@@ -3,7 +3,6 @@ import {
   isArrayOf,
   isBoolean,
   isEnumOf,
-  isLiteral,
   isNumber,
   isObjectOf,
   isOneOf,
@@ -22,11 +21,6 @@ describe("schema validators", () => {
     expect(isNumber(Number.POSITIVE_INFINITY)).toBe(false);
     expect(isBoolean(true)).toBe(true);
     expect(isBoolean("true")).toBe(false);
-  });
-
-  test("isLiteral", () => {
-    expect(isLiteral("BUY")("BUY")).toBe(true);
-    expect(isLiteral("BUY")("SELL")).toBe(false);
   });
 
   test("isEnumOf", () => {

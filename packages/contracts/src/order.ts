@@ -7,8 +7,8 @@ import {
   parse,
   type Validator,
 } from "./schema.ts";
-import { isRiskDecision } from "./risk.ts";
-import type { RiskDecision } from "./risk.ts";
+import { isRiskDecision, type RiskDecision } from "./risk.ts";
+import { isOrderLimits, type OrderLimits } from "./limits.ts";
 
 /**
  * OrderIntent: a typed candidate order that only becomes a real order if the
@@ -18,14 +18,6 @@ import type { RiskDecision } from "./risk.ts";
 
 export const ORDER_SIDES = ["BUY", "SELL"] as const;
 export type OrderSide = (typeof ORDER_SIDES)[number];
-
-export interface OrderLimits {
-  maxSlippageBps?: number;
-  maxGasUsd?: number;
-  maxLatencyMs?: number;
-  /** Minimum data quality state required to execute. */
-  minDataQuality?: "HEALTHY" | "DEGRADED" | "STALE";
-}
 
 export interface OrderIntent {
   /** Idempotency key for deduplication. */
@@ -48,13 +40,6 @@ export interface OrderIntent {
 }
 
 const isOrderSide: Validator<OrderSide> = isEnumOf(ORDER_SIDES);
-
-export const isOrderLimits: Validator<OrderLimits> = isObjectOf({
-  maxSlippageBps: isOptional(isNumber),
-  maxGasUsd: isOptional(isNumber),
-  maxLatencyMs: isOptional(isNumber),
-  minDataQuality: isOptional(isEnumOf(["HEALTHY", "DEGRADED", "STALE"] as const)),
-});
 
 const isOptionalRiskApproval: Validator<RiskDecision | null | undefined> = (
   value,

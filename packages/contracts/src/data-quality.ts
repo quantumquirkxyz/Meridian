@@ -32,7 +32,7 @@ export interface DataQualityReport {
   source: string;
   state: DataQualityState;
   /** Quality score in [0, 1]. */
-  score01: number;
+  score: number;
   /** When the report was produced (Unix ms). */
   updatedAtMs: number;
   /** Timestamp of the last observation from the source (Unix ms). */
@@ -44,7 +44,7 @@ export interface DataQualityReport {
 export const isDataQualityReport: Validator<DataQualityReport> = isObjectOf({
   source: isString,
   state: isDataQualityState,
-  score01: isInRange(0, 1),
+  score: isInRange(0, 1),
   updatedAtMs: isNumber,
   lastSeenMs: isNumber,
   reason: isOptional(isString),

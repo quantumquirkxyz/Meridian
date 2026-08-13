@@ -14,7 +14,7 @@ describe("@agenttrading/core smoke", () => {
     const report = {
       source: "bybit-ws",
       state: "HEALTHY",
-      score01: 0.99,
+      score: 0.99,
       updatedAtMs: 0,
       lastSeenMs: 0,
     };

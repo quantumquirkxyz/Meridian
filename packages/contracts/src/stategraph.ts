@@ -10,9 +10,11 @@ import {
   isRecordOf,
   isString,
   isOneOf,
+  isUnknown,
   type Validator,
 } from "./schema.ts";
 import { isSystemMode, type SystemMode } from "./modes.ts";
+import { isRiskReasonCode, type RiskReasonCode } from "./reason-codes.ts";
 
 /**
  * StateGraph base contracts (ADR-0002, ARCHITECTURE.md). The project's own
@@ -63,7 +65,7 @@ export interface StateNode {
 
 export type GuardResult =
   | { ok: true; reason?: string }
-  | { ok: false; reason: string; reasonCodes: string[] };
+  | { ok: false; reason: string; reasonCodes: RiskReasonCode[] };
 
 /** Evaluates whether a transition is allowed in the given context. */
 export interface TransitionGuard {
@@ -132,7 +134,7 @@ export interface AgentReview {
   reviewedAtMs: number;
 }
 
-const isStateName: Validator<StateName> = isEnumOf(STATE_NAMES);
+export const isStateName: Validator<StateName> = isEnumOf(STATE_NAMES);
 const isPermission: Validator<Permission> = isEnumOf(PERMISSIONS);
 const isAgentReviewAction: Validator<AgentReviewAction> =
   isEnumOf(AGENT_REVIEW_ACTIONS);
@@ -159,7 +161,7 @@ export const isGuardResult: Validator<GuardResult> = isOneOf<GuardResult>([
   isObjectOf({
     ok: isBooleanLiteralFalse,
     reason: isString,
-    reasonCodes: isArrayOf(isString),
+    reasonCodes: isArrayOf(isRiskReasonCode),
   }),
 ]);
 
@@ -186,7 +188,3 @@ export const isAgentReview: Validator<AgentReview> = isObjectOf({
   comment: isString,
   reviewedAtMs: isNumber,
 });
-
-function isUnknown(_value: unknown): _value is unknown {
-  return true;
-}

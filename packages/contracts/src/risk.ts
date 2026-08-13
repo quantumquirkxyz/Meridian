@@ -5,56 +5,92 @@ import {
   isObjectOf,
   isOptional,
   isString,
+  isOneOf,
   parse,
   type Validator,
 } from "./schema.ts";
-import {
-  RISK_DECISION_OUTCOMES,
-  RISK_REASON_CODES,
-  type RiskDecisionOutcome,
-  type RiskReasonCode,
-} from "./reason-codes.ts";
-import type { OrderLimits } from "./order.ts";
+import { isRiskReasonCode, type RiskReasonCode } from "./reason-codes.ts";
+import { isOrderLimits, type OrderLimits } from "./limits.ts";
 
 /**
  * RiskDecision: the deterministic Risk Engine's answer for an OrderIntent
  * (ADR-0003, RISK.md). Every rejected intent carries reason codes; every
- * approved one carries size, limits, and expiry.
+ * approved one carries size, limits, and expiry (docs/RISK.md:45).
+ *
+ * Discriminated union: APPROVE / REDUCE_SIZE require the full approval payload,
+ * REJECT requires reason codes, and the defensive outcomes require neither.
  */
-export interface RiskDecision {
-  decision: RiskDecisionOutcome;
+
+export interface RiskDecisionBase {
   /** OrderIntent.idempotencyKey this decision applies to. */
   orderIntentIdempotencyKey: string;
   /** Reason codes, populated for REJECT / REDUCE_SIZE / defensive modes. */
   reasonCodes: RiskReasonCode[];
   evaluatedAtMs: number;
-  /** Resulting size (APPROVE / REDUCE_SIZE). */
-  approvedSize?: number;
-  /** Limits that bound the resulting order. */
-  approvedLimits?: OrderLimits;
-  /** Decision expiry (Unix ms); an approval past expiry is void. */
-  expiresAtMs?: number;
   /** Optional deterministic notes. */
   notes?: string;
 }
 
-const isRiskDecisionOutcome: Validator<RiskDecisionOutcome> =
-  isEnumOf(RISK_DECISION_OUTCOMES);
+export interface ApprovedRiskDecision extends RiskDecisionBase {
+  decision: "APPROVE" | "REDUCE_SIZE";
+  /** Resulting size. */
+  approvedSize: number;
+  /** Limits that bound the resulting order. */
+  approvedLimits: OrderLimits;
+  /** Decision expiry (Unix ms); an approval past expiry is void. */
+  expiresAtMs: number;
+}
 
-const isRiskReasonCode: Validator<RiskReasonCode> = isEnumOf(RISK_REASON_CODES);
+export interface RejectedRiskDecision extends RiskDecisionBase {
+  decision: "REJECT";
+}
 
-export const isRiskDecision: Validator<RiskDecision> = isObjectOf({
-  decision: isRiskDecisionOutcome,
+export interface DefensiveRiskDecision extends RiskDecisionBase {
+  decision: "EXIT_ONLY" | "CANCEL_ONLY" | "CASH_ONLY" | "HALT_SYSTEM";
+}
+
+export type RiskDecision =
+  | ApprovedRiskDecision
+  | RejectedRiskDecision
+  | DefensiveRiskDecision;
+
+const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
+  decision: isEnumOf(["APPROVE", "REDUCE_SIZE"] as const),
   orderIntentIdempotencyKey: isString,
   reasonCodes: isArrayOf(isRiskReasonCode),
   evaluatedAtMs: isNumber,
-  approvedSize: isOptional(isNumber),
-  approvedLimits: isOptional(
-    (value): value is OrderLimits => typeof value === "object" && value !== null,
-  ),
-  expiresAtMs: isOptional(isNumber),
+  approvedSize: isNumber,
+  approvedLimits: isOrderLimits,
+  expiresAtMs: isNumber,
   notes: isOptional(isString),
 });
+
+const isRejectedDecision: Validator<RejectedRiskDecision> = isObjectOf({
+  decision: isEnumOf(["REJECT"] as const),
+  orderIntentIdempotencyKey: isString,
+  reasonCodes: isArrayOf(isRiskReasonCode),
+  evaluatedAtMs: isNumber,
+  notes: isOptional(isString),
+});
+
+const isDefensiveDecision: Validator<DefensiveRiskDecision> = isObjectOf({
+  decision: isEnumOf([
+    "EXIT_ONLY",
+    "CANCEL_ONLY",
+    "CASH_ONLY",
+    "HALT_SYSTEM",
+  ] as const),
+  orderIntentIdempotencyKey: isString,
+  reasonCodes: isArrayOf(isRiskReasonCode),
+  evaluatedAtMs: isNumber,
+  notes: isOptional(isString),
+});
+
+export const isRiskDecision: Validator<RiskDecision> = isOneOf<RiskDecision>([
+  isApprovedDecision,
+  isRejectedDecision,
+  isDefensiveDecision,
+]);
 
 export function parseRiskDecision(value: unknown): RiskDecision {
   return parse(isRiskDecision, value, "RiskDecision");

@@ -18,10 +18,6 @@ export const isNumber: Validator<number> = (value): value is number =>
 export const isBoolean: Validator<boolean> = (value): value is boolean =>
   typeof value === "boolean";
 
-export const isFunction: Validator<(...args: unknown[]) => unknown> = (
-  value,
-): value is (...args: unknown[]) => unknown => typeof value === "function";
-
 export const isBooleanLiteralTrue: Validator<true> = (
   value,
 ): value is true => value === true;
@@ -30,11 +26,8 @@ export const isBooleanLiteralFalse: Validator<false> = (
   value,
 ): value is false => value === false;
 
-export function isLiteral<T extends string | number | boolean>(
-  expected: T,
-): Validator<T> {
-  return (value): value is T => value === expected;
-}
+/** Accepts anything; used for payload/meta fields that are intentionally untyped. */
+export const isUnknown: Validator<unknown> = (value): value is unknown => true;
 
 export function isEnumOf<T extends string>(
   values: readonly T[],

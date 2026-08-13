@@ -1,4 +1,5 @@
 import {
+  isNullable,
   isNumber,
   isObjectOf,
   isOptional,
@@ -35,8 +36,7 @@ export interface MarketDataSnapshot {
   sequence?: number;
 }
 
-const isNullableNumber: Validator<number | null> = (value): value is number | null =>
-  value === null || (typeof value === "number" && Number.isFinite(value));
+const isNullableNumber: Validator<number | null> = isNullable(isNumber);
 
 export const isMarketDataSnapshot: Validator<MarketDataSnapshot> = isObjectOf({
   venue: isString,

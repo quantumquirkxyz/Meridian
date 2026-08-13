@@ -8,6 +8,7 @@ import {
   isOptional,
   isRecordOf,
   isString,
+  isUnknown,
   parse,
   type Validator,
 } from "./schema.ts";
@@ -131,8 +132,4 @@ export const isMarketGraphSnapshot: Validator<MarketGraphSnapshot> = isObjectOf(
 
 export function parseMarketGraphSnapshot(value: unknown): MarketGraphSnapshot {
   return parse(isMarketGraphSnapshot, value, "MarketGraphSnapshot");
-}
-
-function isUnknown(_value: unknown): _value is unknown {
-  return true;
 }

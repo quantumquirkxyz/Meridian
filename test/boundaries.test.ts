@@ -7,7 +7,16 @@ import { join } from "node:path";
  * level:
  *   - contracts is dependency-free (no LLM or framework runtime);
  *   - core depends only on contracts (never LLMs or connectors);
- *   - connectors, graph, harness, infra depend only on contracts.
+ *   - connectors, graph, harness depend only on contracts (ARCHITECTURE.md:88).
+ *
+ * `packages/agents` is deferred to Beta (ROADMAP.md; ADR-0001 lists it in the
+ * monorepo but issue #12 scopes the scaffold to six packages). When it lands,
+ * add it here with the `agents`-never-imports-`core` boundary from
+ * ARCHITECTURE.md:88.
+ *
+ * `infra` is not restricted to contracts-only by ARCHITECTURE.md:88 (only
+ * graph, harness, and connectors are); it may legitimately depend on core
+ * later. We assert only that it never depends on LLM/framework runtimes.
  */
 const PACKAGE_DIRS = [
   "contracts",
@@ -79,10 +88,18 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     }
   });
 
-  test("connectors, graph, harness, infra depend only on contracts", () => {
-    for (const dir of ["connectors", "graph", "harness", "infra"]) {
+  test("connectors, graph, harness depend only on contracts", () => {
+    for (const dir of ["connectors", "graph", "harness"]) {
       const { dependencies = {} } = packageJson(dir);
       expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
+    }
+  });
+
+  test("infra never depends on LLM/framework runtimes", () => {
+    const { dependencies = {} } = packageJson("infra");
+    for (const dep of Object.keys(dependencies)) {
+      expect(LLM_LIKE.test(dep)).toBe(false);
+      expect(dep).not.toMatch(/connectors/);
     }
   });
 

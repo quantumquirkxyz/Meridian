@@ -2,6 +2,8 @@
  * Shared reason codes for risk decisions and data invalidation (RISK.md
  * "Minimum Risk Engine rules").
  */
+import { isEnumOf, type Validator } from "./schema.ts";
+
 export const RISK_REASON_CODES = [
   "MAX_RISK_PER_TRADE",
   "MAX_DAILY_LOSS",
@@ -24,6 +26,9 @@ export const RISK_REASON_CODES = [
 ] as const;
 
 export type RiskReasonCode = (typeof RISK_REASON_CODES)[number];
+
+export const isRiskReasonCode: Validator<RiskReasonCode> =
+  isEnumOf(RISK_REASON_CODES);
 
 export const RISK_DECISION_OUTCOMES = [
   "APPROVE",

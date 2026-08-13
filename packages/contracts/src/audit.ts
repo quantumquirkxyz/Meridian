@@ -5,9 +5,11 @@ import {
   isOptional,
   isRecordOf,
   isString,
+  isUnknown,
   parse,
   type Validator,
 } from "./schema.ts";
+import { isStateName, type StateName } from "./stategraph.ts";
 
 /**
  * AuditEvent: recorded for every meaningful state transition and decision so
@@ -34,7 +36,7 @@ export interface AuditEvent {
   /** Actor id: module or agent (never a human-passable free string). */
   actor: string;
   /** Resulting StateName when action is STATE_TRANSITION. */
-  state?: string;
+  state?: StateName;
   /** Structured detail (transition id, decision, reason codes, ...). */
   data?: Record<string, unknown>;
 }
@@ -47,14 +49,10 @@ export const isAuditEvent: Validator<AuditEvent> = isObjectOf({
   timestampMs: isNumber,
   action: isAuditAction,
   actor: isString,
-  state: isOptional(isString),
+  state: isOptional(isStateName),
   data: isOptional(isRecordOf(isUnknown)),
 });
 
 export function parseAuditEvent(value: unknown): AuditEvent {
   return parse(isAuditEvent, value, "AuditEvent");
-}
-
-function isUnknown(_value: unknown): _value is unknown {
-  return true;
 }

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   AUDIT_ACTIONS,
-  BASE_EVENT_TYPES,
   DATA_QUALITY_STATES,
   OPPORTUNITY_STATUS,
   ORDER_SIDES,
@@ -13,7 +12,6 @@ import {
   SYSTEM_MODES,
   isAgentReview,
   isAuditEvent,
-  isBaseEvent,
   isCostBreakdown,
   isDataQualityReport,
   isDataQualityState,
@@ -77,7 +75,7 @@ describe("DataQualityReport", () => {
     const report: DataQualityReport = {
       source: "bybit-ws-linear",
       state: "HEALTHY",
-      score01: 0.99,
+      score: 0.99,
       updatedAtMs: 1_700_000_000_000,
       lastSeenMs: 1_699_999_999_000,
     };
@@ -194,9 +192,23 @@ describe("OrderIntent", () => {
       reasonCodes: [],
       evaluatedAtMs: 1_700_000_000_010,
       approvedSize: 0.01,
+      approvedLimits: { maxSlippageBps: 5 },
+      expiresAtMs: 1_700_000_060_000,
     };
     expect(isRiskDecision(decision)).toBe(true);
     expect(isOrderIntent({ ...validIntent(), riskApproval: decision })).toBe(true);
+  });
+
+  test("APPROVE without limits or expiry is rejected", () => {
+    expect(
+      isRiskDecision({
+        decision: "APPROVE",
+        orderIntentIdempotencyKey: "k1",
+        reasonCodes: [],
+        evaluatedAtMs: 0,
+        approvedSize: 0.01,
+      }),
+    ).toBe(false);
   });
 
   test("bad side rejected", () => {
@@ -221,6 +233,42 @@ describe("RiskDecision", () => {
   test("unknown reason code rejected", () => {
     expect(isRiskDecision({ ...validDecision(), reasonCodes: ["NOPE"] })).toBe(false);
   });
+
+  test("approvedLimits is validated against the OrderLimits shape", () => {
+    expect(
+      isRiskDecision({
+        decision: "APPROVE",
+        orderIntentIdempotencyKey: "k1",
+        reasonCodes: [],
+        evaluatedAtMs: 0,
+        approvedSize: 0.01,
+        approvedLimits: { maxSlippageBps: "high" },
+        expiresAtMs: 1_700_000_000_000,
+      }),
+    ).toBe(false);
+    expect(
+      isRiskDecision({
+        decision: "APPROVE",
+        orderIntentIdempotencyKey: "k1",
+        reasonCodes: [],
+        evaluatedAtMs: 0,
+        approvedSize: 0.01,
+        approvedLimits: { minDataQuality: "BROKEN" },
+        expiresAtMs: 1_700_000_000_000,
+      }),
+    ).toBe(false);
+    expect(
+      isRiskDecision({
+        decision: "APPROVE",
+        orderIntentIdempotencyKey: "k1",
+        reasonCodes: [],
+        evaluatedAtMs: 0,
+        approvedSize: 0.01,
+        approvedLimits: { minDataQuality: "HEALTHY" },
+        expiresAtMs: 1_700_000_000_000,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("AuditEvent", () => {
@@ -237,20 +285,9 @@ describe("AuditEvent", () => {
     expect(parseAuditEvent(event)).toEqual(event);
     expect(AUDIT_ACTIONS).toContain("RISK_DECISION");
   });
-});
 
-describe("BaseEvent", () => {
-  test("valid event passes; unknown type rejected", () => {
-    const event = {
-      eventId: "ev-1",
-      type: "MARKET_TICK",
-      occurredAtMs: 1_700_000_000_000,
-      source: "bybit-ws",
-      payload: { symbol: "BTC/USDT" },
-    };
-    expect(isBaseEvent(event)).toBe(true);
-    expect(isBaseEvent({ ...event, type: "NOT_A_TYPE" })).toBe(false);
-    expect(BASE_EVENT_TYPES).toContain("AUDIT_EVENT");
+  test("state must be a known StateName", () => {
+    expect(isAuditEvent({ ...validAuditEvent(), state: "NOT_A_STATE" })).toBe(false);
   });
 });
 
@@ -388,5 +425,16 @@ function validDecision() {
     orderIntentIdempotencyKey: "k1",
     reasonCodes: ["MIN_EDGE"],
     evaluatedAtMs: 1_700_000_000_000,
+  };
+}
+
+function validAuditEvent(): AuditEvent {
+  return {
+    eventId: "audit-1",
+    sequence: 7,
+    timestampMs: 1_700_000_000_000,
+    action: "STATE_TRANSITION",
+    actor: "stategraph",
+    state: "RISK_VALIDATE",
   };
 }
