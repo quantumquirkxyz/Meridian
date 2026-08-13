@@ -3,14 +3,7 @@
 from __future__ import annotations
 
 from quant.agents.base import Agent
-from quant.core.context import (
-    CycleContext,
-    Execution,
-    Hypothesis,
-    Learning,
-    Outcome,
-    Plan,
-)
+from quant.core.context import Artifact, CycleContext
 from quant.core.stages import Stage
 
 
@@ -32,17 +25,23 @@ class StubAgent:
         return stage in self.stages
 
     def act(self, stage: Stage, context: CycleContext) -> None:
-        summary = f"{self.name} contributed at {stage.value}"
-        if stage is Stage.HYPOTHESES:
-            context.hypotheses.append(Hypothesis(agent=self.name, summary=summary))
-        elif stage is Stage.PLANS:
-            context.plans.append(Plan(agent=self.name, summary=summary))
-        elif stage is Stage.EXECUTION:
-            context.executions.append(Execution(agent=self.name, summary=summary))
-        elif stage is Stage.OUTCOME:
-            context.outcomes.append(Outcome(agent=self.name, summary=summary))
-        elif stage is Stage.LEARNING:
-            context.learnings.append(Learning(agent=self.name, summary=summary))
+        bucket = ARTIFACT_BUCKETS.get(stage)
+        if bucket is None:
+            return
+        artifact = Artifact(
+            agent=self.name,
+            summary=f"{self.name} contributed at {stage.value}",
+        )
+        getattr(context, bucket).append(artifact)
+
+
+ARTIFACT_BUCKETS: dict[Stage, str] = {
+    Stage.HYPOTHESES: "hypotheses",
+    Stage.PLANS: "plans",
+    Stage.EXECUTION: "executions",
+    Stage.OUTCOME: "outcomes",
+    Stage.LEARNING: "learnings",
+}
 
 
 DEFAULT_AGENTS: tuple[Agent, ...] = (
@@ -53,6 +52,4 @@ DEFAULT_AGENTS: tuple[Agent, ...] = (
     StubAgent("Portfolio", Stage.PLANS),
     StubAgent("Compliance", Stage.PLANS),
     StubAgent("Execution", Stage.EXECUTION),
-    StubAgent("Outcome", Stage.OUTCOME),
-    StubAgent("Learning", Stage.LEARNING),
 )

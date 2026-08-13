@@ -1,6 +1,6 @@
 from quant.agents.router import Router
 from quant.agents.stubs import DEFAULT_AGENTS
-from quant.core.context import Signal
+from quant.core.context import Hypothesis, Signal
 
 
 def test_default_stub_agents_complete_the_cycle_end_to_end():
@@ -15,9 +15,11 @@ def test_default_stub_agents_complete_the_cycle_end_to_end():
     assert len(report.context.plans) == len(
         [a for a in DEFAULT_AGENTS if a.name in ("Risk", "Portfolio", "Compliance")]
     )
-    assert report.context.executions
-    assert report.context.outcomes
-    assert report.context.learnings
+    assert len(report.context.executions) == len(
+        [a for a in DEFAULT_AGENTS if a.name == "Execution"]
+    )
+    assert report.context.outcomes == []
+    assert report.context.learnings == []
 
 
 def test_agents_are_pluggable_replacing_a_stub():
@@ -29,11 +31,11 @@ def test_agents_are_pluggable_replacing_a_stub():
             return stage == "hypotheses"
 
         def act(self, stage, context):
-            context.hypotheses.append({"agent": self.name, "summary": "custom read"})
+            context.hypotheses.append(Hypothesis(agent=self.name, summary="custom read"))
 
     router = Router(agents=[CustomResearch()])
 
     report = router.run([Signal(venue="Binance", symbol="BTCUSDT", read="momentum up")])
 
     assert report.completed is True
-    assert report.context.hypotheses == [{"agent": "Research", "summary": "custom read"}]
+    assert report.context.hypotheses == [Hypothesis(agent="Research", summary="custom read")]

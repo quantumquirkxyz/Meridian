@@ -24,35 +24,27 @@ export interface Signal {
   read: string;
 }
 
-/** A candidate trade idea produced from signals. */
-export interface Hypothesis {
+/** A single contribution produced by an agent at a cycle stage. */
+export interface Artifact {
   agent: string;
   summary: string;
 }
+
+// Domain-named aliases keep the glossary vocabulary while sharing one shape.
+/** A candidate trade idea produced from signals. */
+export type Hypothesis = Artifact;
 
 /** An approved route toward executable orders. */
-export interface Plan {
-  agent: string;
-  summary: string;
-}
+export type Plan = Artifact;
 
 /** An executable order or route. */
-export interface Execution {
-  agent: string;
-  summary: string;
-}
+export type Execution = Artifact;
 
 /** The observed result of an execution. */
-export interface Outcome {
-  agent: string;
-  summary: string;
-}
+export type Outcome = Artifact;
 
 /** A memory note kept for later cycles. */
-export interface Learning {
-  agent: string;
-  summary: string;
-}
+export type Learning = Artifact;
 
 /** Accumulates the artifacts produced across the cycle's stages. */
 export interface CycleContext {

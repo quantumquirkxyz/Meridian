@@ -17,43 +17,19 @@ class Signal:
 
 
 @dataclass(frozen=True)
-class Hypothesis:
-    """A candidate trade idea produced from signals."""
+class Artifact:
+    """A single contribution produced by an agent at a cycle stage."""
 
     agent: str
     summary: str
 
 
-@dataclass(frozen=True)
-class Plan:
-    """An approved route toward executable orders."""
-
-    agent: str
-    summary: str
-
-
-@dataclass(frozen=True)
-class Execution:
-    """An executable order or route."""
-
-    agent: str
-    summary: str
-
-
-@dataclass(frozen=True)
-class Outcome:
-    """The observed result of an execution."""
-
-    agent: str
-    summary: str
-
-
-@dataclass(frozen=True)
-class Learning:
-    """A memory note kept for later cycles."""
-
-    agent: str
-    summary: str
+# Domain-named aliases keep the glossary vocabulary while sharing one shape.
+Hypothesis = Artifact
+Plan = Artifact
+Execution = Artifact
+Outcome = Artifact
+Learning = Artifact
 
 
 @dataclass
@@ -89,10 +65,3 @@ class CycleReport:
     @property
     def completed(self) -> bool:
         return bool(self.transitions) and self.transitions[-1].stage is Stage.COMPLETE
-
-    @property
-    def complete_reached_at(self) -> StageTransition | None:
-        for transition in self.transitions:
-            if transition.stage is Stage.COMPLETE:
-                return transition
-        return None

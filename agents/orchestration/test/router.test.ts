@@ -79,11 +79,17 @@ describe("Router", () => {
     const hypothesisAgents = DEFAULT_AGENTS.filter((agent) =>
       agent.stages.includes("hypotheses"),
     );
+    const planAgents = DEFAULT_AGENTS.filter((agent) =>
+      agent.stages.includes("plans"),
+    );
+    const executionAgents = DEFAULT_AGENTS.filter((agent) =>
+      agent.stages.includes("execution"),
+    );
     expect(report.context.hypotheses).toHaveLength(hypothesisAgents.length);
-    expect(report.context.plans.length).toBeGreaterThan(0);
-    expect(report.context.executions.length).toBeGreaterThan(0);
-    expect(report.context.outcomes.length).toBeGreaterThan(0);
-    expect(report.context.learnings.length).toBeGreaterThan(0);
+    expect(report.context.plans).toHaveLength(planAgents.length);
+    expect(report.context.executions).toHaveLength(executionAgents.length);
+    expect(report.context.outcomes).toEqual([]);
+    expect(report.context.learnings).toEqual([]);
   });
 
   test("agents are pluggable, replacing a stub", () => {
