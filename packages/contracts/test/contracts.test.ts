@@ -1,0 +1,392 @@
+import { describe, expect, test } from "bun:test";
+import {
+  AUDIT_ACTIONS,
+  BASE_EVENT_TYPES,
+  DATA_QUALITY_STATES,
+  OPPORTUNITY_STATUS,
+  ORDER_SIDES,
+  PERMISSIONS,
+  PERMISSIONS_NEVER_GRANTED_TO_AGENTS,
+  RISK_DECISION_OUTCOMES,
+  RISK_REASON_CODES,
+  STATE_NAMES,
+  SYSTEM_MODES,
+  isAgentReview,
+  isAuditEvent,
+  isBaseEvent,
+  isCostBreakdown,
+  isDataQualityReport,
+  isDataQualityState,
+  isEdgeWeights,
+  isGuardResult,
+  isMarketDataSnapshot,
+  isMarketEdge,
+  isMarketGraphSnapshot,
+  isMarketNode,
+  isOpportunityCandidate,
+  isOrderIntent,
+  isOrderLimits,
+  isRiskDecision,
+  isStateContext,
+  isStateNode,
+  isSystemMode,
+  isTransition,
+  isTransitionGuard,
+  parseAuditEvent,
+  parseDataQualityReport,
+  parseMarketDataSnapshot,
+  parseOpportunityCandidate,
+  parseOrderIntent,
+  parseRiskDecision,
+} from "../src/index.ts";
+import type {
+  AuditEvent,
+  DataQualityReport,
+  MarketDataSnapshot,
+  OpportunityCandidate,
+  OrderIntent,
+  RiskDecision,
+} from "../src/index.ts";
+
+const marketData: MarketDataSnapshot = {
+  venue: "bybit",
+  symbol: "BTC/USDT",
+  timestampMs: 1_700_000_000_000,
+  bid: 30_000,
+  ask: 30_001,
+  mid: 30_000.5,
+  depth: 1_000_000,
+  latencyMs: 12,
+  source: "bybit-ws-linear",
+};
+
+describe("MarketDataSnapshot", () => {
+  test("valid snapshot passes and parses", () => {
+    expect(isMarketDataSnapshot(marketData)).toBe(true);
+    expect(parseMarketDataSnapshot(marketData)).toEqual(marketData);
+  });
+
+  test("null bid/ask/mid accepted; missing symbol rejected", () => {
+    expect(isMarketDataSnapshot({ ...marketData, bid: null, mid: null })).toBe(true);
+    expect(isMarketDataSnapshot({ ...marketData, symbol: undefined })).toBe(false);
+  });
+});
+
+describe("DataQualityReport", () => {
+  test("valid report passes", () => {
+    const report: DataQualityReport = {
+      source: "bybit-ws-linear",
+      state: "HEALTHY",
+      score01: 0.99,
+      updatedAtMs: 1_700_000_000_000,
+      lastSeenMs: 1_699_999_999_000,
+    };
+    expect(isDataQualityReport(report)).toBe(true);
+    expect(parseDataQualityReport(report)).toEqual(report);
+  });
+
+  test("unknown state rejected", () => {
+    expect(isDataQualityState("HEALTHY")).toBe(true);
+    expect(isDataQualityState("BROKEN")).toBe(false);
+    expect(DATA_QUALITY_STATES).toContain("STALE");
+  });
+});
+
+describe("MarketGraphSnapshot", () => {
+  test("valid snapshot passes", () => {
+    const snapshot = {
+      version: 1,
+      snapshotId: "snap-1",
+      createdAtMs: 1_700_000_000_000,
+      nodes: [{ id: "asset:BTC", type: "ASSET" }],
+      edges: [
+        {
+          id: "e1",
+          from: "asset:BTC",
+          to: "venue:bybit",
+          type: "ORDER_BOOK",
+          weights: {
+            price: 30_000,
+            fee: 10,
+            gasCost: 0,
+            expectedSlippage: 5,
+            latencyMs: 12,
+            liquidityUsd: 1_000_000,
+            failureProbability: 0.01,
+            confidence: 0.99,
+            riskScore: 0.1,
+          },
+          tradable: true,
+          source: "bybit-ws",
+        },
+      ],
+    };
+    expect(isMarketNode(snapshot.nodes[0])).toBe(true);
+    expect(isEdgeWeights(snapshot.edges[0].weights)).toBe(true);
+    expect(isMarketEdge(snapshot.edges[0])).toBe(true);
+    expect(isMarketGraphSnapshot(snapshot)).toBe(true);
+  });
+
+  test("non-tradable edge is valid; bad weight rejected", () => {
+    expect(isMarketGraphSnapshot({ version: 1, snapshotId: "s", createdAtMs: 0, nodes: [], edges: [] })).toBe(true);
+    expect(isEdgeWeights({ failureProbability: 2 })).toBe(false);
+  });
+});
+
+describe("OpportunityCandidate", () => {
+  test("valid candidate passes and parses", () => {
+    const candidate: OpportunityCandidate = {
+      id: "c1",
+      snapshotId: "snap-1",
+      route: ["asset:BTC", "venue:bybit", "asset:BTC"],
+      grossSpreadUsd: 100,
+      costs: {
+        tradingFeesUsd: 10,
+        slippageUsd: 5,
+        gasUsd: 2,
+        bridgeCostUsd: 0,
+        fundingCostUsd: 0,
+        latencyRiskUsd: 1,
+        failureRiskUsd: 2,
+        safetyBufferUsd: 10,
+      },
+      expectedNetProfitUsd: 70,
+      createdAtMs: 1_700_000_000_000,
+      status: "CANDIDATE",
+      invalidationReasons: [],
+    };
+    expect(isCostBreakdown(candidate.costs)).toBe(true);
+    expect(isOpportunityCandidate(candidate)).toBe(true);
+    expect(parseOpportunityCandidate(candidate)).toEqual(candidate);
+    expect(OPPORTUNITY_STATUS).toContain("CANDIDATE");
+  });
+
+  test("route must be strings", () => {
+    expect(isOpportunityCandidate({ ...validCandidate(), route: [1] })).toBe(false);
+  });
+});
+
+describe("OrderIntent", () => {
+  test("valid intent passes and parses", () => {
+    const intent: OrderIntent = {
+      idempotencyKey: "k1",
+      opportunityId: "c1",
+      venue: "bybit",
+      symbol: "BTC/USDT",
+      side: "BUY",
+      quantity: 0.01,
+      price: 30_000,
+      quoteCurrency: "USDT",
+      createdAtMs: 1_700_000_000_000,
+      expiresAtMs: 1_700_000_060_000,
+      limits: { maxSlippageBps: 5 },
+    };
+    expect(isOrderLimits(intent.limits)).toBe(true);
+    expect(isOrderIntent(intent)).toBe(true);
+    expect(parseOrderIntent(intent)).toEqual(intent);
+    expect(ORDER_SIDES).toContain("BUY");
+  });
+
+  test("approved intent with risk decision passes", () => {
+    const decision = {
+      decision: "APPROVE",
+      orderIntentIdempotencyKey: "k1",
+      reasonCodes: [],
+      evaluatedAtMs: 1_700_000_000_010,
+      approvedSize: 0.01,
+    };
+    expect(isRiskDecision(decision)).toBe(true);
+    expect(isOrderIntent({ ...validIntent(), riskApproval: decision })).toBe(true);
+  });
+
+  test("bad side rejected", () => {
+    expect(isOrderIntent({ ...validIntent(), side: "HOLD" })).toBe(false);
+  });
+});
+
+describe("RiskDecision", () => {
+  test("rejection carries reason codes", () => {
+    const decision: RiskDecision = {
+      decision: "REJECT",
+      orderIntentIdempotencyKey: "k1",
+      reasonCodes: ["MIN_EDGE", "MAX_SLIPPAGE"],
+      evaluatedAtMs: 1_700_000_000_000,
+    };
+    expect(isRiskDecision(decision)).toBe(true);
+    expect(parseRiskDecision(decision)).toEqual(decision);
+    expect(RISK_DECISION_OUTCOMES).toContain("REJECT");
+    expect(RISK_REASON_CODES).toContain("MIN_EDGE");
+  });
+
+  test("unknown reason code rejected", () => {
+    expect(isRiskDecision({ ...validDecision(), reasonCodes: ["NOPE"] })).toBe(false);
+  });
+});
+
+describe("AuditEvent", () => {
+  test("valid audit event passes", () => {
+    const event: AuditEvent = {
+      eventId: "audit-1",
+      sequence: 7,
+      timestampMs: 1_700_000_000_000,
+      action: "STATE_TRANSITION",
+      actor: "stategraph",
+      state: "RISK_VALIDATE",
+    };
+    expect(isAuditEvent(event)).toBe(true);
+    expect(parseAuditEvent(event)).toEqual(event);
+    expect(AUDIT_ACTIONS).toContain("RISK_DECISION");
+  });
+});
+
+describe("BaseEvent", () => {
+  test("valid event passes; unknown type rejected", () => {
+    const event = {
+      eventId: "ev-1",
+      type: "MARKET_TICK",
+      occurredAtMs: 1_700_000_000_000,
+      source: "bybit-ws",
+      payload: { symbol: "BTC/USDT" },
+    };
+    expect(isBaseEvent(event)).toBe(true);
+    expect(isBaseEvent({ ...event, type: "NOT_A_TYPE" })).toBe(false);
+    expect(BASE_EVENT_TYPES).toContain("AUDIT_EVENT");
+  });
+});
+
+describe("SystemMode", () => {
+  test("modes are as documented", () => {
+    expect(SYSTEM_MODES).toEqual([
+      "NORMAL",
+      "OBSERVE_ONLY",
+      "SIGNAL_ONLY",
+      "PAPER_ONLY",
+      "CANCEL_ONLY",
+      "REDUCE_ONLY",
+      "CASH_ONLY",
+      "HALT",
+    ]);
+    expect(isSystemMode("HALT")).toBe(true);
+    expect(isSystemMode("TRADING")).toBe(false);
+  });
+});
+
+describe("StateGraph contracts", () => {
+  test("state names include flow and defensive modes", () => {
+    expect(STATE_NAMES).toContain("RISK_VALIDATE");
+    expect(STATE_NAMES).toContain("DEGRADED_MODE");
+    expect(STATE_NAMES).toContain("HALT");
+  });
+
+  test("state context validates", () => {
+    const ctx = {
+      state: "RISK_VALIDATE",
+      mode: "NORMAL",
+      updatedAtMs: 1_700_000_000_000,
+    };
+    expect(isStateContext(ctx)).toBe(true);
+    expect(isStateContext({ ...ctx, state: "NOPE" })).toBe(false);
+  });
+
+  test("state node with agent-safe permissions only", () => {
+    const node = {
+      name: "RISK_VALIDATE",
+      allowed: true,
+      permissions: ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
+    };
+    expect(isStateNode(node)).toBe(true);
+  });
+
+  test("permission model: execution permissions never granted to agents", () => {
+    for (const p of PERMISSIONS_NEVER_GRANTED_TO_AGENTS) {
+      expect(PERMISSIONS).toContain(p);
+    }
+    expect(PERMISSIONS_NEVER_GRANTED_TO_AGENTS).toEqual(
+      expect.arrayContaining(["APPROVE_RISK", "SUBMIT_ORDER", "SIGN_TRANSACTION", "MOVE_FUNDS", "MODIFY_RISK_LIMITS"]),
+    );
+  });
+
+  test("transition and guard validate", () => {
+    const guard = {
+      name: "riskApproved",
+      evaluate: (ctx: { state: string }) => ({
+        ok: true,
+      }),
+    };
+    expect(isTransitionGuard(guard)).toBe(true);
+    const transition = {
+      id: "risk-execute",
+      from: "RISK_VALIDATE",
+      to: "EXECUTION_PRECHECK",
+      guard,
+      requiredPermissions: ["APPROVE_RISK"],
+      audit: true,
+    };
+    expect(isTransition(transition)).toBe(true);
+  });
+
+  test("guard results validate both branches", () => {
+    expect(isGuardResult({ ok: true })).toBe(true);
+    expect(isGuardResult({ ok: false, reason: "below edge", reasonCodes: ["MIN_EDGE"] })).toBe(true);
+    expect(isGuardResult({ ok: "yes" })).toBe(false);
+  });
+
+  test("agent review validates", () => {
+    expect(
+      isAgentReview({
+        agent: "risk-analyst",
+        action: "ABSTAIN",
+        comment: "no data",
+        reviewedAtMs: 1_700_000_000_000,
+      }),
+    ).toBe(true);
+  });
+});
+
+function validCandidate() {
+  return {
+    id: "c1",
+    snapshotId: "snap-1",
+    route: ["a", "b"],
+    grossSpreadUsd: 100,
+    costs: {
+      tradingFeesUsd: 10,
+      slippageUsd: 5,
+      gasUsd: 2,
+      bridgeCostUsd: 0,
+      fundingCostUsd: 0,
+      latencyRiskUsd: 1,
+      failureRiskUsd: 2,
+      safetyBufferUsd: 10,
+    },
+    expectedNetProfitUsd: 70,
+    createdAtMs: 1_700_000_000_000,
+    status: "CANDIDATE" as const,
+    invalidationReasons: [],
+  };
+}
+
+function validIntent() {
+  return {
+    idempotencyKey: "k1",
+    opportunityId: "c1",
+    venue: "bybit",
+    symbol: "BTC/USDT",
+    side: "BUY" as const,
+    quantity: 0.01,
+    price: 30_000,
+    quoteCurrency: "USDT",
+    createdAtMs: 1_700_000_000_000,
+    expiresAtMs: 1_700_000_060_000,
+    limits: { maxSlippageBps: 5 },
+  };
+}
+
+function validDecision() {
+  return {
+    decision: "REJECT" as const,
+    orderIntentIdempotencyKey: "k1",
+    reasonCodes: ["MIN_EDGE"],
+    evaluatedAtMs: 1_700_000_000_000,
+  };
+}

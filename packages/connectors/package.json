@@ -1,0 +1,22 @@
+{
+  "name": "@agenttrading/connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Venue connectors: Bybit (CEX), PancakeSwap v4 on BNB Chain (DEX), RPC. Depends only on contracts.",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agenttrading/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  }
+}
