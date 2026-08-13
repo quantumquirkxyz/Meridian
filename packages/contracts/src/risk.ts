@@ -22,8 +22,9 @@ import { isOrderLimits, type OrderLimits } from "./limits.ts";
  * (ADR-0003, RISK.md). Every rejected intent carries reason codes; every
  * approved one carries size, limits, and expiry (docs/RISK.md:45).
  *
- * Discriminated union: APPROVE / REDUCE_SIZE require the full approval payload,
- * REJECT requires reason codes, and the defensive outcomes require neither.
+ * Discriminated union: APPROVE requires the full approval payload; REDUCE_SIZE
+ * requires the approval payload plus reason codes; REJECT and the defensive
+ * outcomes require reason codes.
  */
 
 export interface RiskDecisionBase {
@@ -38,6 +39,9 @@ export interface RiskDecisionBase {
 
 const APPROVAL_OUTCOMES = [
   "APPROVE",
+] as const satisfies readonly RiskDecisionOutcome[];
+
+const REDUCE_SIZE_OUTCOMES = [
   "REDUCE_SIZE",
 ] as const satisfies readonly RiskDecisionOutcome[];
 
@@ -62,16 +66,33 @@ export interface ApprovedRiskDecision extends RiskDecisionBase {
   expiresAtMs: number;
 }
 
+export interface ReduceRiskDecision extends RiskDecisionBase {
+  decision: (typeof REDUCE_SIZE_OUTCOMES)[number];
+  /** Resulting size. */
+  approvedSize: number;
+  /** Limits that bound the resulting order. */
+  approvedLimits: OrderLimits;
+  /** Decision expiry (Unix ms); an approval past expiry is void. */
+  expiresAtMs: number;
+  /** Reason codes; a reduction always explains itself. */
+  reasonCodes: [RiskReasonCode, ...RiskReasonCode[]];
+}
+
 export interface RejectedRiskDecision extends RiskDecisionBase {
   decision: (typeof REJECTION_OUTCOMES)[number];
+  /** Reason codes; a rejection always explains itself. */
+  reasonCodes: [RiskReasonCode, ...RiskReasonCode[]];
 }
 
 export interface DefensiveRiskDecision extends RiskDecisionBase {
   decision: (typeof DEFENSIVE_OUTCOMES)[number];
+  /** Reason codes; a defensive outcome always explains itself. */
+  reasonCodes: [RiskReasonCode, ...RiskReasonCode[]];
 }
 
 export type RiskDecision =
   | ApprovedRiskDecision
+  | ReduceRiskDecision
   | RejectedRiskDecision
   | DefensiveRiskDecision;
 
@@ -85,12 +106,24 @@ const baseShape: {
   notes: isOptional(isString),
 };
 
-const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
-  decision: isEnumOf(APPROVAL_OUTCOMES),
-  ...baseShape,
+/** Shared payload fields of every approval-style decision. */
+const approvalPayloadShape = {
   approvedSize: isNumber,
   approvedLimits: isOrderLimits,
   expiresAtMs: isNumber,
+};
+
+const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
+  decision: isEnumOf(APPROVAL_OUTCOMES),
+  ...baseShape,
+  ...approvalPayloadShape,
+});
+
+const isReduceDecision: Validator<ReduceRiskDecision> = isObjectOf({
+  decision: isEnumOf(REDUCE_SIZE_OUTCOMES),
+  ...baseShape,
+  reasonCodes: isNonEmptyArrayOf(isRiskReasonCode),
+  ...approvalPayloadShape,
 });
 
 const isRejectedDecision: Validator<RejectedRiskDecision> = isObjectOf({
@@ -107,6 +140,7 @@ const isDefensiveDecision: Validator<DefensiveRiskDecision> = isObjectOf({
 
 export const isRiskDecision: Validator<RiskDecision> = isOneOf<RiskDecision>([
   isApprovedDecision,
+  isReduceDecision,
   isRejectedDecision,
   isDefensiveDecision,
 ]);

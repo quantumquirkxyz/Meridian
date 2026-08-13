@@ -51,8 +51,8 @@ export function isArrayOf<T>(inner: Validator<T>): Validator<T[]> {
 }
 
 /** Like `isArrayOf`, but requires at least one element. */
-export function isNonEmptyArrayOf<T>(inner: Validator<T>): Validator<T[]> {
-  return (value): value is T[] =>
+export function isNonEmptyArrayOf<T>(inner: Validator<T>): Validator<[T, ...T[]]> {
+  return (value): value is [T, ...T[]] =>
     Array.isArray(value) && value.length > 0 && value.every((item) => inner(item));
 }
 

@@ -27,7 +27,31 @@ const PACKAGE_DIRS = [
   "infra",
 ] as const;
 
-const LLM_LIKE = /(^|\/)@?(ai|openai|anthropic|mastra|vercel|lodash|zod|langchain|langgraph)\b/i;
+const FORBIDDEN_MODULE_PATHS = [
+  "ai",
+  "openai",
+  "anthropic",
+  "mastra",
+  "vercel",
+  "langchain",
+  "langgraph",
+  "connectors",
+  "lodash",
+  "zod",
+] as const;
+
+/**
+ * True when a module specifier (dependency name or source import path)
+ * references a forbidden LLM/framework runtime or the connectors package.
+ * Matches the token at the start of a path segment (optionally @-scoped), so
+ * `@ai-sdk/provider`, `openai`, and `../connectors` are flagged while
+ * `@agenttrading/contracts` is not.
+ */
+function isForbiddenModule(specifier: string): boolean {
+  return FORBIDDEN_MODULE_PATHS.some((name) =>
+    new RegExp(`(^|\\/)@?${name}\\b`, "i").test(specifier),
+  );
+}
 
 function packageJson(dir: string): {
   dependencies?: Record<string, string>;
@@ -75,7 +99,7 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     expect(dependencies ?? {}).toEqual({});
     // dev-only tooling is allowed, but nothing LLM/framework-like.
     for (const dep of Object.keys(devDependencies ?? {})) {
-      expect(LLM_LIKE.test(dep)).toBe(false);
+      expect(isForbiddenModule(dep)).toBe(false);
     }
   });
 
@@ -83,8 +107,7 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     const { dependencies = {} } = packageJson("core");
     expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
     for (const dep of Object.keys(dependencies)) {
-      expect(LLM_LIKE.test(dep)).toBe(false);
-      expect(dep).not.toMatch(/connectors/);
+      expect(isForbiddenModule(dep)).toBe(false);
     }
   });
 
@@ -98,16 +121,18 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
   test("infra never depends on LLM/framework runtimes", () => {
     const { dependencies = {} } = packageJson("infra");
     for (const dep of Object.keys(dependencies)) {
-      expect(LLM_LIKE.test(dep)).toBe(false);
-      expect(dep).not.toMatch(/connectors/);
+      expect(isForbiddenModule(dep)).toBe(false);
     }
   });
 
   test("core source never imports LLM or connector modules", () => {
-    const forbidden = /from\s+["'](@?.*(ai|openai|anthropic|mastra|vercel|langchain|langgraph|connectors).*)["']/i;
+    const importSpecifiers =
+      /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
     for (const file of sourceFiles("core")) {
       const content = readFileSync(file, "utf8");
-      expect(content).not.toMatch(forbidden);
+      for (const match of content.matchAll(importSpecifiers)) {
+        expect(isForbiddenModule(match[1])).toBe(false);
+      }
     }
   });
 });

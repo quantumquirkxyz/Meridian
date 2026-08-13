@@ -250,6 +250,29 @@ describe("RiskDecision", () => {
     ).toBe(false);
   });
 
+  test("reduction without reason codes is rejected", () => {
+    expect(
+      isRiskDecision({
+        ...validReduceDecision(),
+        reasonCodes: [],
+      }),
+    ).toBe(false);
+  });
+
+  test("approve without reason codes is valid", () => {
+    expect(
+      isRiskDecision({
+        decision: "APPROVE",
+        orderIntentIdempotencyKey: "k1",
+        reasonCodes: [],
+        evaluatedAtMs: 0,
+        approvedSize: 0.01,
+        approvedLimits: { maxSlippageBps: 5 },
+        expiresAtMs: 1_700_000_000_000,
+      }),
+    ).toBe(true);
+  });
+
   test("approvedLimits is validated against the OrderLimits shape", () => {
     expect(
       isRiskDecision({
@@ -416,6 +439,18 @@ describe("StateGraph contracts", () => {
   });
 });
 
+describe("deterministic flow (story 30: no LLM)", () => {
+  test("opportunity -> reject decision validates end to end", () => {
+    expect(isOpportunityCandidate(validCandidate())).toBe(true);
+    expect(isRiskDecision(validDecision())).toBe(true);
+  });
+
+  test("opportunity -> reduce decision validates end to end", () => {
+    expect(isOpportunityCandidate(validCandidate())).toBe(true);
+    expect(isRiskDecision(validReduceDecision())).toBe(true);
+  });
+});
+
 function validCandidate() {
   return {
     id: "c1",
@@ -461,6 +496,18 @@ function validDecision() {
     orderIntentIdempotencyKey: "k1",
     reasonCodes: ["MIN_EDGE"],
     evaluatedAtMs: 1_700_000_000_000,
+  };
+}
+
+function validReduceDecision() {
+  return {
+    decision: "REDUCE_SIZE" as const,
+    orderIntentIdempotencyKey: "k1",
+    reasonCodes: ["MIN_EDGE"],
+    evaluatedAtMs: 1_700_000_000_000,
+    approvedSize: 0.01,
+    approvedLimits: { maxSlippageBps: 5 },
+    expiresAtMs: 1_700_000_060_000,
   };
 }
 
