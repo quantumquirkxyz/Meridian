@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@agents/shared": ["../shared/src/index.ts"]
+    },
+    "types": ["bun"]
+  },
+  "include": ["src", "test"]
+}
