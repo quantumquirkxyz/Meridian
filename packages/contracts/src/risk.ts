@@ -56,8 +56,7 @@ const DEFENSIVE_OUTCOMES = [
   "HALT_SYSTEM",
 ] as const satisfies readonly RiskDecisionOutcome[];
 
-export interface ApprovedRiskDecision extends RiskDecisionBase {
-  decision: (typeof APPROVAL_OUTCOMES)[number];
+interface ApprovalPayload {
   /** Resulting size. */
   approvedSize: number;
   /** Limits that bound the resulting order. */
@@ -66,14 +65,12 @@ export interface ApprovedRiskDecision extends RiskDecisionBase {
   expiresAtMs: number;
 }
 
-export interface ReduceRiskDecision extends RiskDecisionBase {
+export interface ApprovedRiskDecision extends RiskDecisionBase, ApprovalPayload {
+  decision: (typeof APPROVAL_OUTCOMES)[number];
+}
+
+export interface ReduceRiskDecision extends RiskDecisionBase, ApprovalPayload {
   decision: (typeof REDUCE_SIZE_OUTCOMES)[number];
-  /** Resulting size. */
-  approvedSize: number;
-  /** Limits that bound the resulting order. */
-  approvedLimits: OrderLimits;
-  /** Decision expiry (Unix ms); an approval past expiry is void. */
-  expiresAtMs: number;
   /** Reason codes; a reduction always explains itself. */
   reasonCodes: [RiskReasonCode, ...RiskReasonCode[]];
 }

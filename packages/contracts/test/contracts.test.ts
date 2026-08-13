@@ -440,13 +440,22 @@ describe("StateGraph contracts", () => {
 });
 
 describe("deterministic flow (story 30: no LLM)", () => {
-  test("opportunity -> reject decision validates end to end", () => {
-    expect(isOpportunityCandidate(validCandidate())).toBe(true);
-    expect(isRiskDecision(validDecision())).toBe(true);
-  });
+  test("candidate -> intent -> approve/reject/reduce validates end to end", () => {
+    const candidate = validCandidate();
+    const intent = validIntent();
 
-  test("opportunity -> reduce decision validates end to end", () => {
-    expect(isOpportunityCandidate(validCandidate())).toBe(true);
+    expect(isOpportunityCandidate(candidate)).toBe(true);
+    expect(isOrderIntent(intent)).toBe(true);
+    expect(isRiskDecision({
+      decision: "APPROVE",
+      orderIntentIdempotencyKey: intent.idempotencyKey,
+      reasonCodes: [],
+      evaluatedAtMs: 1_700_000_000_000,
+      approvedSize: 0.01,
+      approvedLimits: { maxSlippageBps: 5 },
+      expiresAtMs: 1_700_000_060_000,
+    })).toBe(true);
+    expect(isRiskDecision(validDecision())).toBe(true);
     expect(isRiskDecision(validReduceDecision())).toBe(true);
   });
 });
