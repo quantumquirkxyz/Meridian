@@ -1,0 +1,3 @@
+# 0004 — Hybrid agent layer: Vercel AI SDK (default) + Mastra behind an AgentAdapter
+
+The cognitive layer lives behind an in-house `AgentAdapter` contract (`run(input: Schema<I>) => Promise<Schema<O>>`); the StateGraph only consumes typed outputs and never depends on an LLM framework. **Vercel AI SDK** is the default runtime (generation, streaming, tool calls, provider-agnostic). **Mastra** is used where it adds real value: durable memory (Memory/Learning agents), Evals (Audit), and workflows with human-in-the-loop (Debate cluster). Each agent's runtime is declared in `agents.config.ts`. Per-agent deterministic fallback remains mandatory. See ADR-0002.
