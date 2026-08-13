@@ -20,11 +20,6 @@ export class Router {
     this.cycle = cycle ?? new TradingCycle();
   }
 
-  /** Register an agent so it contributes to the stages it supports. */
-  register(agent: Agent): void {
-    this.agents.push(agent);
-  }
-
   /** Agents that support `stage`. */
   agentsFor(stage: Stage): Agent[] {
     return this.agents.filter((agent) => agent.supports(stage));

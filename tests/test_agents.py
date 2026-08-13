@@ -1,6 +1,7 @@
 from quant.agents.router import Router
 from quant.agents.stubs import DEFAULT_AGENTS
 from quant.core.context import Hypothesis, Signal
+from quant.core.stages import Stage
 
 
 def test_default_stub_agents_complete_the_cycle_end_to_end():
@@ -10,13 +11,11 @@ def test_default_stub_agents_complete_the_cycle_end_to_end():
 
     assert report.completed is True
     assert len(report.context.hypotheses) == len(
-        [a for a in DEFAULT_AGENTS if a.name in ("Research", "MarketReading", "Arbitrage")]
+        [a for a in DEFAULT_AGENTS if Stage.HYPOTHESES in a.stages]
     )
-    assert len(report.context.plans) == len(
-        [a for a in DEFAULT_AGENTS if a.name in ("Risk", "Portfolio", "Compliance")]
-    )
+    assert len(report.context.plans) == len([a for a in DEFAULT_AGENTS if Stage.PLANS in a.stages])
     assert len(report.context.executions) == len(
-        [a for a in DEFAULT_AGENTS if a.name == "Execution"]
+        [a for a in DEFAULT_AGENTS if Stage.EXECUTION in a.stages]
     )
     assert report.context.outcomes == []
     assert report.context.learnings == []

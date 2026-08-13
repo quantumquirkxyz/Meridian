@@ -13,11 +13,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(
         "run",
-        help="Run the router-led trading cycle skeleton with sample signals (alias for run-cycle)",
+        help="Run the router-led trading cycle skeleton with sample signals",
     )
     subparsers.add_parser(
         "run-cycle",
-        help="Run the router-led trading cycle skeleton with sample signals",
+        help="Run the router-led trading cycle skeleton with sample signals (alias for run)",
     )
     return parser
 

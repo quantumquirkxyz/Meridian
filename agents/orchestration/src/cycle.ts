@@ -19,11 +19,4 @@ export class TradingCycle {
   get progression(): readonly Stage[] {
     return [TradingCycle.START, ...TradingCycle.STAGES, TradingCycle.COMPLETE];
   }
-
-  /** The stage following `stage`, or `null` after completion. */
-  next(stage: Stage): Stage | null {
-    const progression = this.progression;
-    const index = progression.indexOf(stage);
-    return index >= 0 && index + 1 < progression.length ? progression[index + 1] : null;
-  }
 }

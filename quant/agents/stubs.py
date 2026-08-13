@@ -2,9 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from quant.agents.base import Agent
 from quant.core.context import Artifact, CycleContext
 from quant.core.stages import Stage
+
+APPENDER = Callable[[CycleContext, Artifact], None]
+
+# Stage -> typed append on CycleContext. Appending to the right bucket is data,
+# not a branch, and a stage's bucket cannot be misspelled at runtime.
+ARTIFACT_BUCKETS: dict[Stage, APPENDER] = {
+    Stage.HYPOTHESES: lambda context, artifact: context.hypotheses.append(artifact),
+    Stage.PLANS: lambda context, artifact: context.plans.append(artifact),
+    Stage.EXECUTION: lambda context, artifact: context.executions.append(artifact),
+    Stage.OUTCOME: lambda context, artifact: context.outcomes.append(artifact),
+    Stage.LEARNING: lambda context, artifact: context.learnings.append(artifact),
+}
 
 
 class StubAgent:
@@ -25,23 +39,16 @@ class StubAgent:
         return stage in self.stages
 
     def act(self, stage: Stage, context: CycleContext) -> None:
-        bucket = ARTIFACT_BUCKETS.get(stage)
-        if bucket is None:
+        append = ARTIFACT_BUCKETS.get(stage)
+        if append is None:
             return
-        artifact = Artifact(
-            agent=self.name,
-            summary=f"{self.name} contributed at {stage.value}",
+        append(
+            context,
+            Artifact(
+                agent=self.name,
+                summary=f"{self.name} contributed at {stage.value}",
+            ),
         )
-        getattr(context, bucket).append(artifact)
-
-
-ARTIFACT_BUCKETS: dict[Stage, str] = {
-    Stage.HYPOTHESES: "hypotheses",
-    Stage.PLANS: "plans",
-    Stage.EXECUTION: "executions",
-    Stage.OUTCOME: "outcomes",
-    Stage.LEARNING: "learnings",
-}
 
 
 DEFAULT_AGENTS: tuple[Agent, ...] = (

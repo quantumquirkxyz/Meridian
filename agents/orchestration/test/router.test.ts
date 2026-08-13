@@ -21,13 +21,6 @@ describe("TradingCycle", () => {
       "complete",
     ]);
   });
-
-  test("next moves forward one stage and stops after complete", () => {
-    const cycle = new TradingCycle();
-    expect(cycle.next("signals")).toBe("hypotheses");
-    expect(cycle.next("learning")).toBe("complete");
-    expect(cycle.next("complete")).toBeNull();
-  });
 });
 
 describe("Router", () => {

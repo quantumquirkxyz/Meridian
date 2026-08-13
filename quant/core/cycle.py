@@ -27,11 +27,3 @@ class TradingCycle:
     def progression(self) -> tuple[Stage, ...]:
         """The full ordered path from start to completion."""
         return (self.START,) + self.STAGES + (self.COMPLETE,)
-
-    def next(self, stage: Stage) -> Stage | None:
-        """Return the stage following ``stage``, or ``None`` after completion."""
-        progression = self.progression
-        index = progression.index(stage)
-        if index + 1 < len(progression):
-            return progression[index + 1]
-        return None

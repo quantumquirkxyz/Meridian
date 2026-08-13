@@ -26,10 +26,6 @@ class Router:
         self._agents: list[Agent] = list(agents if agents is not None else DEFAULT_AGENTS)
         self._cycle = cycle if cycle is not None else TradingCycle()
 
-    def register(self, agent: Agent) -> None:
-        """Register an agent so it contributes to the stages it supports."""
-        self._agents.append(agent)
-
     def agents_for(self, stage: Stage) -> list[Agent]:
         return [agent for agent in self._agents if agent.supports(stage)]
 

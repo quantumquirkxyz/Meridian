@@ -1,14 +1,15 @@
-import type {
-  CycleContext as CycleContextShape,
-  CycleReport as CycleReportShape,
-  Execution,
-  Hypothesis,
-  Learning,
-  Outcome,
-  Plan,
-  Signal,
-  Stage,
-  StageTransition,
+import {
+  STAGES,
+  type CycleContext as CycleContextShape,
+  type CycleReport as CycleReportShape,
+  type Execution,
+  type Hypothesis,
+  type Learning,
+  type Outcome,
+  type Plan,
+  type Signal,
+  type Stage,
+  type StageTransition,
 } from "@agents/shared";
 
 /** Accumulates the artifacts produced across the cycle's stages. */
@@ -35,7 +36,7 @@ export class CycleReport implements CycleReportShape {
   get completed(): boolean {
     return (
       this.transitions.length > 0 &&
-      this.transitions[this.transitions.length - 1].stage === "complete"
+      this.transitions[this.transitions.length - 1].stage === STAGES[STAGES.length - 1]
     );
   }
 }
