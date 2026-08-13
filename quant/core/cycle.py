@@ -15,15 +15,11 @@ class TradingCycle:
 
     START: Stage = Stage.SIGNALS
     COMPLETE: Stage = Stage.COMPLETE
-    STAGES: tuple[Stage, ...] = (
-        Stage.HYPOTHESES,
-        Stage.PLANS,
-        Stage.EXECUTION,
-        Stage.OUTCOME,
-        Stage.LEARNING,
+    MIDDLE_STAGES: tuple[Stage, ...] = tuple(
+        stage for stage in Stage if stage not in {Stage.SIGNALS, Stage.COMPLETE}
     )
 
     @property
     def progression(self) -> tuple[Stage, ...]:
         """The full ordered path from start to completion."""
-        return (self.START,) + self.STAGES + (self.COMPLETE,)
+        return (self.START,) + self.MIDDLE_STAGES + (self.COMPLETE,)

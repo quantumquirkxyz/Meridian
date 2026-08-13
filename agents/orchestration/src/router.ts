@@ -13,11 +13,9 @@ import { CycleContext, CycleReport } from "./context.js";
  */
 export class Router {
   private readonly agents: Agent[];
-  private readonly cycle: TradingCycle;
 
-  constructor(agents?: Iterable<Agent>, cycle?: TradingCycle) {
+  constructor(agents?: Iterable<Agent>) {
     this.agents = agents ? [...agents] : [...DEFAULT_AGENTS];
-    this.cycle = cycle ?? new TradingCycle();
   }
 
   /** Agents that support `stage`. */
@@ -35,7 +33,7 @@ export class Router {
     const context = new CycleContext();
     context.signals.push(...signals);
     const transitions: StageTransition[] = [{ stage: TradingCycle.START }];
-    for (const stage of TradingCycle.STAGES) {
+    for (const stage of TradingCycle.MIDDLE_STAGES) {
       for (const agent of this.agentsFor(stage)) {
         agent.act(stage, context);
       }

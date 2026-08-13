@@ -11,12 +11,16 @@ import { STAGES, type Stage } from "@agents/shared";
 export class TradingCycle {
   static readonly START: Stage = STAGES[0];
   static readonly COMPLETE: Stage = STAGES[STAGES.length - 1];
-  static readonly STAGES: readonly Stage[] = STAGES.filter(
+  static readonly MIDDLE_STAGES: readonly Stage[] = STAGES.filter(
     (stage) => stage !== STAGES[0] && stage !== STAGES[STAGES.length - 1],
   );
 
   /** The full ordered path from start to completion. */
   get progression(): readonly Stage[] {
-    return [TradingCycle.START, ...TradingCycle.STAGES, TradingCycle.COMPLETE];
+    return [
+      TradingCycle.START,
+      ...TradingCycle.MIDDLE_STAGES,
+      TradingCycle.COMPLETE,
+    ];
   }
 }

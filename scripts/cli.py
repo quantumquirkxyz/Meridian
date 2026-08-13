@@ -15,10 +15,6 @@ def build_parser() -> argparse.ArgumentParser:
         "run",
         help="Run the router-led trading cycle skeleton with sample signals",
     )
-    subparsers.add_parser(
-        "run-cycle",
-        help="Run the router-led trading cycle skeleton with sample signals (alias for run)",
-    )
     return parser
 
 
@@ -45,7 +41,7 @@ def run_cycle() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in {"run", "run-cycle"}:
+    if args.command == "run":
         run_cycle()
     return 0
 

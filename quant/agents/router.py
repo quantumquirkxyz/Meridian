@@ -18,13 +18,8 @@ from quant.core.stages import Stage
 class Router:
     """Routes each stage to the agents that support it and runs the cycle."""
 
-    def __init__(
-        self,
-        agents: Iterable[Agent] | None = None,
-        cycle: TradingCycle | None = None,
-    ) -> None:
+    def __init__(self, agents: Iterable[Agent] | None = None) -> None:
         self._agents: list[Agent] = list(agents if agents is not None else DEFAULT_AGENTS)
-        self._cycle = cycle if cycle is not None else TradingCycle()
 
     def agents_for(self, stage: Stage) -> list[Agent]:
         return [agent for agent in self._agents if agent.supports(stage)]
@@ -36,10 +31,10 @@ class Router:
         signals and receive a completed :class:`CycleReport`.
         """
         context = CycleContext(signals=list(signals))
-        transitions = [StageTransition(self._cycle.START)]
-        for stage in self._cycle.STAGES:
+        transitions = [StageTransition(TradingCycle.START)]
+        for stage in TradingCycle.MIDDLE_STAGES:
             for agent in self.agents_for(stage):
                 agent.act(stage, context)
             transitions.append(StageTransition(stage))
-        transitions.append(StageTransition(self._cycle.COMPLETE))
+        transitions.append(StageTransition(TradingCycle.COMPLETE))
         return CycleReport(context=context, transitions=transitions)
