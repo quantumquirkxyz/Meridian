@@ -9,7 +9,11 @@ import {
   parse,
   type Validator,
 } from "./schema.ts";
-import { isRiskReasonCode, type RiskReasonCode } from "./reason-codes.ts";
+import {
+  isRiskReasonCode,
+  type RiskDecisionOutcome,
+  type RiskReasonCode,
+} from "./reason-codes.ts";
 import { isOrderLimits, type OrderLimits } from "./limits.ts";
 
 /**
@@ -31,8 +35,24 @@ export interface RiskDecisionBase {
   notes?: string;
 }
 
+const APPROVAL_OUTCOMES = [
+  "APPROVE",
+  "REDUCE_SIZE",
+] as const satisfies readonly RiskDecisionOutcome[];
+
+const REJECTION_OUTCOMES = [
+  "REJECT",
+] as const satisfies readonly RiskDecisionOutcome[];
+
+const DEFENSIVE_OUTCOMES = [
+  "EXIT_ONLY",
+  "CANCEL_ONLY",
+  "CASH_ONLY",
+  "HALT_SYSTEM",
+] as const satisfies readonly RiskDecisionOutcome[];
+
 export interface ApprovedRiskDecision extends RiskDecisionBase {
-  decision: "APPROVE" | "REDUCE_SIZE";
+  decision: (typeof APPROVAL_OUTCOMES)[number];
   /** Resulting size. */
   approvedSize: number;
   /** Limits that bound the resulting order. */
@@ -42,11 +62,11 @@ export interface ApprovedRiskDecision extends RiskDecisionBase {
 }
 
 export interface RejectedRiskDecision extends RiskDecisionBase {
-  decision: "REJECT";
+  decision: (typeof REJECTION_OUTCOMES)[number];
 }
 
 export interface DefensiveRiskDecision extends RiskDecisionBase {
-  decision: "EXIT_ONLY" | "CANCEL_ONLY" | "CASH_ONLY" | "HALT_SYSTEM";
+  decision: (typeof DEFENSIVE_OUTCOMES)[number];
 }
 
 export type RiskDecision =
@@ -54,36 +74,30 @@ export type RiskDecision =
   | RejectedRiskDecision
   | DefensiveRiskDecision;
 
-const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
-  decision: isEnumOf(["APPROVE", "REDUCE_SIZE"] as const),
+/** Shared base fields of every RiskDecision variant (RiskDecisionBase). */
+const baseShape = {
   orderIntentIdempotencyKey: isString,
   reasonCodes: isArrayOf(isRiskReasonCode),
   evaluatedAtMs: isNumber,
+  notes: isOptional(isString),
+};
+
+const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
+  decision: isEnumOf(APPROVAL_OUTCOMES),
+  ...baseShape,
   approvedSize: isNumber,
   approvedLimits: isOrderLimits,
   expiresAtMs: isNumber,
-  notes: isOptional(isString),
 });
 
 const isRejectedDecision: Validator<RejectedRiskDecision> = isObjectOf({
-  decision: isEnumOf(["REJECT"] as const),
-  orderIntentIdempotencyKey: isString,
-  reasonCodes: isArrayOf(isRiskReasonCode),
-  evaluatedAtMs: isNumber,
-  notes: isOptional(isString),
+  decision: isEnumOf(REJECTION_OUTCOMES),
+  ...baseShape,
 });
 
 const isDefensiveDecision: Validator<DefensiveRiskDecision> = isObjectOf({
-  decision: isEnumOf([
-    "EXIT_ONLY",
-    "CANCEL_ONLY",
-    "CASH_ONLY",
-    "HALT_SYSTEM",
-  ] as const),
-  orderIntentIdempotencyKey: isString,
-  reasonCodes: isArrayOf(isRiskReasonCode),
-  evaluatedAtMs: isNumber,
-  notes: isOptional(isString),
+  decision: isEnumOf(DEFENSIVE_OUTCOMES),
+  ...baseShape,
 });
 
 export const isRiskDecision: Validator<RiskDecision> = isOneOf<RiskDecision>([

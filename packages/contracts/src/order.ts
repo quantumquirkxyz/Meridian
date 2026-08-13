@@ -1,5 +1,6 @@
 import {
   isEnumOf,
+  isNullable,
   isNumber,
   isObjectOf,
   isOptional,
@@ -41,14 +42,8 @@ export interface OrderIntent {
 
 const isOrderSide: Validator<OrderSide> = isEnumOf(ORDER_SIDES);
 
-const isOptionalRiskApproval: Validator<RiskDecision | null | undefined> = (
-  value,
-): value is RiskDecision | null | undefined => {
-  if (value === undefined || value === null) {
-    return true;
-  }
-  return isRiskDecision(value);
-};
+const isOptionalRiskApproval: Validator<RiskDecision | null | undefined> =
+  isOptional(isNullable(isRiskDecision));
 
 export const isOrderIntent: Validator<OrderIntent> = isObjectOf({
   idempotencyKey: isString,

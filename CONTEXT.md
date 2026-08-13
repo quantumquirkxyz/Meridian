@@ -201,7 +201,7 @@ A classification of market state (trend, range, high volatility, low liquidity, 
 _Avoid_: fixed limits ignoring market state.
 
 **SystemMode**:
-Global permission state: normal, signal-only, paper-only, cancel-only, reduce-only, cash-only, halt. The system changes mode on failures or regime changes.
+Global permission state enforced by the contracts package (`SYSTEM_MODES` in `packages/contracts/src/modes.ts`): `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `PAPER_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. The system changes mode on failures or regime changes; modes can only reduce activity, never increase it. This matches ARCHITECTURE.md:39 and the RISK.md emergency chain. It diverges from the Spec Alpha mode list ("normal, degraded, signal-only, paper-only, cancel-only, reduce-only, cash-only, halt") by naming the first defensive mode `OBSERVE_ONLY` instead of `degraded`; the per-source data-quality state `DEGRADED` (DATA_QUALITY_STATES) covers the "degraded" concept. Renaming requires an ADR.
 _Avoid_: trading always active.
 
 **Phase**:

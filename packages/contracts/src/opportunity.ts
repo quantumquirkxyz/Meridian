@@ -7,6 +7,7 @@ import {
   parse,
   type Validator,
 } from "./schema.ts";
+import { isRiskReasonCode, type RiskReasonCode } from "./reason-codes.ts";
 
 /**
  * OpportunityCandidate: an opportunity hypothesis with expected net profit
@@ -50,8 +51,8 @@ export interface OpportunityCandidate {
   expectedNetProfitUsd: number;
   createdAtMs: number;
   status: OpportunityStatus;
-  /** Reason codes / messages when the route was discarded or rejected. */
-  invalidationReasons: string[];
+  /** Reason codes when the route was discarded or rejected. */
+  invalidationReasons: RiskReasonCode[];
 }
 
 const isOpportunityStatus: Validator<OpportunityStatus> =
@@ -77,7 +78,7 @@ export const isOpportunityCandidate: Validator<OpportunityCandidate> = isObjectO
   expectedNetProfitUsd: isNumber,
   createdAtMs: isNumber,
   status: isOpportunityStatus,
-  invalidationReasons: isArrayOf(isString),
+  invalidationReasons: isArrayOf(isRiskReasonCode),
 });
 
 export function parseOpportunityCandidate(value: unknown): OpportunityCandidate {

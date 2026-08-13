@@ -135,7 +135,7 @@ export interface AgentReview {
 }
 
 export const isStateName: Validator<StateName> = isEnumOf(STATE_NAMES);
-const isPermission: Validator<Permission> = isEnumOf(PERMISSIONS);
+export const isPermission: Validator<Permission> = isEnumOf(PERMISSIONS);
 const isAgentReviewAction: Validator<AgentReviewAction> =
   isEnumOf(AGENT_REVIEW_ACTIONS);
 
