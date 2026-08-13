@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARIES Artifact Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "producer", "status", "summary"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1 },
+    "producer": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["draft", "ready", "blocked", "accepted", "rejected"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "evidence": { "type": "array", "items": { "type": "string" } },
+    "consumers": { "type": "array", "items": { "type": "string" } },
+    "createdAt": { "type": "string", "minLength": 1 }
+  }
+}
+

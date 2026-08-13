@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Review Fixes"
+  short_description: "Plan PR review fixes as comments"
+  default_prompt: "Use $plan-review-fixes to turn code-review findings on a PR into a concrete remediation plan and post it as PR comments."

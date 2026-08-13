@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Review Fixes"
+  short_description: "Apply a PR review fix plan"
+  default_prompt: "Use $implement-review-fixes to read a PR remediation plan, implement the corrections, validate them, and report completion."

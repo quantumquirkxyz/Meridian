@@ -1,0 +1,88 @@
+---
+name: implement-review-fixes
+description: Read a GitHub PR remediation plan produced by plan-review-fixes, implement the planned corrections through the repository's implement workflow, validate locally, and report completion. Use after a PR has a Review Fix Plan comment, or when review-fix-loop needs to apply planned review-pr fixes before another review pass.
+version: 1
+capabilities:
+  - implement-review-remediation
+  - validate-review-fixes
+inputs:
+  - review fix plan
+  - pr branch
+outputs:
+  - implementation note
+  - validation result
+dependencies:
+  - plan-review-fixes
+  - implement
+sideEffects:
+  - write-code
+  - run-tests
+stopCondition: The scoped review fixes are implemented and validated locally.
+risk: medium
+---
+
+# Implement Review Fixes
+
+## Overview
+
+Execute an existing review correction plan. This skill treats the PR comment as the source of truth, applies only scoped corrections, and leaves the PR ready for another review-pr pass.
+
+## Workflow
+
+1. Identify the PR and branch.
+   - Prefer an explicit PR number from the user.
+   - Otherwise run `gh pr view --json number,headRefName,baseRefName,url,title`.
+   - Confirm the current branch matches the PR head branch before editing.
+
+2. Read the current plan.
+   - Fetch PR comments with `gh pr view <number> --comments`.
+   - Use the latest comment headed `## Review Fix Plan` with `Status: planned`.
+   - Stop if no plan exists; run plan-review-fixes first.
+
+3. Validate the plan against the current diff.
+   - Confirm the files or symbols named in the plan still exist.
+   - Check whether any item is already fixed; mark it complete in your local working notes and do not rework it.
+   - If the diff has moved enough that the plan is stale, stop and ask for a new plan-review-fixes pass.
+
+4. Implement scoped fixes.
+   - Use the implement workflow for the actual edits.
+   - Prefer test-first fixes when a finding maps to observable behavior.
+   - Keep each correction local to the finding that motivated it.
+   - Avoid opportunistic refactors unless the plan explicitly requires them.
+
+5. Validate.
+   - Run targeted tests or checks named in the plan.
+   - Run repo-level typecheck/lint/test commands when the change surface justifies it.
+   - If a planned item cannot be validated locally, state the reason in the PR completion note.
+
+6. Report completion on the PR.
+   - Comment with heading `## Review Fix Implementation`.
+   - Include completed items, validation commands, failures or skipped checks, and any remaining blockers.
+   - Do not mark the PR clean; only a later review-pr pass can do that.
+
+## Completion Comment Format
+
+```markdown
+## Review Fix Implementation
+
+Status: implemented
+
+### Completed
+
+- <planned item> -> <what changed>
+
+### Validation
+
+- `<command>` -> <result>
+
+### Remaining
+
+<remaining blockers or "None">
+```
+
+## Guardrails
+
+- Never implement without a current Review Fix Plan.
+- Never broaden scope beyond review findings unless the user explicitly asks.
+- Never merge or close the PR.
+- If implementation changes the intended behavior beyond the original spec, stop and send the PR back through review-pr.

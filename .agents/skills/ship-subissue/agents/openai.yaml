@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ship Subissue"
+  short_description: "Merge a reviewed subissue PR and mark the subissue completed"
+  default_prompt: "Use $ship-subissue to merge a clean subissue PR, mark the subissue as completed, and close the linked issue when the workflow requires it after review has passed."

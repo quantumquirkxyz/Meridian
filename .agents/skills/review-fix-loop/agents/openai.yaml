@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Fix Loop"
+  short_description: "Repeat review planning and fixes"
+  default_prompt: "Use $review-fix-loop to run code-review, plan fixes, implement fixes, and repeat until the PR is clean or blocked."

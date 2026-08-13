@@ -1,0 +1,4 @@
+interface:
+  display_name: "Publish Open PR"
+  short_description: "Publish one scoped subissue as a non-draft PR"
+  default_prompt: "Use $publish-open-pr to publish one finished subissue as an open GitHub pull request from an already-prepared issue branch. Follow the issue workflow in AGENTS.md, validate, push, and open a non-draft PR with an explicit markdown body."
