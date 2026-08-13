@@ -371,6 +371,18 @@ describe("StateGraph contracts", () => {
     expect(isTransition(transition)).toBe(true);
   });
 
+  test("audit is mandatory for every transition", () => {
+    const base = {
+      id: "risk-execute",
+      from: "RISK_VALIDATE",
+      to: "EXECUTION_PRECHECK",
+      guard: { name: "minEdge", evaluate: () => true },
+      requiredPermissions: ["APPROVE_RISK"],
+    };
+    expect(isTransition({ ...base, audit: true })).toBe(true);
+    expect(isTransition({ ...base, audit: false })).toBe(false);
+  });
+
   test("guard results validate both branches", () => {
     expect(isGuardResult({ ok: true })).toBe(true);
     expect(isGuardResult({ ok: false, reason: "below edge", reasonCodes: ["MIN_EDGE"] })).toBe(true);

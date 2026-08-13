@@ -75,7 +75,9 @@ export type RiskDecision =
   | DefensiveRiskDecision;
 
 /** Shared base fields of every RiskDecision variant (RiskDecisionBase). */
-const baseShape = {
+const baseShape: {
+  [K in keyof RiskDecisionBase]: Validator<RiskDecisionBase[K]>;
+} = {
   orderIntentIdempotencyKey: isString,
   reasonCodes: isArrayOf(isRiskReasonCode),
   evaluatedAtMs: isNumber,

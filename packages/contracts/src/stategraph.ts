@@ -80,8 +80,8 @@ export interface Transition {
   to: StateName;
   guard: TransitionGuard;
   requiredPermissions: Permission[];
-  /** Every transition is audited; this flag is kept explicit. */
-  audit: boolean;
+  /** Mandatory audit: every transition is audited (ARCHITECTURE.md:41). */
+  audit: true;
 }
 
 /**
@@ -179,7 +179,7 @@ export const isTransition: Validator<Transition> = isObjectOf({
   to: isStateName,
   guard: isTransitionGuard,
   requiredPermissions: isArrayOf(isPermission),
-  audit: isBoolean,
+  audit: isBooleanLiteralTrue,
 });
 
 export const isAgentReview: Validator<AgentReview> = isObjectOf({
