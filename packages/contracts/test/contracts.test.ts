@@ -235,6 +235,21 @@ describe("RiskDecision", () => {
     expect(isRiskDecision({ ...validDecision(), reasonCodes: ["NOPE"] })).toBe(false);
   });
 
+  test("rejection without reason codes is rejected", () => {
+    expect(isRiskDecision({ ...validDecision(), reasonCodes: [] })).toBe(false);
+  });
+
+  test("defensive decision without reason codes is rejected", () => {
+    expect(
+      isRiskDecision({
+        decision: "CASH_ONLY",
+        orderIntentIdempotencyKey: "k1",
+        reasonCodes: [],
+        evaluatedAtMs: 1_700_000_000_000,
+      }),
+    ).toBe(false);
+  });
+
   test("approvedLimits is validated against the OrderLimits shape", () => {
     expect(
       isRiskDecision({

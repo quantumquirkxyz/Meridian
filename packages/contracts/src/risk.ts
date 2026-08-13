@@ -1,6 +1,7 @@
 import {
   isArrayOf,
   isEnumOf,
+  isNonEmptyArrayOf,
   isNumber,
   isObjectOf,
   isOptional,
@@ -95,11 +96,13 @@ const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
 const isRejectedDecision: Validator<RejectedRiskDecision> = isObjectOf({
   decision: isEnumOf(REJECTION_OUTCOMES),
   ...baseShape,
+  reasonCodes: isNonEmptyArrayOf(isRiskReasonCode),
 });
 
 const isDefensiveDecision: Validator<DefensiveRiskDecision> = isObjectOf({
   decision: isEnumOf(DEFENSIVE_OUTCOMES),
   ...baseShape,
+  reasonCodes: isNonEmptyArrayOf(isRiskReasonCode),
 });
 
 export const isRiskDecision: Validator<RiskDecision> = isOneOf<RiskDecision>([

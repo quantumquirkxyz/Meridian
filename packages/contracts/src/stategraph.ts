@@ -4,13 +4,12 @@ import {
   isBooleanLiteralFalse,
   isBooleanLiteralTrue,
   isEnumOf,
+  isFreeformRecord,
   isNumber,
   isObjectOf,
   isOptional,
-  isRecordOf,
   isString,
   isOneOf,
-  isUnknown,
   type Validator,
 } from "./schema.ts";
 import { isSystemMode, type SystemMode } from "./modes.ts";
@@ -143,7 +142,7 @@ export const isStateContext: Validator<StateContext> = isObjectOf({
   state: isStateName,
   mode: isSystemMode,
   updatedAtMs: isNumber,
-  data: isOptional(isRecordOf(isUnknown)),
+  data: isOptional(isFreeformRecord),
 });
 
 export const isStateNode: Validator<StateNode> = isObjectOf({

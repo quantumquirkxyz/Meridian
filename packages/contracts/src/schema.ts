@@ -50,6 +50,16 @@ export function isArrayOf<T>(inner: Validator<T>): Validator<T[]> {
     Array.isArray(value) && value.every((item) => inner(item));
 }
 
+/** Like `isArrayOf`, but requires at least one element. */
+export function isNonEmptyArrayOf<T>(inner: Validator<T>): Validator<T[]> {
+  return (value): value is T[] =>
+    Array.isArray(value) && value.length > 0 && value.every((item) => inner(item));
+}
+
+/** Free-form record of unknown values; for intentionally untyped payload fields. */
+export const isFreeformRecord: Validator<Record<string, unknown>> =
+  isRecordOf(isUnknown);
+
 export function isRecordOf<T>(inner: Validator<T>): Validator<Record<string, T>> {
   return (value): value is Record<string, T> => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {

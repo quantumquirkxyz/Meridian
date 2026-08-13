@@ -2,13 +2,12 @@ import {
   isArrayOf,
   isBoolean,
   isEnumOf,
+  isFreeformRecord,
   isInRange,
   isNumber,
   isObjectOf,
   isOptional,
-  isRecordOf,
   isString,
-  isUnknown,
   parse,
   type Validator,
 } from "./schema.ts";
@@ -97,7 +96,7 @@ const isMarketEdgeType: Validator<MarketEdgeType> = isEnumOf(MARKET_EDGE_TYPES);
 export const isMarketNode: Validator<MarketNode> = isObjectOf({
   id: isString,
   type: isMarketNodeType,
-  meta: isOptional(isRecordOf(isUnknown)),
+  meta: isOptional(isFreeformRecord),
 });
 
 export const isEdgeWeights: Validator<EdgeWeights> = isObjectOf({

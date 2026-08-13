@@ -1,11 +1,10 @@
 import {
   isEnumOf,
+  isFreeformRecord,
   isNumber,
   isObjectOf,
   isOptional,
-  isRecordOf,
   isString,
-  isUnknown,
   parse,
   type Validator,
 } from "./schema.ts";
@@ -50,7 +49,7 @@ export const isAuditEvent: Validator<AuditEvent> = isObjectOf({
   action: isAuditAction,
   actor: isString,
   state: isOptional(isStateName),
-  data: isOptional(isRecordOf(isUnknown)),
+  data: isOptional(isFreeformRecord),
 });
 
 export function parseAuditEvent(value: unknown): AuditEvent {
