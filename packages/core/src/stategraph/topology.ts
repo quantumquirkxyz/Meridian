@@ -76,6 +76,19 @@ function hasCandidateStatus(ctx: StateContext): boolean {
   return candidates.some((candidate) => candidate.status === CANDIDATE_STATUS);
 }
 
+/** True when the first candidate in the transition data is still profitable. */
+function hasProfitableCandidate(ctx: StateContext): boolean {
+  const candidates = (ctx.data?.candidates ?? []) as Array<{
+    expectedNetProfitUsd?: unknown;
+  }>;
+  const candidate = candidates[0];
+  return (
+    candidate !== undefined &&
+    typeof candidate.expectedNetProfitUsd === "number" &&
+    candidate.expectedNetProfitUsd > 0
+  );
+}
+
 /**
  * True when the transition context carries a complete risk decision whose
  * recorded outcome matches the decision itself. US26 / ADR-0003: no bare
@@ -270,7 +283,11 @@ function flowTransitions(): Transition[] {
       to: "BUILD_ORDER_INTENT",
       guard: allOf("detectToBuild", [
         modeAllows("buildMode", SIGNAL_MODES),
-        allowWhen("candidateExists", hasCandidateStatus, "no profitable candidates"),
+        allowWhen(
+          "candidateProfitable",
+          hasProfitableCandidate,
+          "no profitable candidates",
+        ),
       ]),
       requiredPermissions: ["PROPOSE_SIGNAL"],
       audit: true,
@@ -356,6 +373,13 @@ function flowTransitions(): Transition[] {
           "precheckPassed",
           (ctx) => ctx.data?.precheck === "PASS",
           "precheck failed",
+        ),
+        allowWhen(
+          "reducedTradeProfitable",
+          (ctx) =>
+            typeof ctx.data?.expectedNetProfitUsd === "number" &&
+            ctx.data.expectedNetProfitUsd > 0,
+          "reduced trade not profitable",
         ),
         allowWhen(
           "modeAllowsExecution",

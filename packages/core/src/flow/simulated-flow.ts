@@ -300,6 +300,7 @@ export function runSimulatedOpportunityFlow(
         riskDecisionOutcome: riskDecision.decision,
         riskDecision,
         orderIntent,
+        expectedNetProfitUsd: candidate.expectedNetProfitUsd,
       },
       ["RISK_APPROVED"],
     );

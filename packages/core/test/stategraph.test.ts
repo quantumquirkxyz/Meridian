@@ -319,7 +319,11 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
     const toPrecheck = graph.transition({
       to: "EXECUTION_PRECHECK",
       actor: MODULE_ACTORS.riskEngine,
-      data: { riskDecisionOutcome: "APPROVE", riskDecision: approve },
+      data: {
+        riskDecisionOutcome: "APPROVE",
+        riskDecision: approve,
+        expectedNetProfitUsd: 5,
+      },
       timestampMs: 0,
     });
     expect(toPrecheck.ok).toBe(true);

@@ -10,8 +10,16 @@ const CANDIDATE_CYCLE: ReadonlyArray<
   ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
   ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
   ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-  ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-  ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
+  [
+    "DETECT_OPPORTUNITY",
+    MODULE_ACTORS.opportunityScanner,
+    { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] },
+  ],
+  [
+    "BUILD_ORDER_INTENT",
+    MODULE_ACTORS.opportunityScanner,
+    { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] },
+  ],
 ];
 
 /** Canonical cycle up to RISK_VALIDATE, the risk-gate entry point. */
