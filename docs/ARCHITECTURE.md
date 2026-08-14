@@ -78,6 +78,7 @@ Data path: `Market data → Graph state → Agent analysis → Candidate signal 
 packages/
   contracts    types, schemas, events, reason codes (shared frontier)
   core         StateGraph, Risk, Execution, Reconciliation, Inventory, Loops
+  events       in-memory event bus, SQLite event store, deterministic replay
   connectors   bybit, pancakeswap-v4, rpc
   graph        MarketGraph, pathfinder, arbitrage-cycles, systemic-risk
   harness      backtest, replay, simulators, stress
@@ -85,7 +86,7 @@ packages/
   infra        health, failover, circuit breakers, secrets, control TUI
 ```
 
-Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `graph`, `harness`, `connectors` depend only on `contracts`.
+Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `harness`, `connectors` depend only on `contracts`.
 
 ## Persistence
 

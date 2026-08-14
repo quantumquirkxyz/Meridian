@@ -7,7 +7,8 @@ import { join } from "node:path";
  * level:
  *   - contracts is dependency-free (no LLM or framework runtime);
  *   - core depends only on contracts (never LLMs or connectors);
- *   - connectors, graph, harness depend only on contracts (ARCHITECTURE.md:88).
+ *   - connectors, graph, harness, events depend only on contracts
+ *     (ARCHITECTURE.md:88; `events` follows the same rule).
  *
  * `packages/agents` is deferred to Beta (ROADMAP.md; ADR-0001 lists it in the
  * monorepo but issue #12 scopes the scaffold to six packages). When it lands,
@@ -22,6 +23,7 @@ const PACKAGE_DIRS = [
   "contracts",
   "core",
   "connectors",
+  "events",
   "graph",
   "harness",
   "infra",
@@ -111,8 +113,8 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     }
   });
 
-  test("connectors, graph, harness depend only on contracts", () => {
-    for (const dir of ["connectors", "graph", "harness"]) {
+  test("connectors, graph, harness, events depend only on contracts", () => {
+    for (const dir of ["connectors", "graph", "harness", "events"]) {
       const { dependencies = {} } = packageJson(dir);
       expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
     }
