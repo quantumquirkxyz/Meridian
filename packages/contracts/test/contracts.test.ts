@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   AUDIT_ACTIONS,
+  AUDIT_REASON_CODES,
   DATA_QUALITY_STATES,
   OPPORTUNITY_STATUS,
   ORDER_SIDES,
@@ -67,6 +68,22 @@ describe("MarketDataSnapshot", () => {
   test("null bid/ask/mid accepted; missing symbol rejected", () => {
     expect(isMarketDataSnapshot({ ...marketData, bid: null, mid: null })).toBe(true);
     expect(isMarketDataSnapshot({ ...marketData, symbol: undefined })).toBe(false);
+  });
+
+  test("workspace smoke payload validates", () => {
+    expect(
+      isMarketDataSnapshot({
+        venue: "bybit",
+        symbol: "BTC/USDT",
+        timestampMs: 0,
+        bid: 1,
+        ask: 2,
+        mid: 1.5,
+        depth: 1,
+        latencyMs: 1,
+        source: "smoke",
+      }),
+    ).toBe(true);
   });
 });
 
@@ -170,6 +187,30 @@ describe("OpportunityCandidate", () => {
   test("route must be strings", () => {
     expect(isOpportunityCandidate({ ...validCandidate(), route: [1] })).toBe(false);
   });
+
+  test("REJECTED/INVALID candidates must carry reason codes", () => {
+    expect(
+      isOpportunityCandidate({
+        ...validCandidate(),
+        status: "REJECTED",
+        invalidationReasons: [],
+      }),
+    ).toBe(false);
+    expect(
+      isOpportunityCandidate({
+        ...validCandidate(),
+        status: "REJECTED",
+        invalidationReasons: ["MIN_EDGE"],
+      }),
+    ).toBe(true);
+    expect(
+      isOpportunityCandidate({
+        ...validCandidate(),
+        status: "INVALID",
+        invalidationReasons: undefined,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("OrderIntent", () => {
@@ -198,7 +239,6 @@ describe("OrderIntent", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
       }),
@@ -271,7 +311,6 @@ describe("RiskDecision", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
         approvedLimits: { maxSlippageBps: "high" },
@@ -282,7 +321,6 @@ describe("RiskDecision", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
         approvedLimits: { minDataQuality: "BROKEN" },
@@ -293,7 +331,6 @@ describe("RiskDecision", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
         approvedLimits: { minDataQuality: "HEALTHY" },
@@ -321,6 +358,17 @@ describe("AuditEvent", () => {
   test("state must be a known StateName", () => {
     expect(isAuditEvent({ ...validAuditEvent(), state: "NOT_A_STATE" })).toBe(false);
   });
+
+  test("audit events carry machine-readable reason codes", () => {
+    const event = {
+      ...validAuditEvent(),
+      reasonCodes: ["TRANSITION_ALLOWED", "DEFENSIVE_MODE_ENTERED"],
+    };
+    expect(isAuditEvent(event)).toBe(true);
+    expect(isAuditEvent({ ...event, reasonCodes: ["NOT_A_CODE"] })).toBe(false);
+    expect(AUDIT_REASON_CODES).toContain("TRANSITION_BLOCKED");
+    expect(AUDIT_REASON_CODES).toContain("RISK_APPROVED");
+  });
 });
 
 describe("Permission", () => {
@@ -328,6 +376,22 @@ describe("Permission", () => {
     expect(isPermission("APPROVE_RISK")).toBe(true);
     expect(isPermission("TRADE_STOCKS")).toBe(false);
     expect(PERMISSIONS_NEVER_GRANTED_TO_AGENTS.every(isPermission)).toBe(true);
+  });
+
+  test("defensive-mode trigger permissions exist", () => {
+    for (const permission of [
+      "TRIGGER_DEGRADED_MODE",
+      "TRIGGER_CANCEL_ONLY",
+      "TRIGGER_REDUCE_ONLY",
+      "TRIGGER_CASH_ONLY",
+      "TRIGGER_HALT",
+    ]) {
+      expect(isPermission(permission)).toBe(true);
+    }
+    // Execution-authority permissions are still never granted to agents.
+    for (const permission of PERMISSIONS_NEVER_GRANTED_TO_AGENTS) {
+      expect(isPermission(permission)).toBe(true);
+    }
   });
 });
 
@@ -365,13 +429,14 @@ describe("StateGraph contracts", () => {
     expect(isStateContext({ ...ctx, state: "NOPE" })).toBe(false);
   });
 
-  test("state node with agent-safe permissions only", () => {
+  test("state node validates with name and optional description", () => {
     const node = {
       name: "RISK_VALIDATE",
-      canEnter: true,
-      permissions: ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
+      description: "risk validation state",
     };
     expect(isStateNode(node)).toBe(true);
+    expect(isStateNode({ name: "RISK_VALIDATE" })).toBe(true);
+    expect(isStateNode({ name: "NOPE" })).toBe(false);
   });
 
   test("permission model: execution permissions never granted to agents", () => {

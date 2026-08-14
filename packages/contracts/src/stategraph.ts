@@ -56,9 +56,6 @@ export interface StateContext {
 export interface StateNode {
   name: StateName;
   description?: string;
-  canEnter: boolean;
-  /** Permissions required to enter/operate in this state. */
-  permissions: Permission[];
 }
 
 export type GuardResult =
@@ -96,6 +93,9 @@ export const PERMISSIONS = [
   "REQUEST_MORE_DATA",
   "TRIGGER_DEGRADED_MODE",
   "TRIGGER_CANCEL_ONLY",
+  "TRIGGER_REDUCE_ONLY",
+  "TRIGGER_CASH_ONLY",
+  "TRIGGER_HALT",
   "APPROVE_RISK",
   "SUBMIT_ORDER",
   "CANCEL_ORDER",
@@ -128,8 +128,6 @@ export const isStateContext: Validator<StateContext> = isObjectOf({
 export const isStateNode: Validator<StateNode> = isObjectOf({
   name: isStateName,
   description: isOptional(isString),
-  canEnter: isBoolean,
-  permissions: isArrayOf(isPermission),
 });
 
 export const isGuardResult: Validator<GuardResult> = isOneOf<GuardResult>([
