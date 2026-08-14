@@ -49,29 +49,22 @@ export function sameEventStream(
 }
 
 /**
- * Deterministic graph-state reconstruction from a recorded session (Alpha.2
- * exit criterion: replay reconstructs graph state). Folds normalized market
- * events (MARKET_TICK, ORDERBOOK_*, POOL_STATE_UPDATE) into a
- * MarketGraphSnapshot. Deterministic: identical input events always produce
- * the identical snapshot (same version, snapshotId, nodes, edges).
- */
-export function reconstructGraphState(
-  events: readonly EventEnvelope[],
-): MarketGraphSnapshot {
-  return foldGraphState(events);
-}
-
-/**
  * Folds a recorded session's market events into a versioned graph snapshot.
  * Deterministic: identical input events always produce the identical snapshot
  * (same version, snapshotId, nodes, and edges), so replay and live folding
  * agree bit for bit.
+ *
+ * Only MARKET_TICK, ORDERBOOK_SNAPSHOT/DELTA, and POOL_STATE_UPDATE
+ * contribute graph edges/nodes. All other event types (GAS_UPDATE,
+ * FUNDING_UPDATE, DATA_QUALITY_UPDATE, GRAPH_UPDATED, AUDIT_EVENT) are
+ * intentionally skipped — they do not carry graph-topology information.
  */
 export function foldGraphState(
   events: readonly EventEnvelope[],
 ): MarketGraphSnapshot {
   const nodes = new Map<string, MarketNode>();
   const edges = new Map<string, MarketEdge>();
+  let foldedCount = 0;
 
   for (const event of events) {
     if (!isEventEnvelope(event)) {
@@ -79,6 +72,7 @@ export function foldGraphState(
     }
     switch (event.type) {
       case "MARKET_TICK": {
+        foldedCount++;
         const tick = parseMarketTickPayload(event.payload);
         upsertNode(nodes, { id: `asset:${tick.symbol}`, type: "ASSET" });
         upsertNode(nodes, { id: `venue:${tick.venue}`, type: "VENUE" });
@@ -99,6 +93,7 @@ export function foldGraphState(
       }
       case "ORDERBOOK_SNAPSHOT":
       case "ORDERBOOK_DELTA": {
+        foldedCount++;
         const book = parseOrderBookSnapshotPayload(event.payload);
         const bestBid = book.bids[0]?.price;
         const bestAsk = book.asks[0]?.price;
@@ -113,13 +108,14 @@ export function foldGraphState(
           from: `venue:${book.venue}`,
           to: `asset:${book.symbol}`,
           type: "ORDER_BOOK",
-          weights: { price: mid, liquidityUsd: bookDepthUsd(book.bids, book.asks) },
+          weights: { price: mid, liquidityUsd: totalLevelValueUsd(book.bids, book.asks) },
           tradable: true,
           source: event.source,
         });
         break;
       }
       case "POOL_STATE_UPDATE": {
+        foldedCount++;
         const pool = parsePoolStateUpdatePayload(event.payload);
         upsertNode(nodes, { id: `asset:${pool.symbol}`, type: "ASSET" });
         upsertNode(nodes, { id: `venue:${pool.venue}`, type: "VENUE" });
@@ -139,6 +135,9 @@ export function foldGraphState(
         });
         break;
       }
+      // GAS_UPDATE, FUNDING_UPDATE, DATA_QUALITY_UPDATE, GRAPH_UPDATED,
+      // and AUDIT_EVENT do not carry graph-topology information and are
+      // intentionally excluded from the fold.
       default:
         break;
     }
@@ -152,7 +151,7 @@ export function foldGraphState(
   );
 
   return {
-    version: events.filter(isEventEnvelope).length,
+    version: foldedCount,
     snapshotId: snapshotIdFor(sortedNodes, sortedEdges),
     createdAtMs:
       events.filter(isEventEnvelope).at(-1)?.timestampMs ?? 0,
@@ -162,16 +161,14 @@ export function foldGraphState(
 }
 
 function upsertNode(nodes: Map<string, MarketNode>, node: MarketNode): void {
-  if (!nodes.has(node.id)) {
-    nodes.set(node.id, node);
-  }
+  nodes.set(node.id, node);
 }
 
 function upsertEdge(edges: Map<string, MarketEdge>, edge: MarketEdge): void {
   edges.set(edge.id, edge);
 }
 
-function bookDepthUsd(
+function totalLevelValueUsd(
   bids: readonly { price: number; size: number }[],
   asks: readonly { price: number; size: number }[],
 ): number {

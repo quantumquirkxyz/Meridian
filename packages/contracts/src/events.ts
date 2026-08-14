@@ -147,15 +147,9 @@ export const isOrderBookSnapshotPayload: Validator<OrderBookSnapshotPayload> =
     sequence: isOptional(isNumber),
   });
 
+/** Structurally identical to snapshot; reuses the same validator. */
 export const isOrderBookDeltaPayload: Validator<OrderBookDeltaPayload> =
-  isObjectOf({
-    venue: isString,
-    symbol: isString,
-    timestampMs: isNumber,
-    bids: isArrayOf(isOrderBookLevel),
-    asks: isArrayOf(isOrderBookLevel),
-    sequence: isOptional(isNumber),
-  });
+  isOrderBookSnapshotPayload;
 
 export const isPoolStateUpdatePayload: Validator<PoolStateUpdatePayload> =
   isObjectOf({
@@ -184,31 +178,28 @@ export const isFundingUpdatePayload: Validator<FundingUpdatePayload> = isObjectO
   fundingRate: isNumber,
 });
 
+/**
+ * Runtime validator map keyed by event type. Keeps the dispatch in sync with
+ * the BaseEventType union — one entry per event, no repeated switch.
+ */
+const NORMALIZED_VALIDATORS: Record<BaseEventType, Validator<unknown>> = {
+  MARKET_TICK: isMarketDataSnapshot,
+  ORDERBOOK_SNAPSHOT: isOrderBookSnapshotPayload,
+  ORDERBOOK_DELTA: isOrderBookDeltaPayload,
+  POOL_STATE_UPDATE: isPoolStateUpdatePayload,
+  GAS_UPDATE: isGasUpdatePayload,
+  FUNDING_UPDATE: isFundingUpdatePayload,
+  DATA_QUALITY_UPDATE: isDataQualityReport,
+  GRAPH_UPDATED: isMarketGraphSnapshot,
+  AUDIT_EVENT: isAuditEvent,
+};
+
 /** Validates a normalized payload against its event type. */
 export function isNormalizedEventPayload(
   type: BaseEventType,
   payload: Record<string, unknown>,
 ): boolean {
-  switch (type) {
-    case "MARKET_TICK":
-      return isMarketDataSnapshot(payload);
-    case "ORDERBOOK_SNAPSHOT":
-      return isOrderBookSnapshotPayload(payload);
-    case "ORDERBOOK_DELTA":
-      return isOrderBookDeltaPayload(payload);
-    case "POOL_STATE_UPDATE":
-      return isPoolStateUpdatePayload(payload);
-    case "GAS_UPDATE":
-      return isGasUpdatePayload(payload);
-    case "FUNDING_UPDATE":
-      return isFundingUpdatePayload(payload);
-    case "DATA_QUALITY_UPDATE":
-      return isDataQualityReport(payload);
-    case "GRAPH_UPDATED":
-      return isMarketGraphSnapshot(payload);
-    case "AUDIT_EVENT":
-      return isAuditEvent(payload);
-  }
+  return NORMALIZED_VALIDATORS[type](payload);
 }
 
 const isEventEnvelopeShape: Validator<EventEnvelope> = isObjectOf({

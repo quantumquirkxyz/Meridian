@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { EventBus } from "../src/bus.ts";
 import {
   foldGraphState,
-  reconstructGraphState,
   replayAll,
   replaySince,
   sameEventStream,
@@ -158,7 +157,7 @@ describe("event bus + persistence + replay (issue #17)", () => {
     });
 
     const replay = replayAll(store);
-    const reconstructed = reconstructGraphState(replay);
+    const reconstructed = foldGraphState(replay);
 
     // Graph state is derived from market events, not a passthrough.
     expect(reconstructed.nodes.map((n) => n.id).sort()).toEqual([
@@ -173,7 +172,7 @@ describe("event bus + persistence + replay (issue #17)", () => {
     expect(reconstructed.version).toBe(3);
 
     // Deterministic: reconstruct from same store gives identical result.
-    expect(reconstructGraphState(replayAll(store))).toEqual(reconstructed);
+    expect(foldGraphState(replayAll(store))).toEqual(reconstructed);
   });
 
   test("AC4: folding a session is deterministic and matches replay", () => {
