@@ -36,6 +36,16 @@
         "@types/bun": "^1.3.14",
       },
     },
+    "packages/events": {
+      "name": "@agenttrading/events",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agenttrading/contracts": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+      },
+    },
     "packages/graph": {
       "name": "@agenttrading/graph",
       "version": "0.1.0",
@@ -73,6 +83,8 @@
     "@agenttrading/contracts": ["@agenttrading/contracts@workspace:packages/contracts"],
 
     "@agenttrading/core": ["@agenttrading/core@workspace:packages/core"],
+
+    "@agenttrading/events": ["@agenttrading/events@workspace:packages/events"],
 
     "@agenttrading/graph": ["@agenttrading/graph@workspace:packages/graph"],
 
