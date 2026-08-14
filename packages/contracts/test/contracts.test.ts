@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   AUDIT_ACTIONS,
+  AUDIT_REASON_CODES,
   DATA_QUALITY_STATES,
   OPPORTUNITY_STATUS,
   ORDER_SIDES,
@@ -317,6 +318,17 @@ describe("AuditEvent", () => {
   test("state must be a known StateName", () => {
     expect(isAuditEvent({ ...validAuditEvent(), state: "NOT_A_STATE" })).toBe(false);
   });
+
+  test("audit events carry machine-readable reason codes", () => {
+    const event = {
+      ...validAuditEvent(),
+      reasonCodes: ["TRANSITION_ALLOWED", "DEFENSIVE_MODE_ENTERED"],
+    };
+    expect(isAuditEvent(event)).toBe(true);
+    expect(isAuditEvent({ ...event, reasonCodes: ["NOT_A_CODE"] })).toBe(false);
+    expect(AUDIT_REASON_CODES).toContain("TRANSITION_BLOCKED");
+    expect(AUDIT_REASON_CODES).toContain("RISK_APPROVED");
+  });
 });
 
 describe("Permission", () => {
@@ -324,6 +336,22 @@ describe("Permission", () => {
     expect(isPermission("APPROVE_RISK")).toBe(true);
     expect(isPermission("TRADE_STOCKS")).toBe(false);
     expect(PERMISSIONS_NEVER_GRANTED_TO_AGENTS.every(isPermission)).toBe(true);
+  });
+
+  test("defensive-mode trigger permissions exist", () => {
+    for (const permission of [
+      "TRIGGER_DEGRADED_MODE",
+      "TRIGGER_CANCEL_ONLY",
+      "TRIGGER_REDUCE_ONLY",
+      "TRIGGER_CASH_ONLY",
+      "TRIGGER_HALT",
+    ]) {
+      expect(isPermission(permission)).toBe(true);
+    }
+    // Execution-authority permissions are still never granted to agents.
+    for (const permission of PERMISSIONS_NEVER_GRANTED_TO_AGENTS) {
+      expect(isPermission(permission)).toBe(true);
+    }
   });
 });
 

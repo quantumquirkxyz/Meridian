@@ -1,4 +1,5 @@
 import {
+  isArrayOf,
   isEnumOf,
   isFreeformRecord,
   isNumber,
@@ -25,6 +26,30 @@ export const AUDIT_ACTIONS = [
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
+/**
+ * Machine-readable reason codes attached to every audit event. Every StateGraph
+ * transition (allowed or blocked) carries at least one code so the audit trail
+ * is reconstructable without parsing free text (issue #13, ARCHITECTURE.md:41).
+ */
+export const AUDIT_REASON_CODES = [
+  "TRANSITION_ALLOWED",
+  "TRANSITION_BLOCKED",
+  "GUARD_FAILED",
+  "PERMISSION_DENIED",
+  "INVALID_TRANSITION",
+  "DEFENSIVE_MODE_ENTERED",
+  "MODE_REDUCED",
+  "OPPORTUNITY_RECORDED",
+  "ORDER_INTENT_CREATED",
+  "RISK_APPROVED",
+  "RISK_REJECTED",
+  "EXECUTION_SIMULATED",
+  "RECONCILIATION_OK",
+  "CYCLE_COMPLETE",
+] as const;
+
+export type AuditReasonCode = (typeof AUDIT_REASON_CODES)[number];
+
 export interface AuditEvent {
   /** Idempotency key (e.g. uuid) for dedup/replay. */
   eventId: string;
@@ -38,9 +63,13 @@ export interface AuditEvent {
   state?: StateName;
   /** Structured detail (transition id, decision, reason codes, ...). */
   data?: Record<string, unknown>;
+  /** Why this event happened (machine-readable), e.g. transition reason. */
+  reasonCodes?: AuditReasonCode[];
 }
 
 const isAuditAction: Validator<AuditAction> = isEnumOf(AUDIT_ACTIONS);
+const isAuditReasonCode: Validator<AuditReasonCode> =
+  isEnumOf(AUDIT_REASON_CODES);
 
 export const isAuditEvent: Validator<AuditEvent> = isObjectOf({
   eventId: isString,
@@ -50,6 +79,7 @@ export const isAuditEvent: Validator<AuditEvent> = isObjectOf({
   actor: isString,
   state: isOptional(isStateName),
   data: isOptional(isFreeformRecord),
+  reasonCodes: isOptional(isArrayOf(isAuditReasonCode)),
 });
 
 export function parseAuditEvent(value: unknown): AuditEvent {

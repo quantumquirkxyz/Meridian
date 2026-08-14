@@ -3,6 +3,7 @@ import {
   isEnumOf,
   isNumber,
   isObjectOf,
+  isOptional,
   isString,
   parse,
   type Validator,
@@ -78,7 +79,7 @@ export const isOpportunityCandidate: Validator<OpportunityCandidate> = isObjectO
   expectedNetProfitUsd: isNumber,
   createdAtMs: isNumber,
   status: isOpportunityStatus,
-  invalidationReasons: isArrayOf(isRiskReasonCode),
+  invalidationReasons: isOptional(isArrayOf(isRiskReasonCode)),
 });
 
 export function parseOpportunityCandidate(value: unknown): OpportunityCandidate {
