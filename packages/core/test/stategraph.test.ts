@@ -126,6 +126,48 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
     expect(approved.ok).toBe(true);
   });
 
+  test("detect-to-build uses any profitable candidate, not just the first", () => {
+    const { graph } = newGraph();
+    graph.transition({
+      to: "INGEST_MARKET_DATA",
+      actor: MODULE_ACTORS.marketDataSentinel,
+      timestampMs: 0,
+    });
+    graph.transition({
+      to: "NORMALIZE_MARKET_STATE",
+      actor: MODULE_ACTORS.normalizer,
+      data: { normalizedMarketData: { mid: 1 } },
+      timestampMs: 0,
+    });
+    graph.transition({
+      to: "UPDATE_MARKET_GRAPH",
+      actor: MODULE_ACTORS.graphBuilder,
+      data: { graphSnapshot: { version: 1 } },
+      timestampMs: 0,
+    });
+
+    const detected = graph.transition({
+      to: "DETECT_OPPORTUNITY",
+      actor: MODULE_ACTORS.opportunityScanner,
+      data: { graphSnapshot: { version: 1 } },
+      timestampMs: 0,
+    });
+    expect(detected.ok).toBe(true);
+
+    const built = graph.transition({
+      to: "BUILD_ORDER_INTENT",
+      actor: MODULE_ACTORS.opportunityScanner,
+      data: {
+        candidates: [
+          { status: "CANDIDATE", expectedNetProfitUsd: -1 },
+          { status: "CANDIDATE", expectedNetProfitUsd: 5 },
+        ],
+      },
+      timestampMs: 0,
+    });
+    expect(built.ok).toBe(true);
+  });
+
   test("an OrderIntent cannot pass RISK_VALIDATE without a risk decision", () => {
     const { graph } = newGraph();
     walkToRiskValidate(graph);

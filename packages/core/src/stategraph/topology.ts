@@ -81,11 +81,10 @@ function hasProfitableCandidate(ctx: StateContext): boolean {
   const candidates = (ctx.data?.candidates ?? []) as Array<{
     expectedNetProfitUsd?: unknown;
   }>;
-  const candidate = candidates[0];
-  return (
-    candidate !== undefined &&
-    typeof candidate.expectedNetProfitUsd === "number" &&
-    candidate.expectedNetProfitUsd > 0
+  return candidates.some(
+    (candidate) =>
+      typeof candidate.expectedNetProfitUsd === "number" &&
+      candidate.expectedNetProfitUsd > 0,
   );
 }
 
