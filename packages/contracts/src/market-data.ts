@@ -34,12 +34,17 @@ export interface MarketDataSnapshot {
   source: string;
   /** Optional venue sequence number for ordering/dedup. */
   sequence?: number;
+  /** Optional raw pool reserves for DEX snapshots. */
   reserve0?: number;
   reserve1?: number;
+  /** Optional quote metadata for DEX snapshots. */
   gasEstimateUsd?: number;
   routerQuote?: number;
+  /** Optional venue-specific chain id. */
   chain?: string;
+  /** Optional venue-specific pool or market identifier. */
   poolAddress?: string;
+  /** Optional RPC health for on-chain sources. */
   rpcHealth?: string;
 }
 
