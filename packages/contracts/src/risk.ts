@@ -30,8 +30,6 @@ import { isOrderLimits, type OrderLimits } from "./limits.ts";
 export interface RiskDecisionBase {
   /** OrderIntent.idempotencyKey this decision applies to. */
   orderIntentIdempotencyKey: string;
-  /** Reason codes, populated for REJECT / REDUCE_SIZE / defensive modes. */
-  reasonCodes: RiskReasonCode[];
   evaluatedAtMs: number;
   /** Optional deterministic notes. */
   notes?: string;
@@ -98,7 +96,6 @@ const baseShape: {
   [K in keyof RiskDecisionBase]: Validator<RiskDecisionBase[K]>;
 } = {
   orderIntentIdempotencyKey: isString,
-  reasonCodes: isArrayOf(isRiskReasonCode),
   evaluatedAtMs: isNumber,
   notes: isOptional(isString),
 };

@@ -52,7 +52,7 @@ export interface OpportunityCandidate {
   createdAtMs: number;
   status: OpportunityStatus;
   /** Reason codes when the route was discarded or rejected. */
-  invalidationReasons: RiskReasonCode[];
+  invalidationReasons?: RiskReasonCode[];
 }
 
 const isOpportunityStatus: Validator<OpportunityStatus> =

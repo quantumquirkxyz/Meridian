@@ -198,7 +198,6 @@ describe("OrderIntent", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
       }),
@@ -271,7 +270,6 @@ describe("RiskDecision", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
         approvedLimits: { maxSlippageBps: "high" },
@@ -282,7 +280,6 @@ describe("RiskDecision", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
         approvedLimits: { minDataQuality: "BROKEN" },
@@ -293,7 +290,6 @@ describe("RiskDecision", () => {
       isRiskDecision({
         decision: "APPROVE",
         orderIntentIdempotencyKey: "k1",
-        reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
         approvedLimits: { minDataQuality: "HEALTHY" },
