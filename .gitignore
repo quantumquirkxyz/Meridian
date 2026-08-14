@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+bun.lockb
+.env
+.env.*
+!.env.example
+coverage/
+*.log

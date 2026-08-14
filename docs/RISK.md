@@ -62,7 +62,7 @@ A route is a candidate only if net profit exceeds costs, slippage, gas, latency,
 
 ## Emergency modes
 
-`OBSERVE_ONLY` → `SIGNAL_ONLY` → `PAPER_ONLY` → `CANCEL_ONLY` → `REDUCE_ONLY` → `CASH_ONLY` → `HALTED`
+`OBSERVE_ONLY` → `SIGNAL_ONLY` → `PAPER_ONLY` → `CANCEL_ONLY` → `REDUCE_ONLY` → `CASH_ONLY` → `HALT`
 
 General rule: on technical failure, reduce activity; never increase exposure.
 
