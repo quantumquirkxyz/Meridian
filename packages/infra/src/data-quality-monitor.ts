@@ -4,6 +4,8 @@ import {
   type DataQualityState,
   DEFAULT_SCORING_THRESHOLDS,
   evaluateDataQuality,
+  isStateAtLeast,
+  STATE_RULES,
   type DataQualityScoringThresholds,
 } from "@agenttrading/contracts";
 
@@ -12,6 +14,11 @@ import {
  * should attempt reconnection.
  */
 export type ReconnectCallback = (source: string) => void;
+
+/**
+ * Callback invoked when a source transitions to DISCONNECTED (alert).
+ */
+export type AlertCallback = (source: string, report: DataQualityReport) => void;
 
 /**
  * Callback invoked on any state transition.
@@ -46,6 +53,7 @@ export class DataQualityMonitor {
   private readonly sources = new Map<string, SourceTracking>();
   private readonly thresholds: DataQualityScoringThresholds;
   private readonly reconnectCallbacks: ReconnectCallback[] = [];
+  private readonly alertCallbacks: AlertCallback[] = [];
   private readonly stateChangeCallbacks: StateChangeCallback[] = [];
 
   constructor(
@@ -57,6 +65,11 @@ export class DataQualityMonitor {
   /** Register a callback for DISCONNECTED events (reconnection trigger). */
   onReconnect(callback: ReconnectCallback): void {
     this.reconnectCallbacks.push(callback);
+  }
+
+  /** Register a callback for DISCONNECTED events (alert). */
+  onAlert(callback: AlertCallback): void {
+    this.alertCallbacks.push(callback);
   }
 
   /** Register a callback for any state transition. */
@@ -92,6 +105,9 @@ export class DataQualityMonitor {
       for (const cb of this.reconnectCallbacks) {
         cb(metrics.source);
       }
+      for (const cb of this.alertCallbacks) {
+        cb(metrics.source, report);
+      }
     }
 
     return report;
@@ -119,7 +135,7 @@ export class DataQualityMonitor {
   isSourceTradable(source: string): boolean {
     const report = this.sources.get(source)?.report;
     if (!report) return false;
-    return report.state === "HEALTHY" || report.state === "DEGRADED";
+    return STATE_RULES[report.state].tradable;
   }
 
   /**
@@ -129,7 +145,7 @@ export class DataQualityMonitor {
   canSourceGenerateSignals(source: string): boolean {
     const report = this.sources.get(source)?.report;
     if (!report) return false;
-    return report.state === "HEALTHY";
+    return STATE_RULES[report.state].canGenerateSignals;
   }
 
   /**
@@ -139,7 +155,7 @@ export class DataQualityMonitor {
   sourcesAtLeast(threshold: DataQualityState): string[] {
     const result: string[] = [];
     for (const [source, tracking] of this.sources) {
-      if (stateRank(tracking.report.state) >= stateRank(threshold)) {
+      if (isStateAtLeast(tracking.report.state, threshold)) {
         result.push(source);
       }
     }
@@ -154,18 +170,5 @@ export class DataQualityMonitor {
   /** Number of tracked sources. */
   get size(): number {
     return this.sources.size;
-  }
-}
-
-function stateRank(state: DataQualityState): number {
-  switch (state) {
-    case "HEALTHY":
-      return 0;
-    case "DEGRADED":
-      return 1;
-    case "STALE":
-      return 2;
-    case "DISCONNECTED":
-      return 3;
   }
 }

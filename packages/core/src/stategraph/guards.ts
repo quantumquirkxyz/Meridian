@@ -2,6 +2,7 @@ import {
   type DataQualityReport,
   type DataQualityState,
   isStateAtLeast,
+  markEdgesByQuality,
   SYSTEM_MODES,
   type GuardResult,
   type StateContext,
@@ -204,26 +205,24 @@ export function defensiveEntry(
  * Guard that blocks signal generation when the data sources feeding the
  * current opportunity are degraded or worse. Reads `dataQualityReports` from
  * the transition context (an array of DataQualityReport) and checks whether
- * any source referenced by `sourceKeys` in `context.data` is at least as
- * restrictive as the given threshold (default STALE).
+ * any source is at least as restrictive as the given threshold (default DEGRADED).
  *
  * Acceptance criteria (issue #18 AC2):
  * - Degraded sources block dependent signal generation when threshold is
  *   DEGRADED or stricter.
- * - STALE sources block dependent signal generation when threshold is STALE
- *   (default).
+ * - STALE sources block dependent signal generation when threshold is STALE.
  */
 export function dataQualityBlocksSignal(
   name: string,
   options: {
     /** Keys in context.data to check for source reports (default: ["source"]). */
     sourceKeys?: string[];
-    /** Minimum state that blocks signal generation (default: "STALE"). */
+    /** Minimum state that blocks signal generation (default: "DEGRADED"). */
     threshold?: DataQualityState;
   } = {},
 ): TransitionGuard {
   const sourceKeys = options.sourceKeys ?? ["source"];
-  const threshold = options.threshold ?? "STALE";
+  const threshold = options.threshold ?? "DEGRADED";
 
   return {
     name,
@@ -234,22 +233,6 @@ export function dataQualityBlocksSignal(
         return { ok: true, reason: "no data quality reports; proceeding" };
       }
 
-      for (const key of sourceKeys) {
-        const sourceId = context.data?.[key];
-        if (typeof sourceId !== "string") continue;
-
-        const report = reports.find((r) => r.source === sourceId);
-        if (report && isStateAtLeast(report.state, threshold)) {
-          return {
-            ok: false,
-            reason: `source ${sourceId} quality ${report.state} blocks signal generation (threshold: ${threshold})`,
-          };
-        }
-      }
-
-      // Also check all reports: if any source in the report list is at least
-      // as restrictive as the threshold, block. This catches cases where
-      // multiple sources feed the opportunity.
       for (const report of reports) {
         if (isStateAtLeast(report.state, threshold)) {
           return {
@@ -279,11 +262,5 @@ export function markEdgesFromDegradedSources<
   reports: readonly DataQualityReport[],
   threshold: DataQualityState = "DEGRADED",
 ): E[] {
-  return edges.map((edge) => {
-    const report = reports.find((r) => r.source === edge.source);
-    if (report && isStateAtLeast(report.state, threshold)) {
-      return { ...edge, tradable: false };
-    }
-    return edge;
-  });
+  return markEdgesByQuality(edges, reports, threshold);
 }

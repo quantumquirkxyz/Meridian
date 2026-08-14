@@ -4,6 +4,7 @@ import {
   type MarketEdge,
   type MarketGraphSnapshot,
   isStateAtLeast,
+  markEdgesByQuality,
 } from "@agenttrading/contracts";
 
 /**
@@ -37,13 +38,7 @@ export function markEdgesFromSources(
   reports: readonly DataQualityReport[],
   threshold: DataQualityState = "DEGRADED",
 ): MarketEdge[] {
-  return edges.map((edge) => {
-    const report = reports.find((r) => r.source === edge.source);
-    if (report && isStateAtLeast(report.state, threshold)) {
-      return { ...edge, tradable: false };
-    }
-    return edge;
-  });
+  return markEdgesByQuality(edges, reports, threshold);
 }
 
 /**

@@ -37,13 +37,26 @@ The exact queries and mutations live in [`references/graphql.md`](references/gra
 - Rule: never create a board that already exists under the same title.
 - Rule: item field values are set only after the item is added — you cannot add and update an item in one call.
 
+## CohortLens context
+
+This repo is **CohortLens** — a DeFi platform powered by Graph Engineering that maps, predicts, and recommends on complex capital flows between protocols and blockchains. When creating boards for this project, use domain-appropriate fields:
+
+- **Protocol** — the DeFi protocol involved (Aave, Uniswap, etc.)
+- **Chain** — the settlement network (Ethereum, Polygon, Arbitrum, etc.)
+- **Capital Flow Type** — Deposit, Borrow, Repay, Withdraw, Swap, Transfer
+- **Risk Level** — systemic, credit, counterparty, protocol
+- **Lens Type** — ML model, graph query/analytics, risk signal
+- **Status** — matching the triage labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix
+
+Use the project's domain glossary from `CONTEXT.md` when naming fields and items. Avoid synonyms the glossary explicitly rejects (e.g. use "Capital flow" not "transaction", "Wallet" not "user").
+
 ## Steps
 
 ### 1. Confirm the target
 
 Ask for or confirm:
 
-- **Owner** — which org or user the board belongs to.
+- **Owner** — which org or user the board belongs to (default: `quantumquirkxyz`).
 - **Title** — exact string.
 - **Scope** — which repositories to link, which custom fields and views to create, which items to add, and any field values to set.
 

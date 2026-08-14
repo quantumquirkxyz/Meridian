@@ -19,5 +19,4 @@ API consumers and spec-readers see an accurate contract instead of stale stubs.
 
 - Related issue: #100
 - Issue title: BE-2: Update OpenAPI spec to reflect real backend contracts
-- Issue URL: https://github.com/quantumquirkxyz/ARIES/issues/100
 - Issue labels: `ready-for-agent`

@@ -51,8 +51,8 @@ Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-
       - assignee: the current GitHub user
       - reviewers: the other human collaborator, and any additional reviewers explicitly resolved by the bundle
       - labels: the linked issue's non-triage labels
-      - milestone: only the linked issue milestone when the ticket already provides one; do not invent a repo default
-    - Use `gh pr create --title "<title>" --body-file "<body-file>" --assignee "@me"` without `--draft`, add `--milestone "<milestone>"` only when the metadata bundle resolved one, then add repeated `--label` and `--reviewer` flags from the metadata bundle.
+      - milestone: the linked issue milestone, if one is set
+    - Use `gh pr create --title "<title>" --body-file "<body-file>" --assignee "@me" --milestone "<milestone>"` without `--draft`, then add repeated `--label` and `--reviewer` flags from the metadata bundle.
    - Use a title that matches the subissue and the actual diff.
 6. Hand off to the next workflow.
    - After the PR opens, the next workflow is `review-pr`, then `ship-subissue` for merge/close.
@@ -62,7 +62,6 @@ Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-
 - Never create a draft PR.
 - Never open a PR before the branch is pushed.
 - Never guess at issue traceability when the reference is not already clear.
-- Never fall back to a repo-wide default milestone such as `MVP Alpha`; if the linked issue does not specify one, omit `--milestone`.
 - Never guess at reviewer handles. If the workflow cannot resolve a required reviewer from repository context, stop and report the missing configuration.
 - Never use a vague title like `Update` or `Misc fixes` unless the diff is genuinely broad and unavoidable.
 - Never create or amend commits here; that belongs to `implement`.

@@ -45,7 +45,7 @@ The issue tracker and triage label vocabulary should have been provided to you â
 
 Check with the user that these seams match their expectations.
 
-3. Write the spec using the template below, then publish it to the project issue tracker. Apply the repo defaults from `docs/agents/issue-tracker.md`: for this repo that means milestone `MVP Alpha`, project `MVP Alpha - ARIES`, and labels `spec` plus `ready-for-agent` - no need for additional triage. The entire published issue, including headings, user stories, and notes, must be in English.
+3. Write the spec using the template below, then publish it to the project issue tracker. Apply the repo defaults from `docs/agents/issue-tracker.md`: for this repo that means labels `spec` plus `ready-for-agent` - no need for additional triage. The entire published issue, including headings, user stories, and notes, must be in English.
 
 ## Completion criteria
 

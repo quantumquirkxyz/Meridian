@@ -94,13 +94,13 @@ describe("dataQualityBlocksSignal", () => {
     expect(result.reason).toContain("DISCONNECTED");
   });
 
-  test("passes when DEGRADED with default STALE threshold", () => {
+  test("blocks when DEGRADED with default DEGRADED threshold", () => {
     const guard = dataQualityBlocksSignal("testGuard");
     const ctx = makeCtx({
       source: "bybit-ws",
       dataQualityReports: [degradedReport("bybit-ws")],
     });
-    expect(guard.evaluate(ctx).ok).toBe(true);
+    expect(guard.evaluate(ctx).ok).toBe(false);
   });
 
   test("blocks when DEGRADED with DEGRADED threshold", () => {

@@ -24,6 +24,15 @@ export const DATA_QUALITY_STATES = [
 
 export type DataQualityState = (typeof DATA_QUALITY_STATES)[number];
 
+export const EXCHANGE_STATUSES = [
+  "online",
+  "degraded",
+  "maintenance",
+  "offline",
+] as const;
+
+export type ExchangeStatus = (typeof EXCHANGE_STATUSES)[number];
+
 export const isDataQualityState: Validator<DataQualityState> =
   isEnumOf(DATA_QUALITY_STATES);
 
@@ -68,7 +77,7 @@ export interface DataQualityMetrics {
   /** Whether the RPC/HTTP endpoint is reachable. */
   rpcHealthy: boolean;
   /** Exchange-reported status ("online", "maintenance", etc.). */
-  exchangeStatus: string;
+  exchangeStatus: ExchangeStatus;
 }
 
 export const isDataQualityMetrics: Validator<DataQualityMetrics> = isObjectOf({
@@ -78,7 +87,7 @@ export const isDataQualityMetrics: Validator<DataQualityMetrics> = isObjectOf({
   gapCount: isNumber,
   wsRestConsistent: isBoolean,
   rpcHealthy: isBoolean,
-  exchangeStatus: isString,
+  exchangeStatus: isEnumOf(EXCHANGE_STATUSES),
 });
 
 export function parseDataQualityMetrics(value: unknown): DataQualityMetrics {
@@ -150,23 +159,19 @@ function linearScore(
   return clamp01((max - value) / (max - ideal));
 }
 
-/**
- * Computes a composite data quality score in [0, 1] from raw metrics.
- *
- * Components (all normalized to [0, 1]):
- * - Latency: linear decay from ideal to max
- * - Staleness: linear decay from ideal to max
- * - Gaps: linear decay from 0 to maxGaps
- * - WS/REST consistency: 1.0 if consistent, 0.0 otherwise
- * - RPC health: 1.0 if healthy, 0.0 otherwise
- * - Exchange status: 1.0 if "online", 0.5 if "degraded", 0.0 otherwise
- *
- * The final score is the weighted sum, clamped to [0, 1].
- */
-export function computeDataQualityScore(
+interface QualityComponents {
+  latency: number;
+  staleness: number;
+  gaps: number;
+  consistency: number;
+  rpcHealth: number;
+  exchangeStatus: number;
+}
+
+function computeQualityComponents(
   metrics: DataQualityMetrics,
-  thresholds: DataQualityScoringThresholds = DEFAULT_SCORING_THRESHOLDS,
-): number {
+  thresholds: DataQualityScoringThresholds,
+): QualityComponents {
   const latency = linearScore(
     metrics.latencyMs,
     thresholds.latencyIdealMs,
@@ -191,6 +196,29 @@ export function computeDataQualityScore(
       : metrics.exchangeStatus === "degraded"
         ? 0.5
         : 0;
+
+  return { latency, staleness, gaps, consistency, rpcHealth, exchangeStatus };
+}
+
+/**
+ * Computes a composite data quality score in [0, 1] from raw metrics.
+ *
+ * Components (all normalized to [0, 1]):
+ * - Latency: linear decay from ideal to max
+ * - Staleness: linear decay from ideal to max
+ * - Gaps: linear decay from 0 to maxGaps
+ * - WS/REST consistency: 1.0 if consistent, 0.0 otherwise
+ * - RPC health: 1.0 if healthy, 0.0 otherwise
+ * - Exchange status: 1.0 if "online", 0.5 if "degraded", 0.0 otherwise
+ *
+ * The final score is the weighted sum, clamped to [0, 1].
+ */
+export function computeDataQualityScore(
+  metrics: DataQualityMetrics,
+  thresholds: DataQualityScoringThresholds = DEFAULT_SCORING_THRESHOLDS,
+): number {
+  const { latency, staleness, gaps, consistency, rpcHealth, exchangeStatus } =
+    computeQualityComponents(metrics, thresholds);
 
   const raw =
     latency * thresholds.weightLatency +
@@ -230,27 +258,15 @@ export function deriveDataQualityState(
 
   if (isStale) return "STALE";
 
-  const latencyComponent = linearScore(
-    metrics.latencyMs,
-    thresholds.latencyIdealMs,
-    thresholds.latencyMaxMs,
+  const { latency, staleness, gaps, consistency } = computeQualityComponents(
+    metrics,
+    thresholds,
   );
-  const stalenessComponent = linearScore(
-    metrics.stalenessMs,
-    thresholds.stalenessIdealMs,
-    thresholds.stalenessMaxMs,
-  );
-  const gapComponent =
-    thresholds.maxGaps > 0
-      ? clamp01(1 - metrics.gapCount / thresholds.maxGaps)
-      : metrics.gapCount === 0
-        ? 1
-        : 0;
 
   const hasWeakComponent =
-    latencyComponent < 0.5 ||
-    stalenessComponent < 0.5 ||
-    gapComponent < 0.5 ||
+    latency < 0.5 ||
+    staleness < 0.5 ||
+    gaps < 0.5 ||
     !metrics.wsRestConsistent;
 
   const isDegraded = score < 0.7 || hasWeakComponent;
@@ -326,4 +342,34 @@ export function evaluateDataQuality(
     lastSeenMs,
     reason,
   };
+}
+
+/**
+ * Per-state behavior rules. Consumers should query this table instead of
+ * repeating switch/if-cascades on `DataQualityState`.
+ */
+export const STATE_RULES: Record<
+  DataQualityState,
+  { tradable: boolean; canGenerateSignals: boolean }
+> = {
+  HEALTHY: { tradable: true, canGenerateSignals: true },
+  DEGRADED: { tradable: true, canGenerateSignals: false },
+  STALE: { tradable: false, canGenerateSignals: false },
+  DISCONNECTED: { tradable: false, canGenerateSignals: false },
+};
+
+/**
+ * Generic helper: marks edges as non-tradable when their source is at least
+ * as restrictive as the given threshold. Pure function — returns a new array.
+ */
+export function markEdgesByQuality<
+  E extends { source: string; tradable: boolean },
+>(edges: readonly E[], reports: readonly DataQualityReport[], threshold: DataQualityState = "DEGRADED"): E[] {
+  return edges.map((edge) => {
+    const report = reports.find((r) => r.source === edge.source);
+    if (report && isStateAtLeast(report.state, threshold)) {
+      return { ...edge, tradable: false };
+    }
+    return edge;
+  });
 }

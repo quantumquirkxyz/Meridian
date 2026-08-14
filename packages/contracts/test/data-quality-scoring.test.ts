@@ -129,7 +129,7 @@ describe("computeDataQualityScore", () => {
   });
 
   test("exchange maintenance reduces score", () => {
-    const m = { ...healthyMetrics(), exchangeStatus: "maintenance" };
+    const m: DataQualityMetrics = { ...healthyMetrics(), exchangeStatus: "maintenance" };
     const score = computeDataQualityScore(m);
     expect(score).toBeLessThan(0.95);
   });
@@ -138,11 +138,11 @@ describe("computeDataQualityScore", () => {
     const degraded = computeDataQualityScore({
       ...healthyMetrics(),
       exchangeStatus: "degraded",
-    });
+    } as DataQualityMetrics);
     const maintenance = computeDataQualityScore({
       ...healthyMetrics(),
       exchangeStatus: "maintenance",
-    });
+    } as DataQualityMetrics);
     expect(degraded).toBeGreaterThan(maintenance);
   });
 
@@ -155,7 +155,7 @@ describe("computeDataQualityScore", () => {
       wsRestConsistent: false,
       rpcHealthy: false,
       exchangeStatus: "offline",
-    });
+    } as DataQualityMetrics);
     expect(worst).toBeGreaterThanOrEqual(0);
     expect(worst).toBeLessThanOrEqual(1);
   });
@@ -169,13 +169,13 @@ describe("deriveDataQualityState", () => {
   });
 
   test("offline exchange -> DISCONNECTED", () => {
-    const m = { ...healthyMetrics(), exchangeStatus: "offline" };
+    const m: DataQualityMetrics = { ...healthyMetrics(), exchangeStatus: "offline" };
     const score = computeDataQualityScore(m);
     expect(deriveDataQualityState(score, m)).toBe("DISCONNECTED");
   });
 
-  test("unknown exchange status -> DISCONNECTED", () => {
-    const m = { ...healthyMetrics(), exchangeStatus: "unknown" };
+  test("maintenance exchange -> DISCONNECTED", () => {
+    const m: DataQualityMetrics = { ...healthyMetrics(), exchangeStatus: "maintenance" };
     const score = computeDataQualityScore(m);
     expect(deriveDataQualityState(score, m)).toBe("DISCONNECTED");
   });
@@ -197,7 +197,7 @@ describe("deriveDataQualityState", () => {
   });
 
   test("low score -> STALE", () => {
-    const m = {
+    const m: DataQualityMetrics = {
       source: "x",
       latencyMs: 100_000,
       stalenessMs: 100_000,
@@ -218,7 +218,7 @@ describe("deriveDataQualityState", () => {
   });
 
   test("degraded exchange status -> DEGRADED (not disconnected)", () => {
-    const m = {
+    const m: DataQualityMetrics = {
       ...healthyMetrics(),
       exchangeStatus: "degraded",
       latencyMs: 2_500,
@@ -243,7 +243,7 @@ describe("evaluateDataQuality", () => {
   });
 
   test("DISCONNECTED report includes reason", () => {
-    const m = { ...healthyMetrics(), exchangeStatus: "offline" };
+    const m: DataQualityMetrics = { ...healthyMetrics(), exchangeStatus: "offline" };
     const report = evaluateDataQuality(m, 1_700_000_000_000);
     expect(report.state).toBe("DISCONNECTED");
     expect(report.reason).toContain("exchange status");

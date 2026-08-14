@@ -159,6 +159,34 @@ describe("DataQualityMonitor", () => {
     expect(reconnected).toHaveLength(1);
   });
 
+  test("alert callback fires on DISCONNECTED", () => {
+    const monitor = new DataQualityMonitor();
+    const alerts: Array<{ source: string; state: string }> = [];
+
+    monitor.onAlert((source, report) => {
+      alerts.push({ source, state: report.state });
+    });
+
+    monitor.evaluate(healthyMetrics(), 1_000);
+    monitor.evaluate(disconnectedMetrics(), 2_000);
+
+    expect(alerts).toEqual([{ source: "bybit-ws-linear", state: "DISCONNECTED" }]);
+  });
+
+  test("alert callback does not fire if already DISCONNECTED", () => {
+    const monitor = new DataQualityMonitor();
+    const alerts: string[] = [];
+
+    monitor.onAlert((source) => {
+      alerts.push(source);
+    });
+
+    monitor.evaluate(disconnectedMetrics(), 1_000);
+    monitor.evaluate(disconnectedMetrics(), 2_000);
+
+    expect(alerts).toHaveLength(1);
+  });
+
   test("isSourceTradable returns true for HEALTHY and DEGRADED", () => {
     const monitor = new DataQualityMonitor();
     monitor.evaluate(healthyMetrics(), 1_000);
