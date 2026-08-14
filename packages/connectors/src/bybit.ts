@@ -13,9 +13,27 @@ export interface BybitMarketDataInput {
   venue?: string;
 }
 
+const BYBIT_QUOTE_SUFFIXES = ["USDT", "USDC", "BTC", "ETH", "SOL", "BNB", "USD"] as const;
+
+function splitBybitSymbol(symbol: string): [string, string] {
+  const normalized = symbol.toUpperCase().replace(/[-_]/g, "");
+  const slash = symbol.includes("/") ? symbol.toUpperCase().split("/") : null;
+  if (slash && slash.length === 2) {
+    return [slash[0], slash[1]];
+  }
+
+  for (const suffix of BYBIT_QUOTE_SUFFIXES) {
+    if (normalized.endsWith(suffix) && normalized.length > suffix.length) {
+      return [normalized.slice(0, -suffix.length), suffix];
+    }
+  }
+
+  return [normalized, ""];
+}
+
 export function normalizeBybitSymbol(symbol: string): string {
-  const normalized = symbol.toUpperCase().replace(/[-_]/g, "/");
-  return normalized.includes("/") ? normalized : `${normalized.slice(0, 3)}/${normalized.slice(3)}`;
+  const [base, quote] = splitBybitSymbol(symbol);
+  return quote ? `${base}/${quote}` : base;
 }
 
 export function buildBybitMarketDataSnapshot(

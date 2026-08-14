@@ -10,6 +10,7 @@ describe("Bybit connector normalization", () => {
   test("normalizes symbol variants", () => {
     expect(normalizeBybitSymbol("BTCUSDT")).toBe("BTC/USDT");
     expect(normalizeBybitSymbol("btc_usdt")).toBe("BTC/USDT");
+    expect(normalizeBybitSymbol("1000PEPEUSDT")).toBe("1000PEPE/USDT");
   });
 
   test("builds a normalized market snapshot with latency and mid", () => {
