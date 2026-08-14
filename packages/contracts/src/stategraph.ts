@@ -13,7 +13,7 @@ import {
   type Validator,
 } from "./schema.ts";
 import { isSystemMode, type SystemMode } from "./modes.ts";
-import { isRiskReasonCode, type RiskReasonCode } from "./reason-codes.ts";
+import { isRiskReasonCode } from "./reason-codes.ts";
 
 /**
  * StateGraph base contracts (ADR-0002, ARCHITECTURE.md). The project's own
@@ -56,14 +56,14 @@ export interface StateContext {
 export interface StateNode {
   name: StateName;
   description?: string;
-  allowed: boolean;
+  canEnter: boolean;
   /** Permissions required to enter/operate in this state. */
   permissions: Permission[];
 }
 
 export type GuardResult =
   | { ok: true; reason?: string }
-  | { ok: false; reason: string; reasonCodes: RiskReasonCode[] };
+  | { ok: false; reason: string };
 
 /** Evaluates whether a transition is allowed in the given context. */
 export interface TransitionGuard {
@@ -115,27 +115,8 @@ export const PERMISSIONS_NEVER_GRANTED_TO_AGENTS = [
   "MODIFY_RISK_LIMITS",
 ] as const satisfies readonly Permission[];
 
-/** AgentReview: the typed recommendation agents produce at REQUEST_AGENT_REVIEW. */
-export const AGENT_REVIEW_ACTIONS = [
-  "APPROVE",
-  "REJECT",
-  "REQUEST_MORE_DATA",
-  "ABSTAIN",
-] as const;
-
-export type AgentReviewAction = (typeof AGENT_REVIEW_ACTIONS)[number];
-
-export interface AgentReview {
-  agent: string;
-  action: AgentReviewAction;
-  comment: string;
-  reviewedAtMs: number;
-}
-
 export const isStateName: Validator<StateName> = isEnumOf(STATE_NAMES);
 export const isPermission: Validator<Permission> = isEnumOf(PERMISSIONS);
-const isAgentReviewAction: Validator<AgentReviewAction> =
-  isEnumOf(AGENT_REVIEW_ACTIONS);
 
 export const isStateContext: Validator<StateContext> = isObjectOf({
   state: isStateName,
@@ -147,7 +128,7 @@ export const isStateContext: Validator<StateContext> = isObjectOf({
 export const isStateNode: Validator<StateNode> = isObjectOf({
   name: isStateName,
   description: isOptional(isString),
-  allowed: isBoolean,
+  canEnter: isBoolean,
   permissions: isArrayOf(isPermission),
 });
 
@@ -159,7 +140,6 @@ export const isGuardResult: Validator<GuardResult> = isOneOf<GuardResult>([
   isObjectOf({
     ok: isBooleanLiteralFalse,
     reason: isString,
-    reasonCodes: isArrayOf(isRiskReasonCode),
   }),
 ]);
 
@@ -178,11 +158,4 @@ export const isTransition: Validator<Transition> = isObjectOf({
   guard: isTransitionGuard,
   requiredPermissions: isArrayOf(isPermission),
   audit: isBooleanLiteralTrue,
-});
-
-export const isAgentReview: Validator<AgentReview> = isObjectOf({
-  agent: isString,
-  action: isAgentReviewAction,
-  comment: isString,
-  reviewedAtMs: isNumber,
 });

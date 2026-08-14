@@ -103,6 +103,8 @@ const baseShape: {
   notes: isOptional(isString),
 };
 
+const isExplainedReasonCodes = isNonEmptyArrayOf(isRiskReasonCode);
+
 /** Shared payload fields of every approval-style decision. */
 const approvalPayloadShape = {
   approvedSize: isNumber,
@@ -119,20 +121,20 @@ const isApprovedDecision: Validator<ApprovedRiskDecision> = isObjectOf({
 const isReduceDecision: Validator<ReduceRiskDecision> = isObjectOf({
   decision: isEnumOf(REDUCE_SIZE_OUTCOMES),
   ...baseShape,
-  reasonCodes: isNonEmptyArrayOf(isRiskReasonCode),
+  reasonCodes: isExplainedReasonCodes,
   ...approvalPayloadShape,
 });
 
 const isRejectedDecision: Validator<RejectedRiskDecision> = isObjectOf({
   decision: isEnumOf(REJECTION_OUTCOMES),
   ...baseShape,
-  reasonCodes: isNonEmptyArrayOf(isRiskReasonCode),
+  reasonCodes: isExplainedReasonCodes,
 });
 
 const isDefensiveDecision: Validator<DefensiveRiskDecision> = isObjectOf({
   decision: isEnumOf(DEFENSIVE_OUTCOMES),
   ...baseShape,
-  reasonCodes: isNonEmptyArrayOf(isRiskReasonCode),
+  reasonCodes: isExplainedReasonCodes,
 });
 
 export const isRiskDecision: Validator<RiskDecision> = isOneOf<RiskDecision>([

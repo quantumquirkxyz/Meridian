@@ -97,7 +97,7 @@ export function isOneOf<T>(validators: readonly Validator<T>[]): Validator<T> {
   return (value): value is T => validators.some((check) => check(value));
 }
 
-/** Inclusive range check for finite numbers. */
+/** Inclusive range check for finite numbers; used by data-quality and score bounds. */
 export function isInRange(min: number, max: number): Validator<number> {
   return (value): value is number =>
     typeof value === "number" &&

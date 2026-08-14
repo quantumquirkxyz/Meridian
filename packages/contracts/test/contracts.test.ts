@@ -10,7 +10,6 @@ import {
   RISK_REASON_CODES,
   STATE_NAMES,
   SYSTEM_MODES,
-  isAgentReview,
   isAuditEvent,
   isCostBreakdown,
   isDataQualityReport,
@@ -70,6 +69,23 @@ describe("MarketDataSnapshot", () => {
     expect(isMarketDataSnapshot({ ...marketData, symbol: undefined })).toBe(false);
   });
 });
+
+function makeCostBreakdown() {
+  return {
+    tradingFeesUsd: 10,
+    slippageUsd: 5,
+    gasUsd: 2,
+    bridgeCostUsd: 0,
+    fundingCostUsd: 0,
+    latencyRiskUsd: 1,
+    failureRiskUsd: 2,
+    safetyBufferUsd: 10,
+  };
+}
+
+function makeApprovalLimits() {
+  return { maxSlippageBps: 5 };
+}
 
 describe("DataQualityReport", () => {
   test("valid report passes", () => {
@@ -139,16 +155,7 @@ describe("OpportunityCandidate", () => {
       snapshotId: "snap-1",
       route: ["asset:BTC", "venue:bybit", "asset:BTC"],
       grossSpreadUsd: 100,
-      costs: {
-        tradingFeesUsd: 10,
-        slippageUsd: 5,
-        gasUsd: 2,
-        bridgeCostUsd: 0,
-        fundingCostUsd: 0,
-        latencyRiskUsd: 1,
-        failureRiskUsd: 2,
-        safetyBufferUsd: 10,
-      },
+      costs: makeCostBreakdown(),
       expectedNetProfitUsd: 70,
       createdAtMs: 1_700_000_000_000,
       status: "CANDIDATE",
@@ -178,26 +185,12 @@ describe("OrderIntent", () => {
       quoteCurrency: "USDT",
       createdAtMs: 1_700_000_000_000,
       expiresAtMs: 1_700_000_060_000,
-      limits: { maxSlippageBps: 5 },
+      limits: makeApprovalLimits(),
     };
     expect(isOrderLimits(intent.limits)).toBe(true);
     expect(isOrderIntent(intent)).toBe(true);
     expect(parseOrderIntent(intent)).toEqual(intent);
     expect(ORDER_SIDES).toContain("BUY");
-  });
-
-  test("approved intent with risk decision passes", () => {
-    const decision = {
-      decision: "APPROVE",
-      orderIntentIdempotencyKey: "k1",
-      reasonCodes: [],
-      evaluatedAtMs: 1_700_000_000_010,
-      approvedSize: 0.01,
-      approvedLimits: { maxSlippageBps: 5 },
-      expiresAtMs: 1_700_000_060_000,
-    };
-    expect(isRiskDecision(decision)).toBe(true);
-    expect(isOrderIntent({ ...validIntent(), riskApproval: decision })).toBe(true);
   });
 
   test("APPROVE without limits or expiry is rejected", () => {
@@ -267,7 +260,7 @@ describe("RiskDecision", () => {
         reasonCodes: [],
         evaluatedAtMs: 0,
         approvedSize: 0.01,
-        approvedLimits: { maxSlippageBps: 5 },
+        approvedLimits: makeApprovalLimits(),
         expiresAtMs: 1_700_000_000_000,
       }),
     ).toBe(true);
@@ -375,7 +368,7 @@ describe("StateGraph contracts", () => {
   test("state node with agent-safe permissions only", () => {
     const node = {
       name: "RISK_VALIDATE",
-      allowed: true,
+      canEnter: true,
       permissions: ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
     };
     expect(isStateNode(node)).toBe(true);
@@ -423,19 +416,8 @@ describe("StateGraph contracts", () => {
 
   test("guard results validate both branches", () => {
     expect(isGuardResult({ ok: true })).toBe(true);
-    expect(isGuardResult({ ok: false, reason: "below edge", reasonCodes: ["MIN_EDGE"] })).toBe(true);
+    expect(isGuardResult({ ok: false, reason: "below edge" })).toBe(true);
     expect(isGuardResult({ ok: "yes" })).toBe(false);
-  });
-
-  test("agent review validates", () => {
-    expect(
-      isAgentReview({
-        agent: "risk-analyst",
-        action: "ABSTAIN",
-        comment: "no data",
-        reviewedAtMs: 1_700_000_000_000,
-      }),
-    ).toBe(true);
   });
 });
 

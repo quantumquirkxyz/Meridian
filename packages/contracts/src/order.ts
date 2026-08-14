@@ -1,14 +1,11 @@
 import {
   isEnumOf,
-  isNullable,
   isNumber,
   isObjectOf,
-  isOptional,
   isString,
   parse,
   type Validator,
 } from "./schema.ts";
-import { isRiskDecision, type RiskDecision } from "./risk.ts";
 import { isOrderLimits, type OrderLimits } from "./limits.ts";
 
 /**
@@ -36,14 +33,9 @@ export interface OrderIntent {
   /** Intents past expiry are never executed. */
   expiresAtMs: number;
   limits: OrderLimits;
-  /** Filled by the Risk Engine; an approved intent becomes executable. */
-  riskApproval?: RiskDecision | null;
 }
 
 const isOrderSide: Validator<OrderSide> = isEnumOf(ORDER_SIDES);
-
-const isOptionalRiskApproval: Validator<RiskDecision | null | undefined> =
-  isOptional(isNullable(isRiskDecision));
 
 export const isOrderIntent: Validator<OrderIntent> = isObjectOf({
   idempotencyKey: isString,
@@ -57,7 +49,6 @@ export const isOrderIntent: Validator<OrderIntent> = isObjectOf({
   createdAtMs: isNumber,
   expiresAtMs: isNumber,
   limits: isOrderLimits,
-  riskApproval: isOptionalRiskApproval,
 });
 
 export function parseOrderIntent(value: unknown): OrderIntent {
