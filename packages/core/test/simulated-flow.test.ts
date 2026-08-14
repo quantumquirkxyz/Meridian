@@ -122,8 +122,9 @@ describe("simulated opportunity flow (issue #13 AC4, Phase Zero exit criterion)"
     const { run } = flowHarness();
     const result = run("no-llm-1", 5);
     // All actors are fixed module ids from the registry; none is an LLM.
+    // Log lines are `#seq ts actor action ...` so the actor is index 2.
     const actors = result.logs
-      .map((line) => line.split(" ")[3])
+      .map((line) => line.split(" ")[2])
       .filter((actor) => actor !== undefined);
     expect(actors.every((actor) => actor !== undefined && !/ai|llm/i.test(actor))).toBe(true);
   });
@@ -144,6 +145,10 @@ describe("simulated opportunity flow (issue #13 AC4, Phase Zero exit criterion)"
         DEFAULT_RISK_POLICY.maxRiskPerTradeUsd / 100,
       );
     }
+    // The reduction actually governs the simulated execution and reconciliation.
+    expect(result.executedSize).toBe(
+      DEFAULT_RISK_POLICY.maxRiskPerTradeUsd / 100,
+    );
     // A reduction is audited as an approval-side decision, never a rejection.
     const reasons = result.logs.join(" ");
     expect(reasons).toContain("RISK_APPROVED");

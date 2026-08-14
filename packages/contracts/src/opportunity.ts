@@ -26,6 +26,9 @@ export const OPPORTUNITY_STATUS = [
 
 export type OpportunityStatus = (typeof OPPORTUNITY_STATUS)[number];
 
+/** Named value for the actionable candidate state (avoids indexing OPPORTUNITY_STATUS). */
+export const CANDIDATE_STATUS = "CANDIDATE" as const satisfies OpportunityStatus;
+
 /** Full cost stack from the Spec Alpha net profit formula. */
 export interface CostBreakdown {
   tradingFeesUsd: number;

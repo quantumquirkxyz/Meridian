@@ -1,5 +1,6 @@
 import {
-  OPPORTUNITY_STATUS,
+  CANDIDATE_STATUS,
+  isRiskDecision,
   type OpportunityStatus,
   type Permission,
   type StateContext,
@@ -36,6 +37,7 @@ import {
  * defensive state requires an operator reset back to IDLE.
  */
 
+/** Defensive states the graph can enter from anywhere (ADR-0002, RISK.md). */
 export const DEFENSIVE_STATES = [
   "HALT",
   "DEGRADED_MODE",
@@ -44,6 +46,7 @@ export const DEFENSIVE_STATES = [
   "REDUCE_ONLY_MODE",
 ] as const satisfies readonly StateName[];
 
+/** Union type of every defensive state name. */
 export type DefensiveState = (typeof DEFENSIVE_STATES)[number];
 
 /** SystemMode each defensive state puts the graph into (CONTEXT.md SystemMode). */
@@ -56,10 +59,15 @@ export const DEFENSIVE_STATE_MODE: Record<DefensiveState, SystemMode> = {
 };
 
 /** Outcome of a risk decision that authorizes simulated execution. */
-const EXECUTABLE_RISK_OUTCOMES = ["APPROVE", "REDUCE_SIZE"] as const;
+const EXECUTABLE_RISK_OUTCOMES: readonly string[] = ["APPROVE", "REDUCE_SIZE"];
+
+/** True when the recorded risk decision outcome permits execution. */
+function isExecutableRiskOutcome(outcome: unknown): boolean {
+  return EXECUTABLE_RISK_OUTCOMES.includes(String(outcome));
+}
 
 /** CANDIDATE status from the shared OPPORTUNITY_STATUS vocabulary. */
-const CANDIDATE_STATUS: OpportunityStatus = OPPORTUNITY_STATUS[1];
+const CANDIDATE_STATUS_VALUE: OpportunityStatus = CANDIDATE_STATUS;
 
 /**
  * True when the transition data carries at least one candidate still in
@@ -69,21 +77,24 @@ function hasCandidateStatus(ctx: StateContext): boolean {
   const candidates = (ctx.data?.candidates ?? []) as Array<{
     status?: string;
   }>;
-  return candidates.some((candidate) => candidate.status === CANDIDATE_STATUS);
+  return candidates.some(
+    (candidate) => candidate.status === CANDIDATE_STATUS_VALUE,
+  );
 }
 
 /**
  * True when the transition context carries a complete risk decision whose
  * recorded outcome matches the decision itself. US26 / ADR-0003: no bare
  * hand-written `riskDecisionOutcome` string can authorize execution; the full
- * RiskGate-produced decision record must be present.
+ * RiskGate-produced decision record must be present and structurally valid
+ * (the contracts `isRiskDecision` guard rejects forged/malformed records).
  */
 function hasRiskDecision(ctx: StateContext): boolean {
   const outcome = ctx.data?.riskDecisionOutcome;
-  const decision = ctx.data?.riskDecision as { decision?: string } | undefined;
+  const decision = ctx.data?.riskDecision;
   return (
     outcome !== undefined &&
-    decision !== undefined &&
+    isRiskDecision(decision) &&
     decision.decision === outcome
   );
 }
@@ -111,6 +122,21 @@ export const AGENT_IDS = [
   "agent-planner",
   "agent-audit",
 ] as const;
+
+/**
+ * Permissions per analytical agent. Keyed by AGENT_IDS member so the two lists
+ * cannot drift: a registered agent always appears in AGENT_IDS and vice versa
+ * (enforced at compile time by the Record type).
+ */
+const AGENT_PERMISSIONS: Record<
+  (typeof AGENT_IDS)[number],
+  readonly Permission[]
+> = {
+  "agent-arbitrage-alpha": ["OBSERVE_MARKET_DATA", "PROPOSE_SIGNAL"],
+  "agent-risk-analyst": ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
+  "agent-planner": ["OBSERVE_STATE", "PROPOSE_SIGNAL", "PROPOSE_EXECUTION_PLAN"],
+  "agent-audit": ["OBSERVE_AUDIT", "OBSERVE_STATE"],
+};
 
 const TRIGGER_BY_DEFENSIVE_STATE: Record<DefensiveState, Permission> = {
   DEGRADED_MODE: "TRIGGER_DEGRADED_MODE",
@@ -190,24 +216,17 @@ export function defaultPermissionRegistry(): PermissionRegistry {
     "TRIGGER_HALT",
   ]);
 
-  registry.register("agent-arbitrage-alpha", [
-    "OBSERVE_MARKET_DATA",
-    "PROPOSE_SIGNAL",
-  ]);
-  registry.register("agent-risk-analyst", [
-    "OBSERVE_STATE",
-    "PROPOSE_RISK_REVIEW",
-  ]);
-  registry.register("agent-planner", [
-    "OBSERVE_STATE",
-    "PROPOSE_SIGNAL",
-    "PROPOSE_EXECUTION_PLAN",
-  ]);
-  registry.register("agent-audit", ["OBSERVE_AUDIT", "OBSERVE_STATE"]);
+  for (const [agentId, permissions] of Object.entries(AGENT_PERMISSIONS)) {
+    registry.register(agentId, permissions);
+  }
 
   return registry;
 }
 
+/**
+ * The default graph topology: canonical flow, reject forks, defensive fan-out
+ * from every state, and operator recovery edges.
+ */
 export interface DefaultGraph {
   nodes: readonly StateNode[];
   transitions: readonly Transition[];
@@ -312,10 +331,7 @@ function flowTransitions(): Transition[] {
         allowWhen(
           "riskApproved",
           (ctx) =>
-            hasRiskDecision(ctx) &&
-            (EXECUTABLE_RISK_OUTCOMES as readonly string[]).includes(
-              String(ctx.data?.riskDecisionOutcome),
-            ),
+            hasRiskDecision(ctx) && isExecutableRiskOutcome(ctx.data?.riskDecisionOutcome),
           "no approved risk decision (APPROVE or REDUCE_SIZE)",
         ),
         modeAllows("executionMode", EXECUTION_MODES),
@@ -331,9 +347,7 @@ function flowTransitions(): Transition[] {
         "riskRejected",
         (ctx) =>
           hasRiskDecision(ctx) &&
-          !(EXECUTABLE_RISK_OUTCOMES as readonly string[]).includes(
-            String(ctx.data?.riskDecisionOutcome),
-          ),
+          !isExecutableRiskOutcome(ctx.data?.riskDecisionOutcome),
         "risk decision is not an approval",
       ),
       requiredPermissions: ["APPROVE_RISK"],
@@ -343,13 +357,29 @@ function flowTransitions(): Transition[] {
       id: "precheck-to-execute",
       from: "EXECUTION_PRECHECK",
       to: "EXECUTE_ORDER",
-      guard: allowWhen(
-        "precheckPassed",
-        (ctx) =>
-          ctx.data?.precheck === "PASS" &&
-          EXECUTION_MODES.includes(ctx.mode),
-        "precheck failed or mode blocks execution",
-      ),
+      guard: allOf("precheckAndApprovalValid", [
+        allowWhen(
+          "precheckPassed",
+          (ctx) => ctx.data?.precheck === "PASS",
+          "precheck failed",
+        ),
+        allowWhen(
+          "modeAllowsExecution",
+          (ctx) => EXECUTION_MODES.includes(ctx.mode),
+          "mode blocks execution",
+        ),
+        allowWhen(
+          "approvalNotExpired",
+          (ctx) => {
+            const decision = ctx.data?.riskDecision;
+            if (!isRiskDecision(decision) || !("expiresAtMs" in decision)) {
+              return false;
+            }
+            return ctx.updatedAtMs < decision.expiresAtMs;
+          },
+          "approval expired (RISK.md)",
+        ),
+      ]),
       requiredPermissions: ["SUBMIT_ORDER"],
       audit: true,
     },
@@ -471,7 +501,7 @@ export function buildDefaultGraph(): DefaultGraph {
       })),
     ),
     ...DEFENSIVE_STATES.flatMap((defensive) =>
-      DEFENSIVE_STATES.map((target) => ({
+      DEFENSIVE_STATES.filter((target) => target !== defensive).map((target) => ({
         ...defensiveGuard(target),
         from: defensive,
       })),

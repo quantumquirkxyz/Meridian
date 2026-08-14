@@ -12,6 +12,11 @@ import { SIGNAL_MODES } from "../modes.ts";
  * with the Beta Risk Engine (ticket #27). It never calls an LLM.
  */
 
+/**
+ * Thresholds the skeleton gate evaluates. Rules map to RISK.md "Minimum Risk
+ * Engine rules": MAX_RISK_PER_TRADE (rule 1), MIN_EDGE (rule 12),
+ * MIN_DATA_QUALITY (rule 11).
+ */
 export interface RiskPolicy {
   /** Below this net profit an opportunity is rejected (rule 12, MIN_EDGE). */
   minEdgeUsd: number;
@@ -21,12 +26,14 @@ export interface RiskPolicy {
   minDataQualityScore: number;
 }
 
+/** Default thresholds for the skeleton RiskGate (same policy in every flow). */
 export const DEFAULT_RISK_POLICY: RiskPolicy = {
   minEdgeUsd: 1,
   maxRiskPerTradeUsd: 1_000_000,
   minDataQualityScore: 0.5,
 };
 
+/** Everything the RiskGate needs to evaluate one OrderIntent. */
 export interface RiskGateInput {
   orderIntent: OrderIntent;
   /** OpportunityCandidate.expectedNetProfitUsd that produced this intent. */
@@ -44,7 +51,10 @@ export class RiskGate {
    * Evaluates an OrderIntent against the minimum rules and returns a typed
    * RiskDecision: APPROVE / REDUCE_SIZE (with the full approval payload and
    * expiry), REJECT, or a defensive EXIT_ONLY outcome — always with reason
-   * codes where required (RISK.md:45).
+   * codes where required (RISK.md:45). The skeleton gate emits only EXIT_ONLY
+   * as the defensive outcome; the contract's CANCEL_ONLY / CASH_ONLY /
+   * HALT_SYSTEM outcomes are reserved for the Beta Risk Engine (ticket #27)
+   * and are already reachable through the graph's risk-to-audit edge.
    */
   evaluate(input: RiskGateInput): RiskDecision {
     const base = {
@@ -52,8 +62,9 @@ export class RiskGate {
       evaluatedAtMs: input.evaluatedAtMs,
     };
 
-    // The gate only approves new orders in signal-capable modes; the shared
-    // SIGNAL_MODES vocabulary keeps gate and graph in lockstep.
+    // The gate only evaluates new orders in signal-capable modes (SIGNAL_MODES).
+    // Execution itself is additionally gated by the graph's EXECUTION_MODES, so
+    // e.g. in SIGNAL_ONLY the gate may approve but risk-to-precheck blocks it.
     if (!SIGNAL_MODES.includes(input.mode)) {
       return {
         ...base,
@@ -92,7 +103,7 @@ export class RiskGate {
         decision: "REDUCE_SIZE",
         reasonCodes: ["MAX_RISK_PER_TRADE"],
         approvedSize,
-        approvedLimits: input.orderIntent.limits,
+        approvedLimits: { ...input.orderIntent.limits },
         expiresAtMs: input.evaluatedAtMs + RISK_APPROVAL_TTL_MS,
         notes: `notional ${notionalUsd} reduced to ${this.policy.maxRiskPerTradeUsd}`,
       };

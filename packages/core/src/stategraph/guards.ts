@@ -68,8 +68,9 @@ export function allOf(
 }
 
 /**
- * Guard that blocks the transition while the system is halted. Observation,
- * reconciliation, and audit states run in HALT; nothing else may advance.
+ * Guard blocking the transition while the system is halted. Used on the
+ * observation cycle start so a halted system cannot begin a new cycle;
+ * activity inside a defensive mode is governed by the mode-based guards.
  */
 export function notHalted(name: string): TransitionGuard {
   return {
@@ -78,7 +79,7 @@ export function notHalted(name: string): TransitionGuard {
       if (context.mode === "HALT") {
         return {
           ok: false,
-          reason: "system is halted; only observation/reconciliation/audit run",
+          reason: "system is halted; new cycles cannot start",
         };
       }
       return { ok: true, reason: "system not halted" };

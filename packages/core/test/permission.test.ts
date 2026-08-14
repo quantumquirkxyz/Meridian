@@ -13,6 +13,7 @@ import {
   defaultPermissionRegistry,
   MODULE_ACTORS,
 } from "../src/stategraph/topology.ts";
+import { walkToRiskValidate } from "./helpers.ts";
 
 describe("permission model (ADR-0003, user story 28)", () => {
   test("no agent holds any execution-authority permission", () => {
@@ -99,22 +100,7 @@ describe("per-transition permission checks (issue #13)", () => {
 
   test("an agent cannot drive the risk gate (no APPROVE_RISK)", () => {
     const graph = newGraph();
-    const steps: Array<
-      [import("@agenttrading/contracts").StateName, string, Record<string, unknown>]
-    > = [
-      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-      ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-    ];
-    for (const [to, actor, data] of steps) {
-      expect(graph.transition({ to, actor, data, timestampMs: 0 }).ok).toBe(
-        true,
-      );
-    }
+    walkToRiskValidate(graph);
 
     const denied = graph.transition({
       to: "EXECUTION_PRECHECK",

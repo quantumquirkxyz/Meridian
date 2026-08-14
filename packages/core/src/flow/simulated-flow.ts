@@ -5,6 +5,7 @@ import {
   type OpportunityCandidate,
   type OrderIntent,
   type RiskDecision,
+  type RiskReasonCode,
   type StateName,
   type SystemMode,
 } from "@agenttrading/contracts";
@@ -44,6 +45,8 @@ export interface SimulatedFlowResult {
   opportunity?: OpportunityCandidate;
   orderIntent?: OrderIntent;
   riskDecision?: RiskDecision;
+  /** Size actually executed/reconciled (approvedSize when the gate reduced it). */
+  executedSize?: number;
   /** Full verifiable audit log lines, one per event. */
   logs: readonly string[];
 }
@@ -65,6 +68,14 @@ const EMPTY_COSTS: CostBreakdown = {
   failureRiskUsd: 0,
   safetyBufferUsd: 0,
 };
+
+/** The decision's own reason codes, when the variant carries them. */
+function decisionReasonCodes(
+  decision: RiskDecision,
+): RiskReasonCode[] | undefined {
+  const codes = "reasonCodes" in decision ? decision.reasonCodes : undefined;
+  return codes === undefined ? undefined : [...codes];
+}
 
 export function runSimulatedOpportunityFlow(
   options: SimulatedFlowOptions,
@@ -255,8 +266,7 @@ export function runSimulatedOpportunityFlow(
     data: {
       idempotencyKey: orderIntent.idempotencyKey,
       decision: riskDecision.decision,
-      reasonCodes:
-        "reasonCodes" in riskDecision ? riskDecision.reasonCodes : undefined,
+      reasonCodes: decisionReasonCodes(riskDecision),
     },
   });
 
@@ -273,15 +283,25 @@ export function runSimulatedOpportunityFlow(
       },
       ["RISK_APPROVED"],
     );
+    // The gate's approvedSize/approvedLimits govern the simulated fill, so a
+    // REDUCE_SIZE decision actually reduces execution (ADR-0003, RISK.md:45).
     step(
       "EXECUTE_ORDER",
       MODULE_ACTORS.executionEngine,
-      { precheck: "PASS" },
+      {
+        precheck: "PASS",
+        executedSize: riskDecision.approvedSize,
+        approvedLimits: riskDecision.approvedLimits,
+      },
     );
     step(
       "RECONCILE",
       MODULE_ACTORS.executionEngine,
-      { execution: "SIMULATED_FILL", orderIntent },
+      {
+        execution: "SIMULATED_FILL",
+        orderIntent,
+        executedSize: riskDecision.approvedSize,
+      },
       ["EXECUTION_SIMULATED"],
     );
     step(
@@ -295,8 +315,7 @@ export function runSimulatedOpportunityFlow(
     ]);
   } else {
     // Rejected path: record the rejected hypothesis and complete the cycle.
-    const rejectedReasonCodes =
-      "reasonCodes" in riskDecision ? riskDecision.reasonCodes : undefined;
+    const rejectedReasonCodes = decisionReasonCodes(riskDecision);
     candidate.status = "REJECTED";
     candidate.invalidationReasons = rejectedReasonCodes ?? [];
     step(
@@ -325,6 +344,11 @@ export function runSimulatedOpportunityFlow(
     opportunity: candidate,
     orderIntent,
     riskDecision,
+    executedSize:
+      riskDecision.decision === "APPROVE" ||
+      riskDecision.decision === "REDUCE_SIZE"
+        ? riskDecision.approvedSize
+        : undefined,
     logs: audit.toLogLines(),
   };
 }

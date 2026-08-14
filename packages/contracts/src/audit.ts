@@ -20,8 +20,6 @@ export const AUDIT_ACTIONS = [
   "RISK_DECISION",
   "ORDER_INTENT_CREATED",
   "OPPORTUNITY_DETECTED",
-  "SYSTEM_MODE_CHANGE",
-  "DATA_QUALITY_UPDATE",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

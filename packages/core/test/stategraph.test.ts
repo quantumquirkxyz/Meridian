@@ -14,6 +14,7 @@ import {
   DEFENSIVE_STATE_MODE,
   MODULE_ACTORS,
 } from "../src/stategraph/topology.ts";
+import { walkToBuildIntent, walkToRiskValidate } from "./helpers.ts";
 
 const FIXED_TS = 1_700_000_000_000;
 
@@ -38,17 +39,7 @@ function newGraph(options?: {
 describe("StateGraph guards and transitions (issue #13 AC1)", () => {
   test("walks the canonical flow from IDLE to AUDIT_DECISION", () => {
     const { graph } = newGraph();
-    const steps: Array<[StateName, string, Record<string, unknown>]> = [
-      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-    ];
-    for (const [to, actor, data] of steps) {
-      const outcome = graph.transition({ to, actor, data, timestampMs: 0 });
-      expect(outcome.ok, `expected ${to} to be reachable`).toBe(true);
-    }
+    walkToBuildIntent(graph);
     expect(graph.currentState).toBe("BUILD_ORDER_INTENT");
   });
 
@@ -94,19 +85,7 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
 
   test("guarded fork: only APPROVE leaves RISK_VALIDATE towards execution", () => {
     const { graph } = newGraph();
-    const steps: Array<[StateName, string, Record<string, unknown>]> = [
-      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-      ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-    ];
-    for (const [to, actor, data] of steps) {
-      const outcome = graph.transition({ to, actor, data, timestampMs: 0 });
-      expect(outcome.ok, `expected ${to} reachable`).toBe(true);
-    }
+    walkToRiskValidate(graph);
 
     // REJECT (with a complete risk decision record) keeps the cycle away from execution.
     const rejected = graph.transition({
@@ -127,11 +106,7 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
 
     // Reset and try APPROVE -> execution path.
     graph.reset();
-    for (const [to, actor, data] of steps) {
-      expect(
-        graph.transition({ to, actor, data, timestampMs: 0 }).ok,
-      ).toBe(true);
-    }
+    walkToRiskValidate(graph);
     const approved = graph.transition({
       to: "EXECUTION_PRECHECK",
       actor: MODULE_ACTORS.riskEngine,
@@ -153,20 +128,7 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
 
   test("an OrderIntent cannot pass RISK_VALIDATE without a risk decision", () => {
     const { graph } = newGraph();
-    const steps: Array<[StateName, string, Record<string, unknown>]> = [
-      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-      ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-    ];
-    for (const [to, actor, data] of steps) {
-      expect(graph.transition({ to, actor, data, timestampMs: 0 }).ok).toBe(
-        true,
-      );
-    }
+    walkToRiskValidate(graph);
 
     // No risk decision at all -> blocked before execution.
     const missing = graph.transition({
@@ -191,19 +153,111 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
     if (!forged.ok) {
       expect(forged.reasonCode).toBe("GUARD_FAILED");
     }
+
+    // A forged decision record that echoes the outcome but lacks the approval
+    // payload (approvedSize/approvedLimits/expiresAtMs) is also rejected by
+    // the contracts isRiskDecision guard.
+    const forgedRecord = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "APPROVE", riskDecision: { decision: "APPROVE" } },
+      timestampMs: 0,
+    });
+    expect(forgedRecord.ok).toBe(false);
+    if (!forgedRecord.ok) {
+      expect(forgedRecord.reasonCode).toBe("GUARD_FAILED");
+    }
+  });
+
+  test("defensive risk decisions route to audit, never to execution", () => {
+    const { graph } = newGraph();
+    walkToRiskValidate(graph);
+
+    // A defensive decision (CANCEL_ONLY, valid per the contract) is a rejection:
+    // execution is unreachable but the decision is recorded through risk-to-audit.
+    const defensive: Record<string, unknown> = {
+      decision: "CANCEL_ONLY",
+      orderIntentIdempotencyKey: "intent-1",
+      evaluatedAtMs: 0,
+      reasonCodes: ["DEGRADED_MODE"],
+    };
+    const toExecution = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "CANCEL_ONLY", riskDecision: defensive },
+      timestampMs: 0,
+    });
+    expect(toExecution.ok).toBe(false);
+    if (!toExecution.ok) {
+      expect(toExecution.reasonCode).toBe("GUARD_FAILED");
+    }
+
+    graph.reset();
+    walkToRiskValidate(graph);
+    const toAudit = graph.transition({
+      to: "AUDIT_DECISION",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "CANCEL_ONLY", riskDecision: defensive },
+      timestampMs: 0,
+    });
+    expect(toAudit.ok).toBe(true);
+  });
+
+  test("an expired approval is void at precheck-to-execute", () => {
+    const { graph } = newGraph();
+    walkToRiskValidate(graph);
+
+    // Approve with an already-expired expiry; entering the precheck is fine,
+    // but executing on it is void (RISK.md:63 "an approval past expiry is void").
+    const expired = {
+      decision: "APPROVE",
+      orderIntentIdempotencyKey: "intent-1",
+      evaluatedAtMs: 0,
+      approvedSize: 0.01,
+      approvedLimits: { maxSlippageBps: 30 },
+      expiresAtMs: 0,
+    };
+    const toPrecheck = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "APPROVE", riskDecision: expired },
+      timestampMs: 0,
+    });
+    expect(toPrecheck.ok).toBe(true);
+
+    const toExecute = graph.transition({
+      to: "EXECUTE_ORDER",
+      actor: MODULE_ACTORS.executionEngine,
+      data: { precheck: "PASS" },
+      timestampMs: 1_000,
+    });
+    expect(toExecute.ok).toBe(false);
+    if (!toExecute.ok) {
+      expect(toExecute.reasonCode).toBe("GUARD_FAILED");
+    }
+    expect(graph.currentState).toBe("EXECUTION_PRECHECK");
   });
 });
 
 describe("defensive modes reachable from any state and reduce activity (issue #13 AC2)", () => {
-  test("defensive edges exist from every state", () => {
+  test("defensive edges exist from every state (no self-loops)", () => {
     const { graph } = newGraph();
     for (const state of STATE_NAMES) {
       for (const defensive of DEFENSIVE_STATES) {
+        if (state === defensive) continue;
         expect(
           graph.transitionFor(state, defensive),
           `missing edge ${state} -> ${defensive}`,
         ).toBeDefined();
       }
+    }
+    // A defensive self-loop would re-emit DEFENSIVE_MODE_ENTERED / MODE_REDUCED
+    // without reducing activity, so no defensive state has one.
+    for (const defensive of DEFENSIVE_STATES) {
+      expect(
+        graph.transitionFor(defensive, defensive),
+        `unexpected self-loop ${defensive} -> ${defensive}`,
+      ).toBeUndefined();
     }
   });
 
@@ -329,18 +383,7 @@ describe("defensive modes reachable from any state and reduce activity (issue #1
 
   test("a defensive mode entered mid-flow blocks subsequent execution steps", () => {
     const { graph } = newGraph();
-    const steps: Array<[StateName, string, Record<string, unknown>]> = [
-      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
-    ];
-    for (const [to, actor, data] of steps) {
-      expect(graph.transition({ to, actor, data, timestampMs: 0 }).ok).toBe(
-        true,
-      );
-    }
+    walkToBuildIntent(graph);
     expect(graph.currentState).toBe("BUILD_ORDER_INTENT");
 
     // Infra-guardian pulls the flow into a defensive mode mid-cycle.
