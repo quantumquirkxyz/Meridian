@@ -481,13 +481,11 @@ export function buildDefaultGraph(): DefaultGraph {
     ...NORMAL_STATES.flatMap((source) =>
       DEFENSIVE_STATES.map((defensive) => ({
         ...defensiveGuard(source, defensive),
-        from: source,
       })),
     ),
     ...DEFENSIVE_STATES.flatMap((defensive) =>
       DEFENSIVE_STATES.filter((target) => target !== defensive).map((target) => ({
         ...defensiveGuard(defensive, target),
-        from: defensive,
       })),
     ),
     ...DEFENSIVE_STATES.map((defensive) => recoveryGuard(defensive)),
