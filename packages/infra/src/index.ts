@@ -3,3 +3,10 @@
  * control surface (TUI). Depends only on contracts.
  */
 export const INFRA_VERSION = "0.1.0";
+
+export { DataQualityMonitor } from "./data-quality-monitor.ts";
+export type {
+  ReconnectCallback,
+  StateChangeCallback,
+  SourceTracking,
+} from "./data-quality-monitor.ts";
