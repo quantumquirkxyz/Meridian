@@ -3,6 +3,7 @@
  * Execution, Reconciliation, Inventory, Loops). ARCHITECTURE.md boundary:
  * core never imports LLMs or connectors; it only depends on contracts.
  */
+/** Core package version string. */
 export const CORE_VERSION = "0.1.0";
 
 export * from "./stategraph/permission-registry.ts";

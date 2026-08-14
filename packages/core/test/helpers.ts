@@ -22,11 +22,14 @@ const CANDIDATE_CYCLE: ReadonlyArray<
   ],
 ];
 
+/** Shared candidate prefix for the canonical test walks. */
+const CANDIDATE_PREFIX = CANDIDATE_CYCLE;
+
 /** Canonical cycle up to RISK_VALIDATE, the risk-gate entry point. */
 const RISK_CYCLE: ReadonlyArray<
   [StateName, string, Record<string, unknown>]
 > = [
-  ...CANDIDATE_CYCLE,
+  ...CANDIDATE_PREFIX,
   ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
   ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
 ];

@@ -16,6 +16,7 @@ import {
   type DefensiveState,
 } from "./topology.ts";
 
+/** Constructor options for the deterministic StateGraph core. */
 export interface StateGraphOptions {
   nodes: readonly StateNode[];
   transitions: readonly Transition[];
@@ -27,6 +28,7 @@ export interface StateGraphOptions {
   initialMode?: SystemMode;
 }
 
+/** Input for one transition attempt and its audit metadata. */
 export interface TransitionInput {
   to: StateName;
   /** Module/agent performing the transition; must hold the edge's permissions. */
