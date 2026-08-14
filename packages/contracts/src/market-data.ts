@@ -34,6 +34,13 @@ export interface MarketDataSnapshot {
   source: string;
   /** Optional venue sequence number for ordering/dedup. */
   sequence?: number;
+  reserve0?: number;
+  reserve1?: number;
+  gasEstimateUsd?: number;
+  routerQuote?: number;
+  chain?: string;
+  poolAddress?: string;
+  rpcHealth?: string;
 }
 
 const isNullableNumber: Validator<number | null> = isNullable(isNumber);
@@ -49,6 +56,13 @@ export const isMarketDataSnapshot: Validator<MarketDataSnapshot> = isObjectOf({
   latencyMs: isNumber,
   source: isString,
   sequence: isOptional(isNumber),
+  reserve0: isOptional(isNumber),
+  reserve1: isOptional(isNumber),
+  gasEstimateUsd: isOptional(isNumber),
+  routerQuote: isOptional(isNumber),
+  chain: isOptional(isString),
+  poolAddress: isOptional(isString),
+  rpcHealth: isOptional(isString),
 });
 
 export function parseMarketDataSnapshot(value: unknown): MarketDataSnapshot {
