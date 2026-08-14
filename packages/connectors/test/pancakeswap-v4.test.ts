@@ -22,7 +22,10 @@ describe("PancakeSwap v4 connector normalization", () => {
     expect(snapshot.symbol).toBe("WBNB/USDT");
     expect(snapshot.latencyMs).toBe(14);
     expect(snapshot.depth).toBe(400);
-    expect((snapshot as { gasEstimateUsd?: number }).gasEstimateUsd).toBe(1.25);
+    expect(snapshot.reserve0).toBe(100);
+    expect(snapshot.reserve1).toBe(300);
+    expect(snapshot.gasEstimateUsd).toBe(1.25);
+    expect(snapshot.routerQuote).toBe(299);
     expect(isMarketDataSnapshot(snapshot)).toBe(true);
   });
 });

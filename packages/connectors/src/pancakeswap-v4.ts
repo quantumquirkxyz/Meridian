@@ -24,13 +24,11 @@ function normalizeDexSymbol(token0Symbol: string, token1Symbol: string): string 
 
 export function buildPancakeSwapSnapshot(
   input: PancakeSwapV4QuoteInput,
-): MarketDataSnapshot & { chain: "bsc"; poolAddress: string; gasEstimateUsd?: number; routerQuote?: number; rpcHealth: PancakeSwapV4PoolState["rpcHealth"] } {
+): MarketDataSnapshot {
   const mid = input.reserve0 > 0 && input.reserve1 > 0 ? input.reserve1 / input.reserve0 : null;
 
   return {
     venue: "pancakeswap-v4",
-    chain: input.chain,
-    poolAddress: input.poolAddress,
     symbol: normalizeDexSymbol(input.token0Symbol, input.token1Symbol),
     timestampMs: input.blockTimestampMs,
     bid: null,
@@ -39,8 +37,12 @@ export function buildPancakeSwapSnapshot(
     depth: input.reserve0 + input.reserve1,
     latencyMs: Math.max(0, input.rpcTimestampMs - input.blockTimestampMs),
     source: input.source ?? "pancakeswap-v4-rpc",
+    reserve0: input.reserve0,
+    reserve1: input.reserve1,
     gasEstimateUsd: input.gasEstimateUsd,
     routerQuote: input.routerQuote,
+    chain: input.chain,
+    poolAddress: input.poolAddress,
     rpcHealth: input.rpcHealth,
   };
 }
