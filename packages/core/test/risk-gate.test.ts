@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { isRiskDecision, type OrderIntent } from "@agenttrading/contracts";
+import {
+  isRiskDecision,
+  parseRiskDecision,
+  type OrderIntent,
+} from "@agenttrading/contracts";
 import {
   DEFAULT_RISK_POLICY,
   RiskGate,
@@ -109,5 +113,10 @@ describe("RiskGate (issue #13 AC4, RISK.md minimum rules)", () => {
       evaluatedAtMs: 0,
     });
     expect(decision.decision).toBe("REJECT");
+  });
+
+  test("bare APPROVE decisions are rejected without the approval payload", () => {
+    expect(isRiskDecision({ decision: "APPROVE" })).toBe(false);
+    expect(() => parseRiskDecision({ decision: "APPROVE" })).toThrow();
   });
 });
