@@ -5,7 +5,6 @@ import {
   type MarketEdge,
   type MarketGraphSnapshot,
   type MarketNode,
-  parseGraphUpdatedPayload,
   parseMarketTickPayload,
   parseOrderBookSnapshotPayload,
   parsePoolStateUpdatePayload,
@@ -29,7 +28,7 @@ export function replaySince(store: EventStore, sequence: number): EventEnvelope[
   return store.since(sequence).map((event) => parseEventEnvelope(event));
 }
 
-/** Compares two event streams by idempotency key and sequence order. */
+/** Compares two event streams including payload — identical event and order. */
 export function sameEventStream(
   left: readonly EventEnvelope[],
   right: readonly EventEnvelope[],
@@ -44,29 +43,22 @@ export function sameEventStream(
       event.type === right[index].type &&
       event.kind === right[index].kind &&
       event.timestampMs === right[index].timestampMs &&
-      event.source === right[index].source,
+      event.source === right[index].source &&
+      JSON.stringify(event.payload) === JSON.stringify(right[index].payload),
   );
 }
 
 /**
- * Deterministic graph-state reconstruction from a recorded session. Each
- * GRAPH_UPDATED event carries a versioned MarketGraphSnapshot; the latest one
- * in the stream is the reconstructed graph state (Alpha.2 exit criterion:
- * replay reconstructs graph state).
+ * Deterministic graph-state reconstruction from a recorded session (Alpha.2
+ * exit criterion: replay reconstructs graph state). Folds normalized market
+ * events (MARKET_TICK, ORDERBOOK_*, POOL_STATE_UPDATE) into a
+ * MarketGraphSnapshot. Deterministic: identical input events always produce
+ * the identical snapshot (same version, snapshotId, nodes, edges).
  */
 export function reconstructGraphState(
   events: readonly EventEnvelope[],
 ): MarketGraphSnapshot {
-  const graphUpdated = [...events].filter(
-    (event) => event.type === "GRAPH_UPDATED",
-  );
-  const latest = graphUpdated[graphUpdated.length - 1];
-  if (latest === undefined) {
-    throw new Error(
-      "Cannot reconstruct graph state: session contains no GRAPH_UPDATED event.",
-    );
-  }
-  return parseGraphUpdatedPayload(latest.payload);
+  return foldGraphState(events);
 }
 
 /**

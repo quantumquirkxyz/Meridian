@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS events (
 );
 `;
 
+const SELECT_COLUMNS =
+  "event_id AS eventId, sequence, type, kind, timestamp_ms AS timestampMs, source, payload";
+
 export class EventStore {
   readonly db: Database;
   private readonly insertStmt: ReturnType<Database["query"]>;
@@ -71,16 +74,13 @@ export class EventStore {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     this.selectByEventIdStmt = this.db.query(
-      `SELECT event_id AS eventId, sequence, type, kind, timestamp_ms AS timestampMs, source, payload
-         FROM events WHERE event_id = ?`,
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE event_id = ?`,
     );
     this.selectBySequenceStmt = this.db.query(
-      `SELECT event_id AS eventId, sequence, type, kind, timestamp_ms AS timestampMs, source, payload
-         FROM events WHERE sequence = ?`,
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE sequence = ?`,
     );
     this.selectSinceStmt = this.db.query(
-      `SELECT event_id AS eventId, sequence, type, kind, timestamp_ms AS timestampMs, source, payload
-         FROM events WHERE sequence > ? ORDER BY sequence ASC`,
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE sequence > ? ORDER BY sequence ASC`,
     );
     this.maxSequenceStmt = this.db.query(
       `SELECT COALESCE(MAX(sequence), 0) AS maxSeq FROM events`,
@@ -109,24 +109,30 @@ export class EventStore {
    * Appends the event with the next monotonic sequence number. When an event
    * with the same `eventId` already exists it is deduplicated: nothing is
    * written and the stored event is returned instead (issue #17 AC1).
+   *
+   * The read-check-select is wrapped in a SQLite transaction so concurrent
+   * appends cannot claim the same sequence number.
    */
   append(input: PublishEvent): AppendResult {
-    const existing = this.selectByEventIdStmt.get(input.eventId) as Row | null;
-    if (existing) {
-      return { event: this.toEnvelope(existing), deduplicated: true };
-    }
-    const sequence = this.nextSequence();
-    this.insertStmt.run(
-      input.eventId,
-      sequence,
-      input.type,
-      input.kind,
-      input.timestampMs,
-      input.source,
-      JSON.stringify(input.payload),
-    );
-    const row = this.selectBySequenceStmt.get(sequence) as Row;
-    return { event: this.toEnvelope(row), deduplicated: false };
+    const appendTx = this.db.transaction(() => {
+      const existing = this.selectByEventIdStmt.get(input.eventId) as Row | null;
+      if (existing) {
+        return { event: this.toEnvelope(existing), deduplicated: true } as const;
+      }
+      const sequence = this.nextSequence();
+      this.insertStmt.run(
+        input.eventId,
+        sequence,
+        input.type,
+        input.kind,
+        input.timestampMs,
+        input.source,
+        JSON.stringify(input.payload),
+      );
+      const row = this.selectBySequenceStmt.get(sequence) as Row;
+      return { event: this.toEnvelope(row), deduplicated: false } as const;
+    });
+    return appendTx();
   }
 
   /** True when an event with this idempotency key is already persisted. */

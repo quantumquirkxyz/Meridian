@@ -60,39 +60,6 @@ function rawTickEvent(
   };
 }
 
-function graphUpdatedEvent(
-  eventId: string,
-  version: number,
-  timestampMs: number,
-  edges: number,
-): PublishEvent {
-  return {
-    eventId,
-    type: "GRAPH_UPDATED",
-    kind: "normalized",
-    timestampMs,
-    source: "graph-builder",
-    payload: {
-      version,
-      snapshotId: `snap-graph-${version}`,
-      createdAtMs: timestampMs,
-      nodes: [
-        { id: "asset:BTC/USDT", type: "ASSET" },
-        { id: "venue:bybit", type: "VENUE" },
-      ],
-      edges: Array.from({ length: edges }, (_, index) => ({
-        id: `book:bybit:BTC/USDT-${index}`,
-        from: "venue:bybit",
-        to: "asset:BTC/USDT",
-        type: "ORDER_BOOK",
-        weights: { price: 30_000 + index, latencyMs: 12, liquidityUsd: 1_000_000 },
-        tradable: true,
-        source: "bybit-ws-linear",
-      })),
-    },
-  };
-}
-
 describe("event bus + persistence + replay (issue #17)", () => {
   test("AC1: events are published with idempotency keys and deduplicated", () => {
     const store = new EventStore(":memory:");
@@ -141,7 +108,7 @@ describe("event bus + persistence + replay (issue #17)", () => {
       rawTickEvent("r1", "BTCUSDT", 1_000),
       tickEvent("t1", "BTC/USDT", 30_000, 30_001, 1_001),
       tickEvent("t2", "ETH/USDT", 2_000, 2_001, 1_002),
-      graphUpdatedEvent("g1", 1, 1_003, 1),
+      tickEvent("t3", "SOL/USDT", 100, 101, 1_003),
     ];
     const recorded = session.map((event) => bus.publish(event).event);
 
@@ -166,18 +133,47 @@ describe("event bus + persistence + replay (issue #17)", () => {
     expect(tail.map((event) => event.sequence)).toEqual([2, 3]);
   });
 
-  test("AC4: replay reconstructs graph state from GRAPH_UPDATED events", () => {
+  test("AC4: replay reconstructs graph state from market events", () => {
     const store = new EventStore(":memory:");
     const bus = new EventBus(store);
-    bus.publish(graphUpdatedEvent("g1", 1, 1_000, 1));
-    bus.publish(graphUpdatedEvent("g2", 2, 1_001, 2));
+
+    bus.publish(tickEvent("t1", "BTC/USDT", 30_000, 30_001, 1_000));
+    bus.publish(tickEvent("t2", "ETH/USDT", 2_000, 2_001, 1_001));
+    bus.publish({
+      eventId: "p1",
+      type: "POOL_STATE_UPDATE",
+      kind: "normalized",
+      timestampMs: 1_002,
+      source: "pancakeswap-v4-rpc",
+      payload: {
+        venue: "pancakeswap-v4",
+        poolAddress: "0xpool",
+        symbol: "BNB/USDT",
+        timestampMs: 1_002,
+        reserve0: 100,
+        reserve1: 1_000,
+        price: 10,
+        liquidityUsd: 50_000,
+      },
+    });
 
     const replay = replayAll(store);
     const reconstructed = reconstructGraphState(replay);
 
-    expect(reconstructed.version).toBe(2);
-    expect(reconstructed.edges).toHaveLength(2);
-    expect(reconstructed.snapshotId).toBe("snap-graph-2");
+    // Graph state is derived from market events, not a passthrough.
+    expect(reconstructed.nodes.map((n) => n.id).sort()).toEqual([
+      "asset:BNB/USDT",
+      "asset:BTC/USDT",
+      "asset:ETH/USDT",
+      "pool:0xpool",
+      "venue:bybit",
+      "venue:pancakeswap-v4",
+    ]);
+    expect(reconstructed.edges).toHaveLength(3);
+    expect(reconstructed.version).toBe(3);
+
+    // Deterministic: reconstruct from same store gives identical result.
+    expect(reconstructGraphState(replayAll(store))).toEqual(reconstructed);
   });
 
   test("AC4: folding a session is deterministic and matches replay", () => {
@@ -225,6 +221,22 @@ describe("event bus + persistence + replay (issue #17)", () => {
     // Deterministic: folding the same stream twice is identical.
     expect(foldGraphState(recorded)).toEqual(folded);
     expect(folded.snapshotId).toBe(foldGraphState(recorded).snapshotId);
+  });
+
+  test("AC3: sameEventStream detects differing payloads", () => {
+    const store = new EventStore(":memory:");
+    const bus = new EventBus(store);
+    bus.publish(tickEvent("t1", "BTC/USDT", 30_000, 30_001, 1_000));
+    bus.publish(tickEvent("t2", "BTC/USDT", 30_001, 30_002, 1_001));
+
+    const replay = replayAll(store);
+
+    // Modify payload of the second stream's first event to simulate a different payload.
+    const tampered = [
+      replay[0],
+      { ...replay[1], payload: { ...replay[1].payload, bid: 999_999 } },
+    ];
+    expect(sameEventStream(replay, tampered)).toBe(false);
   });
 
   test("makeEventId produces stable keys used for dedup", () => {
