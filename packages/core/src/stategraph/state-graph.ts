@@ -93,6 +93,7 @@ export class StateGraph {
     this.mode = this.initialMode;
   }
 
+  /** Current state + mode + accumulated handoff data. */
   get context(): StateContext {
     return {
       state: this.state,
@@ -102,18 +103,22 @@ export class StateGraph {
     };
   }
 
+  /** Current state name. */
   get currentState(): StateName {
     return this.state;
   }
 
+  /** Current global SystemMode. */
   get currentMode(): SystemMode {
     return this.mode;
   }
 
+  /** The audit store backing every transition event. */
   get auditLog(): AuditLog {
     return this.audit;
   }
 
+  /** The permission registry backing every transition check. */
   get permissionRegistry(): PermissionRegistry {
     return this.permissions;
   }
@@ -125,6 +130,10 @@ export class StateGraph {
     this.data = {};
   }
 
+  /**
+   * Attempts a transition. Guards, permission checks, and the audit event are
+   * applied for both accepted and blocked attempts (issue #13 AC1/AC3).
+   */
   transition(input: TransitionInput): TransitionOutcome {
     const { to, actor } = input;
     const timestampMs = input.timestampMs ?? this.now();
@@ -224,13 +233,7 @@ export class StateGraph {
     };
   }
 
-  /** Defensive states that have an edge from the current state. */
-  defensiveTargets(): readonly StateName[] {
-    return DEFENSIVE_STATES.filter((defensive) =>
-      this.transitions.has(transitionKey(this.state, defensive)),
-    );
-  }
-
+  /** The edge definition for a given from -> to pair, if it exists. */
   transitionFor(from: StateName, to: StateName): Transition | undefined {
     return this.transitions.get(transitionKey(from, to));
   }

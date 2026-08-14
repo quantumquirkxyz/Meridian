@@ -18,7 +18,11 @@ function flowHarness(): {
   graph: StateGraph;
   audit: AuditLog;
   gate: RiskGate;
-  run: (id: string, expectedNetProfitUsd: number) => SimulatedFlowResult;
+  run: (
+    id: string,
+    expectedNetProfitUsd: number,
+    overrides?: Partial<import("../src/flow/simulated-flow.ts").SimulatedFlowScenario>,
+  ) => SimulatedFlowResult;
 } {
   const { nodes, transitions } = buildDefaultGraph();
   const audit = new AuditLog();
@@ -34,11 +38,11 @@ function flowHarness(): {
     graph,
     audit,
     gate,
-    run: (id, expectedNetProfitUsd) =>
+    run: (id, expectedNetProfitUsd, overrides = {}) =>
       runSimulatedOpportunityFlow({
         graph,
         riskGate: gate,
-        scenario: { id, expectedNetProfitUsd },
+        scenario: { id, expectedNetProfitUsd, ...overrides },
         timestampMs: FIXED_TS,
       }),
   };
@@ -122,5 +126,49 @@ describe("simulated opportunity flow (issue #13 AC4, Phase Zero exit criterion)"
       .map((line) => line.split(" ")[3])
       .filter((actor) => actor !== undefined);
     expect(actors.every((actor) => actor !== undefined && !/ai|llm/i.test(actor))).toBe(true);
+  });
+
+  test("reduce: an oversized order is reduced in size and still completes", () => {
+    const { run } = flowHarness();
+    const result = run("reduce-1", 5, { quantity: 20_000, price: 100 });
+
+    expect(result.riskDecision?.decision).toBe("REDUCE_SIZE");
+    expect(result.approved).toBe(true);
+    expect(result.finalState).toBe("IDLE");
+    expect(result.finalMode).toBe("NORMAL");
+    expect(result.path).toContain("EXECUTION_PRECHECK");
+    expect(result.path).toContain("EXECUTE_ORDER");
+    if (result.riskDecision?.decision === "REDUCE_SIZE") {
+      expect(result.riskDecision.reasonCodes).toContain("MAX_RISK_PER_TRADE");
+      expect(result.riskDecision.approvedSize).toBe(
+        DEFAULT_RISK_POLICY.maxRiskPerTradeUsd / 100,
+      );
+    }
+    // A reduction is audited as an approval-side decision, never a rejection.
+    const reasons = result.logs.join(" ");
+    expect(reasons).toContain("RISK_APPROVED");
+    expect(reasons).not.toContain("RISK_REJECTED");
+  });
+
+  test("OPPORTUNITY_DETECTED audit carries the full cost stack", () => {
+    const { audit, run } = flowHarness();
+    run("costs-1", 5);
+
+    const event = audit.all().find((e) => e.action === "OPPORTUNITY_DETECTED");
+    expect(event).toBeDefined();
+    const costs = event?.data?.costs as Record<string, number> | undefined;
+    expect(costs).toBeDefined();
+    for (const key of [
+      "tradingFeesUsd",
+      "slippageUsd",
+      "gasUsd",
+      "bridgeCostUsd",
+      "fundingCostUsd",
+      "latencyRiskUsd",
+      "failureRiskUsd",
+      "safetyBufferUsd",
+    ]) {
+      expect(typeof costs?.[key]).toBe("number");
+    }
   });
 });

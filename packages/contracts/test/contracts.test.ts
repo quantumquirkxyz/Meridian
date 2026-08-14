@@ -69,6 +69,22 @@ describe("MarketDataSnapshot", () => {
     expect(isMarketDataSnapshot({ ...marketData, bid: null, mid: null })).toBe(true);
     expect(isMarketDataSnapshot({ ...marketData, symbol: undefined })).toBe(false);
   });
+
+  test("workspace smoke payload validates", () => {
+    expect(
+      isMarketDataSnapshot({
+        venue: "bybit",
+        symbol: "BTC/USDT",
+        timestampMs: 0,
+        bid: 1,
+        ask: 2,
+        mid: 1.5,
+        depth: 1,
+        latencyMs: 1,
+        source: "smoke",
+      }),
+    ).toBe(true);
+  });
 });
 
 function makeCostBreakdown() {
@@ -170,6 +186,30 @@ describe("OpportunityCandidate", () => {
 
   test("route must be strings", () => {
     expect(isOpportunityCandidate({ ...validCandidate(), route: [1] })).toBe(false);
+  });
+
+  test("REJECTED/INVALID candidates must carry reason codes", () => {
+    expect(
+      isOpportunityCandidate({
+        ...validCandidate(),
+        status: "REJECTED",
+        invalidationReasons: [],
+      }),
+    ).toBe(false);
+    expect(
+      isOpportunityCandidate({
+        ...validCandidate(),
+        status: "REJECTED",
+        invalidationReasons: ["MIN_EDGE"],
+      }),
+    ).toBe(true);
+    expect(
+      isOpportunityCandidate({
+        ...validCandidate(),
+        status: "INVALID",
+        invalidationReasons: undefined,
+      }),
+    ).toBe(false);
   });
 });
 

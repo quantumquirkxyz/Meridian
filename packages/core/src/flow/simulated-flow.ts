@@ -152,6 +152,7 @@ export function runSimulatedOpportunityFlow(
       candidateId: candidate.id,
       snapshotId,
       expectedNetProfitUsd: candidate.expectedNetProfitUsd,
+      costs: candidate.costs,
       route: candidate.route,
       status: candidate.status,
     },

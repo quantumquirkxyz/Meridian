@@ -70,7 +70,7 @@ export const isCostBreakdown: Validator<CostBreakdown> = isObjectOf({
   safetyBufferUsd: isNumber,
 });
 
-export const isOpportunityCandidate: Validator<OpportunityCandidate> = isObjectOf({
+const isOpportunityCandidateShape: Validator<OpportunityCandidate> = isObjectOf({
   id: isString,
   snapshotId: isString,
   route: isArrayOf(isString),
@@ -81,6 +81,24 @@ export const isOpportunityCandidate: Validator<OpportunityCandidate> = isObjectO
   status: isOpportunityStatus,
   invalidationReasons: isOptional(isArrayOf(isRiskReasonCode)),
 });
+
+/**
+ * A discarded or rejected candidate must carry at least one reason code
+ * (RISK.md:45 "every rejected OrderIntent carries reason codes"), so an
+ * INVALID/REJECTED opportunity can never silently pass validation.
+ */
+export const isOpportunityCandidate: Validator<OpportunityCandidate> = (
+  value,
+): value is OpportunityCandidate => {
+  if (!isOpportunityCandidateShape(value)) {
+    return false;
+  }
+  const candidate = value as OpportunityCandidate;
+  if (candidate.status === "INVALID" || candidate.status === "REJECTED") {
+    return (candidate.invalidationReasons ?? []).length > 0;
+  }
+  return true;
+};
 
 export function parseOpportunityCandidate(value: unknown): OpportunityCandidate {
   return parse(isOpportunityCandidate, value, "OpportunityCandidate");

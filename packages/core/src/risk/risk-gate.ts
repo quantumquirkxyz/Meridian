@@ -1,9 +1,9 @@
 import {
   type OrderIntent,
-  type OrderLimits,
   type RiskDecision,
   type SystemMode,
 } from "@agenttrading/contracts";
+import { SIGNAL_MODES } from "../modes.ts";
 
 /**
  * RiskGate: the minimal deterministic gate for RISK_VALIDATE (issue #13 AC4,
@@ -27,13 +27,6 @@ export const DEFAULT_RISK_POLICY: RiskPolicy = {
   minDataQualityScore: 0.5,
 };
 
-/** Modes in which the gate may approve new orders. */
-const EXECUTABLE_MODES: readonly SystemMode[] = [
-  "NORMAL",
-  "SIGNAL_ONLY",
-  "PAPER_ONLY",
-];
-
 export interface RiskGateInput {
   orderIntent: OrderIntent;
   /** OpportunityCandidate.expectedNetProfitUsd that produced this intent. */
@@ -47,13 +40,21 @@ export interface RiskGateInput {
 export class RiskGate {
   constructor(private readonly policy: RiskPolicy = DEFAULT_RISK_POLICY) {}
 
+  /**
+   * Evaluates an OrderIntent against the minimum rules and returns a typed
+   * RiskDecision: APPROVE / REDUCE_SIZE (with the full approval payload and
+   * expiry), REJECT, or a defensive EXIT_ONLY outcome — always with reason
+   * codes where required (RISK.md:45).
+   */
   evaluate(input: RiskGateInput): RiskDecision {
     const base = {
       orderIntentIdempotencyKey: input.orderIntent.idempotencyKey,
       evaluatedAtMs: input.evaluatedAtMs,
     };
 
-    if (!EXECUTABLE_MODES.includes(input.mode)) {
+    // The gate only approves new orders in signal-capable modes; the shared
+    // SIGNAL_MODES vocabulary keeps gate and graph in lockstep.
+    if (!SIGNAL_MODES.includes(input.mode)) {
       return {
         ...base,
         decision: "EXIT_ONLY",
@@ -101,7 +102,7 @@ export class RiskGate {
       ...base,
       decision: "APPROVE",
       approvedSize: input.orderIntent.quantity,
-      approvedLimits: orderLimitsFrom(input.orderIntent.limits),
+      approvedLimits: { ...input.orderIntent.limits },
       expiresAtMs: input.evaluatedAtMs + RISK_APPROVAL_TTL_MS,
     };
   }
@@ -109,7 +110,3 @@ export class RiskGate {
 
 /** Approval validity window (ms); an approval past expiry is void. */
 export const RISK_APPROVAL_TTL_MS = 60_000;
-
-function orderLimitsFrom(limits: OrderLimits): OrderLimits {
-  return { ...limits };
-}

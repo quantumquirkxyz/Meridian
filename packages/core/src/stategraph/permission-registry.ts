@@ -10,26 +10,30 @@ import {
  * is rejected with a PERMISSION_DENIED audit before any guard runs.
  *
  * The registry stores an actor id -> set of Permissions. Actor ids are fixed
- * module/agent names, never human-passable free strings. Agents are granted
- * only observation/proposal permissions; the execution-authority permissions
- * (APPROVE_RISK, SUBMIT_ORDER, SIGN_TRANSACTION, MOVE_FUNDS, MODIFY_RISK_LIMITS)
- * are never granted to agents (PERMISSIONS_NEVER_GRANTED_TO_AGENTS).
+ * module/agent names, never human-passable free strings. The registry is built
+ * with the set of agent ids; registering or granting an execution-authority
+ * permission (APPROVE_RISK, SUBMIT_ORDER, SIGN_TRANSACTION, MOVE_FUNDS,
+ * MODIFY_RISK_LIMITS) to an agent throws immediately, so the boundary of
+ * ARCHITECTURE.md:57 is enforced at runtime rather than by convention.
  */
 export class PermissionRegistry {
   private readonly byActor = new Map<string, Set<Permission>>();
+  private readonly agentIds: ReadonlySet<string>;
+
+  constructor(agentIds: readonly string[] = []) {
+    this.agentIds = new Set(agentIds);
+  }
 
   register(actor: string, permissions: readonly Permission[]): void {
+    this.assertAgentSafe(actor, permissions);
     this.byActor.set(actor, new Set(permissions));
   }
 
   grant(actor: string, permission: Permission): void {
+    this.assertAgentSafe(actor, [permission]);
     const set = this.byActor.get(actor) ?? new Set<Permission>();
     set.add(permission);
     this.byActor.set(actor, set);
-  }
-
-  revoke(actor: string, permission: Permission): void {
-    this.byActor.get(actor)?.delete(permission);
   }
 
   has(actor: string, permission: Permission): boolean {
@@ -40,32 +44,31 @@ export class PermissionRegistry {
     return required.every((permission) => this.has(actor, permission));
   }
 
-  /** Permissions a given actor currently holds (stable copy). */
-  permissionsFor(actor: string): readonly Permission[] {
-    return [...(this.byActor.get(actor) ?? [])];
+  private assertAgentSafe(
+    actor: string,
+    permissions: readonly Permission[],
+  ): void {
+    if (!this.agentIds.has(actor)) {
+      return;
+    }
+    const forbidden = (
+      PERMISSIONS_NEVER_GRANTED_TO_AGENTS as readonly Permission[]
+    ).filter((permission) => permissions.includes(permission));
+    if (forbidden.length > 0) {
+      throw new Error(
+        `permission boundary violated: agent ${actor} cannot be granted ` +
+          `${forbidden.join(", ")}`,
+      );
+    }
   }
-
-  actors(): readonly string[] {
-    return [...this.byActor.keys()];
-  }
-}
-
-/**
- * True when a permission is one of the execution-authority permissions that
- * ARCHITECTURE.md:57 forbids granting to agents.
- */
-export function isExecutionPermission(permission: Permission): boolean {
-  return (PERMISSIONS_NEVER_GRANTED_TO_AGENTS as readonly Permission[]).includes(
-    permission,
-  );
 }
 
 /**
  * Structural enforcement of user story 28: no AI agent holds
  * APPROVE_RISK / SUBMIT_ORDER / SIGN_TRANSACTION / MOVE_FUNDS /
  * MODIFY_RISK_LIMITS. Returns the list of offending agents (empty when the
- * boundary holds). Used by the permission-boundary tests and by
- * `assertAgentPermissionsSafe`.
+ * boundary holds). Belt-and-braces on top of the registry's runtime check:
+ * it can also catch a registry constructed without its agent ids.
  */
 export function agentsHoldingExecutionPermissions(
   registry: PermissionRegistry,

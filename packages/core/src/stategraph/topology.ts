@@ -1,12 +1,15 @@
 import {
+  OPPORTUNITY_STATUS,
+  type OpportunityStatus,
   type Permission,
+  type StateContext,
   type StateName,
   type StateNode,
   type SystemMode,
   type Transition,
 } from "@agenttrading/contracts";
-import { SYSTEM_MODES } from "@agenttrading/contracts";
 import { PermissionRegistry } from "./permission-registry.ts";
+import { EXECUTION_MODES, SIGNAL_MODES } from "../modes.ts";
 import {
   alwaysAllow,
   allOf,
@@ -52,18 +55,38 @@ export const DEFENSIVE_STATE_MODE: Record<DefensiveState, SystemMode> = {
   REDUCE_ONLY_MODE: "REDUCE_ONLY",
 };
 
-/** Modes in which signal-generation states may run (no execution). */
-const SIGNAL_MODES: readonly SystemMode[] = [
-  "NORMAL",
-  "SIGNAL_ONLY",
-  "PAPER_ONLY",
-];
+/** Outcome of a risk decision that authorizes simulated execution. */
+const EXECUTABLE_RISK_OUTCOMES = ["APPROVE", "REDUCE_SIZE"] as const;
 
-/** Modes in which execution states may run (paper execution only in Alpha). */
-const EXECUTION_MODES: readonly SystemMode[] = ["NORMAL", "PAPER_ONLY"];
+/** CANDIDATE status from the shared OPPORTUNITY_STATUS vocabulary. */
+const CANDIDATE_STATUS: OpportunityStatus = OPPORTUNITY_STATUS[1];
 
-/** Observation/reconciliation/audit states run in every mode. */
-const OBSERVATION_MODES: readonly SystemMode[] = [...SYSTEM_MODES];
+/**
+ * True when the transition data carries at least one candidate still in
+ * CANDIDATE status. Shared by the detect forks so the predicate lives once.
+ */
+function hasCandidateStatus(ctx: StateContext): boolean {
+  const candidates = (ctx.data?.candidates ?? []) as Array<{
+    status?: string;
+  }>;
+  return candidates.some((candidate) => candidate.status === CANDIDATE_STATUS);
+}
+
+/**
+ * True when the transition context carries a complete risk decision whose
+ * recorded outcome matches the decision itself. US26 / ADR-0003: no bare
+ * hand-written `riskDecisionOutcome` string can authorize execution; the full
+ * RiskGate-produced decision record must be present.
+ */
+function hasRiskDecision(ctx: StateContext): boolean {
+  const outcome = ctx.data?.riskDecisionOutcome;
+  const decision = ctx.data?.riskDecision as { decision?: string } | undefined;
+  return (
+    outcome !== undefined &&
+    decision !== undefined &&
+    decision.decision === outcome
+  );
+}
 
 /** Actors and the permissions they hold (ARCHITECTURE.md:55-59). */
 export const MODULE_ACTORS = {
@@ -103,7 +126,7 @@ const TRIGGER_BY_DEFENSIVE_STATE: Record<DefensiveState, Permission> = {
  * on deterministic engines and the operator.
  */
 export function defaultPermissionRegistry(): PermissionRegistry {
-  const registry = new PermissionRegistry();
+  const registry = new PermissionRegistry(AGENT_IDS);
 
   registry.register(MODULE_ACTORS.marketDataSentinel, [
     "OBSERVE_MARKET_DATA",
@@ -234,18 +257,7 @@ function flowTransitions(): Transition[] {
       to: "BUILD_ORDER_INTENT",
       guard: allOf("detectToBuild", [
         modeAllows("buildMode", SIGNAL_MODES),
-        allowWhen(
-          "candidateExists",
-          (ctx) => {
-            const candidates = (ctx.data?.candidates ?? []) as Array<{
-              status?: string;
-            }>;
-            return candidates.some(
-              (candidate) => candidate.status === "CANDIDATE",
-            );
-          },
-          "no profitable candidates",
-        ),
+        allowWhen("candidateExists", hasCandidateStatus, "no profitable candidates"),
       ]),
       requiredPermissions: ["PROPOSE_SIGNAL"],
       audit: true,
@@ -256,14 +268,7 @@ function flowTransitions(): Transition[] {
       to: "AUDIT_DECISION",
       guard: allowWhen(
         "detectToAudit",
-        (ctx) => {
-          const candidates = (ctx.data?.candidates ?? []) as Array<{
-            status?: string;
-          }>;
-          return !candidates.some(
-            (candidate) => candidate.status === "CANDIDATE",
-          );
-        },
+        (ctx) => !hasCandidateStatus(ctx),
         "all candidates discarded",
       ),
       requiredPermissions: ["OBSERVE_AUDIT"],
@@ -303,13 +308,18 @@ function flowTransitions(): Transition[] {
       id: "risk-to-precheck",
       from: "RISK_VALIDATE",
       to: "EXECUTION_PRECHECK",
-      guard: allowWhen(
-        "riskApprovedAndExecutable",
-        (ctx) =>
-          ctx.data?.riskDecisionOutcome === "APPROVE" &&
-          EXECUTION_MODES.includes(ctx.mode),
-        "risk not approved or mode blocks execution",
-      ),
+      guard: allOf("riskApprovedAndExecutable", [
+        allowWhen(
+          "riskApproved",
+          (ctx) =>
+            hasRiskDecision(ctx) &&
+            (EXECUTABLE_RISK_OUTCOMES as readonly string[]).includes(
+              String(ctx.data?.riskDecisionOutcome),
+            ),
+          "no approved risk decision (APPROVE or REDUCE_SIZE)",
+        ),
+        modeAllows("executionMode", EXECUTION_MODES),
+      ]),
       requiredPermissions: ["APPROVE_RISK"],
       audit: true,
     },
@@ -320,8 +330,10 @@ function flowTransitions(): Transition[] {
       guard: allowWhen(
         "riskRejected",
         (ctx) =>
-          ctx.data?.riskDecisionOutcome !== undefined &&
-          ctx.data?.riskDecisionOutcome !== "APPROVE",
+          hasRiskDecision(ctx) &&
+          !(EXECUTABLE_RISK_OUTCOMES as readonly string[]).includes(
+            String(ctx.data?.riskDecisionOutcome),
+          ),
         "risk decision is not an approval",
       ),
       requiredPermissions: ["APPROVE_RISK"],
@@ -469,22 +481,3 @@ export function buildDefaultGraph(): DefaultGraph {
 
   return { nodes, transitions };
 }
-
-/** Modes that allow each normal state to run (used by flow-level guards). */
-export const MODE_POLICY: Record<
-  Exclude<StateName, DefensiveState>,
-  readonly SystemMode[]
-> = {
-  IDLE: OBSERVATION_MODES,
-  INGEST_MARKET_DATA: OBSERVATION_MODES,
-  NORMALIZE_MARKET_STATE: OBSERVATION_MODES,
-  UPDATE_MARKET_GRAPH: OBSERVATION_MODES,
-  DETECT_OPPORTUNITY: SIGNAL_MODES,
-  BUILD_ORDER_INTENT: SIGNAL_MODES,
-  REQUEST_AGENT_REVIEW: SIGNAL_MODES,
-  RISK_VALIDATE: SIGNAL_MODES,
-  EXECUTION_PRECHECK: EXECUTION_MODES,
-  EXECUTE_ORDER: EXECUTION_MODES,
-  RECONCILE: OBSERVATION_MODES,
-  AUDIT_DECISION: OBSERVATION_MODES,
-};

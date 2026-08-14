@@ -1,4 +1,5 @@
 import {
+  SYSTEM_MODES,
   type GuardResult,
   type StateContext,
   type SystemMode,
@@ -22,7 +23,11 @@ export function alwaysAllow(name: string): TransitionGuard {
   };
 }
 
-/** Guard built from a predicate; rejects with the given reason when false. */
+/**
+ * Guard built from a predicate; rejects with the given reason when false. The
+ * success reason reflects the guard name (not the reject reason), so an
+ * accepted transition never audits a contradictory explanation.
+ */
 export function allowWhen(
   name: string,
   predicate: (context: StateContext) => boolean,
@@ -32,7 +37,7 @@ export function allowWhen(
     name,
     evaluate(context: StateContext): GuardResult {
       if (predicate(context)) {
-        return { ok: true, reason: rejectReason };
+        return { ok: true, reason: `${name} passed` };
       }
       return { ok: false, reason: rejectReason };
     },
@@ -152,20 +157,12 @@ export function dataEquals(
 
 /**
  * Mode restrictiveness ordering for defensive-mode entry (RISK.md:63-67,
- * fail closed). NORMAL is the least restrictive and HALT the most; a
- * transition into a defensive mode is allowed only when the target mode is at
- * least as restrictive as the current mode, so activity never increases.
+ * fail closed). SYSTEM_MODES is already ordered least -> most restrictive:
+ * NORMAL is the least restrictive and HALT the most. A transition into a
+ * defensive mode is allowed only when the target mode is at least as
+ * restrictive as the current mode, so activity never increases.
  */
-export const MODE_ORDER: readonly SystemMode[] = [
-  "NORMAL",
-  "OBSERVE_ONLY",
-  "SIGNAL_ONLY",
-  "PAPER_ONLY",
-  "CANCEL_ONLY",
-  "REDUCE_ONLY",
-  "CASH_ONLY",
-  "HALT",
-] as const;
+export const MODE_ORDER: readonly SystemMode[] = SYSTEM_MODES;
 
 const MODE_RANK = new Map<SystemMode, number>(
   MODE_ORDER.map((mode, index) => [mode, index]),

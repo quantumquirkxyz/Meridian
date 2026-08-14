@@ -31,6 +31,7 @@ export interface AuditRecordInput {
 export class AuditLog {
   private readonly events: AuditEvent[] = [];
 
+  /** Records an event with the next monotonic sequence number. */
   record(input: AuditRecordInput): AuditEvent {
     const event: AuditEvent = {
       eventId: input.eventId,
@@ -48,14 +49,17 @@ export class AuditLog {
     return event;
   }
 
+  /** Every recorded event, in sequence order. */
   all(): readonly AuditEvent[] {
     return this.events;
   }
 
+  /** Number of recorded events. */
   count(): number {
     return this.events.length;
   }
 
+  /** The most recent event, or undefined when the log is empty. */
   last(): AuditEvent | undefined {
     return this.events[this.events.length - 1];
   }

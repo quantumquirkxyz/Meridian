@@ -37,8 +37,22 @@ describe("permission model (ADR-0003, user story 28)", () => {
     }
   });
 
-  test("a structurally-violating registry is detected", () => {
+  test("the boundary is enforced at runtime: agents cannot be granted execution permissions", () => {
     const registry = defaultPermissionRegistry();
+    expect(() =>
+      registry.register("agent-planner", ["APPROVE_RISK"]),
+    ).toThrow();
+    expect(() => registry.grant("agent-planner", "SUBMIT_ORDER")).toThrow();
+    // Modules/engines are unaffected.
+    expect(() =>
+      registry.register(MODULE_ACTORS.riskEngine, ["APPROVE_RISK"]),
+    ).not.toThrow();
+  });
+
+  test("a structurally-violating registry is detected", () => {
+    // A registry built without its agent ids cannot prevent the violation, so
+    // the assertion helpers still catch it (belt and braces).
+    const registry = new PermissionRegistry([]);
     registry.grant("agent-planner", "APPROVE_RISK");
     expect(
       agentsHoldingExecutionPermissions(registry, ["agent-planner"]),

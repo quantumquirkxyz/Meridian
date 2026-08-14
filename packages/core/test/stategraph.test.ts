@@ -108,11 +108,19 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
       expect(outcome.ok, `expected ${to} reachable`).toBe(true);
     }
 
-    // REJECT keeps the cycle away from execution.
+    // REJECT (with a complete risk decision record) keeps the cycle away from execution.
     const rejected = graph.transition({
       to: "AUDIT_DECISION",
       actor: MODULE_ACTORS.riskEngine,
-      data: { riskDecisionOutcome: "REJECT" },
+      data: {
+        riskDecisionOutcome: "REJECT",
+        riskDecision: {
+          decision: "REJECT",
+          orderIntentIdempotencyKey: "intent-1",
+          evaluatedAtMs: 0,
+          reasonCodes: ["MIN_EDGE"],
+        },
+      },
       timestampMs: 0,
     });
     expect(rejected.ok).toBe(true);
@@ -127,10 +135,62 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
     const approved = graph.transition({
       to: "EXECUTION_PRECHECK",
       actor: MODULE_ACTORS.riskEngine,
-      data: { riskDecisionOutcome: "APPROVE" },
+      data: {
+        riskDecisionOutcome: "APPROVE",
+        riskDecision: {
+          decision: "APPROVE",
+          orderIntentIdempotencyKey: "intent-1",
+          evaluatedAtMs: 0,
+          approvedSize: 0.01,
+          approvedLimits: { maxSlippageBps: 30 },
+          expiresAtMs: 60_000,
+        },
+      },
       timestampMs: 0,
     });
     expect(approved.ok).toBe(true);
+  });
+
+  test("an OrderIntent cannot pass RISK_VALIDATE without a risk decision", () => {
+    const { graph } = newGraph();
+    const steps: Array<[StateName, string, Record<string, unknown>]> = [
+      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
+      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
+      ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+      ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
+    ];
+    for (const [to, actor, data] of steps) {
+      expect(graph.transition({ to, actor, data, timestampMs: 0 }).ok).toBe(
+        true,
+      );
+    }
+
+    // No risk decision at all -> blocked before execution.
+    const missing = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      timestampMs: 0,
+    });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.reasonCode).toBe("GUARD_FAILED");
+    }
+
+    // A bare hand-written outcome string without the full RiskDecision record
+    // is also blocked: the gate must be enforced structurally, not by convention.
+    const forged = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "APPROVE" },
+      timestampMs: 0,
+    });
+    expect(forged.ok).toBe(false);
+    if (!forged.ok) {
+      expect(forged.reasonCode).toBe("GUARD_FAILED");
+    }
   });
 });
 
@@ -265,6 +325,64 @@ describe("defensive modes reachable from any state and reduce activity (issue #1
     expect(reset.ok).toBe(true);
     expect(graph.currentState).toBe("IDLE");
     expect(graph.currentMode).toBe("NORMAL");
+  });
+
+  test("a defensive mode entered mid-flow blocks subsequent execution steps", () => {
+    const { graph } = newGraph();
+    const steps: Array<[StateName, string, Record<string, unknown>]> = [
+      ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+      ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+      ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+      ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
+      ["BUILD_ORDER_INTENT", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE" }] }],
+    ];
+    for (const [to, actor, data] of steps) {
+      expect(graph.transition({ to, actor, data, timestampMs: 0 }).ok).toBe(
+        true,
+      );
+    }
+    expect(graph.currentState).toBe("BUILD_ORDER_INTENT");
+
+    // Infra-guardian pulls the flow into a defensive mode mid-cycle.
+    const entered = graph.transition({
+      to: "CANCEL_ONLY_MODE",
+      actor: MODULE_ACTORS.infraGuardian,
+      timestampMs: 0,
+    });
+    expect(entered.ok).toBe(true);
+    expect(graph.currentMode).toBe("CANCEL_ONLY");
+
+    // Execution is unreachable from the defensive state, and recovery needs an
+    // operator reset: activity is demonstrably reduced.
+    expect(
+      graph.transition({
+        to: "EXECUTION_PRECHECK",
+        actor: MODULE_ACTORS.riskEngine,
+        timestampMs: 0,
+      }).ok,
+    ).toBe(false);
+    expect(
+      graph.transition({
+        to: "EXECUTE_ORDER",
+        actor: MODULE_ACTORS.executionEngine,
+        timestampMs: 0,
+      }).ok,
+    ).toBe(false);
+    expect(
+      graph.transition({
+        to: "IDLE",
+        actor: MODULE_ACTORS.operator,
+        timestampMs: 0,
+      }).ok,
+    ).toBe(false);
+    expect(
+      graph.transition({
+        to: "IDLE",
+        actor: MODULE_ACTORS.operator,
+        data: { operatorReset: true },
+        timestampMs: 0,
+      }).ok,
+    ).toBe(true);
   });
 });
 
