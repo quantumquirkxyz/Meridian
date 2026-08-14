@@ -56,9 +56,6 @@ export interface StateContext {
 export interface StateNode {
   name: StateName;
   description?: string;
-  canEnter: boolean;
-  /** Permissions required to enter/operate in this state. */
-  permissions: Permission[];
 }
 
 export type GuardResult =
@@ -131,8 +128,6 @@ export const isStateContext: Validator<StateContext> = isObjectOf({
 export const isStateNode: Validator<StateNode> = isObjectOf({
   name: isStateName,
   description: isOptional(isString),
-  canEnter: isBoolean,
-  permissions: isArrayOf(isPermission),
 });
 
 export const isGuardResult: Validator<GuardResult> = isOneOf<GuardResult>([

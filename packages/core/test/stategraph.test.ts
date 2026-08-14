@@ -237,6 +237,116 @@ describe("StateGraph guards and transitions (issue #13 AC1)", () => {
     }
     expect(graph.currentState).toBe("EXECUTION_PRECHECK");
   });
+
+  test("expiry is judged by the clock, not a stale caller timestamp", () => {
+    const { graph } = newGraph();
+    walkToRiskValidate(graph);
+
+    // Expired by the injectable clock (now() = FIXED_TS), but the caller
+    // forwards a stale past timestamp that the old code would have trusted.
+    const decision = {
+      decision: "APPROVE",
+      orderIntentIdempotencyKey: "intent-1",
+      evaluatedAtMs: 0,
+      approvedSize: 0.01,
+      approvedLimits: { maxSlippageBps: 30 },
+      expiresAtMs: FIXED_TS - 1,
+    };
+    const toPrecheck = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "APPROVE", riskDecision: decision },
+      timestampMs: FIXED_TS - 10_000,
+    });
+    expect(toPrecheck.ok).toBe(true);
+
+    const toExecute = graph.transition({
+      to: "EXECUTE_ORDER",
+      actor: MODULE_ACTORS.executionEngine,
+      data: { precheck: "PASS" },
+      timestampMs: FIXED_TS - 10_000,
+    });
+    expect(toExecute.ok).toBe(false);
+    if (!toExecute.ok) {
+      expect(toExecute.reasonCode).toBe("GUARD_FAILED");
+    }
+  });
+
+  test("a failed precheck aborts to AUDIT_DECISION, never stranding", () => {
+    const { graph } = newGraph();
+    walkToRiskValidate(graph);
+
+    const toPrecheck = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: {
+        riskDecisionOutcome: "APPROVE",
+        riskDecision: {
+          decision: "APPROVE",
+          orderIntentIdempotencyKey: "intent-1",
+          evaluatedAtMs: 0,
+          approvedSize: 0.01,
+          approvedLimits: { maxSlippageBps: 30 },
+          expiresAtMs: 60_000,
+        },
+      },
+      timestampMs: 0,
+    });
+    expect(toPrecheck.ok).toBe(true);
+
+    const aborted = graph.transition({
+      to: "AUDIT_DECISION",
+      actor: MODULE_ACTORS.executionEngine,
+      data: { precheck: "FAILED" },
+      timestampMs: 0,
+    });
+    expect(aborted.ok).toBe(true);
+    expect(graph.currentState).toBe("AUDIT_DECISION");
+  });
+
+  test("a failed reconciliation still reaches AUDIT_DECISION", () => {
+    const { graph } = newGraph();
+    walkToRiskValidate(graph);
+
+    const approve = {
+      decision: "APPROVE",
+      orderIntentIdempotencyKey: "intent-1",
+      evaluatedAtMs: 0,
+      approvedSize: 0.01,
+      approvedLimits: { maxSlippageBps: 30 },
+      expiresAtMs: FIXED_TS + 60_000,
+    };
+    const toPrecheck = graph.transition({
+      to: "EXECUTION_PRECHECK",
+      actor: MODULE_ACTORS.riskEngine,
+      data: { riskDecisionOutcome: "APPROVE", riskDecision: approve },
+      timestampMs: 0,
+    });
+    expect(toPrecheck.ok).toBe(true);
+    const toExecute = graph.transition({
+      to: "EXECUTE_ORDER",
+      actor: MODULE_ACTORS.executionEngine,
+      data: { precheck: "PASS", executedSize: 0.01 },
+      timestampMs: 0,
+    });
+    expect(toExecute.ok).toBe(true);
+    const toReconcile = graph.transition({
+      to: "RECONCILE",
+      actor: MODULE_ACTORS.executionEngine,
+      data: { execution: "SIMULATED_FILL" },
+      timestampMs: 0,
+    });
+    expect(toReconcile.ok).toBe(true);
+
+    const reconciled = graph.transition({
+      to: "AUDIT_DECISION",
+      actor: MODULE_ACTORS.reconciliationEngine,
+      data: { reconciliation: "FAILED" },
+      timestampMs: 0,
+    });
+    expect(reconciled.ok).toBe(true);
+    expect(graph.currentState).toBe("AUDIT_DECISION");
+  });
 });
 
 describe("defensive modes reachable from any state and reduce activity (issue #13 AC2)", () => {
@@ -479,6 +589,31 @@ describe("audit per transition (issue #13 AC3)", () => {
     const event = audit.last();
     expect(event?.reasonCodes).toContain("DEFENSIVE_MODE_ENTERED");
     expect(event?.reasonCodes).toContain("MODE_REDUCED");
+  });
+
+  test("transition events expose the resulting SystemMode (US27)", () => {
+    const { graph, audit } = newGraph();
+    graph.transition({
+      to: "DEGRADED_MODE",
+      actor: MODULE_ACTORS.infraGuardian,
+      timestampMs: 0,
+    });
+    const event = audit.last();
+    expect(event?.action).toBe("STATE_TRANSITION");
+    expect((event?.data as { mode?: string } | undefined)?.mode).toBe(
+      "OBSERVE_ONLY",
+    );
+
+    // A blocked attempt records the current (unchanged) mode too.
+    graph.transition({
+      to: "EXECUTE_ORDER",
+      actor: MODULE_ACTORS.executionEngine,
+      timestampMs: 0,
+    });
+    const blocked = audit.last();
+    expect((blocked?.data as { mode?: string } | undefined)?.mode).toBe(
+      "OBSERVE_ONLY",
+    );
   });
 
   test("sequence numbers are monotonic and events are valid AuditEvents", () => {

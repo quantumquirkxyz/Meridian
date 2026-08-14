@@ -1,16 +1,21 @@
 import {
+  type ApprovedRiskDecision,
   type AuditEvent,
   type AuditReasonCode,
   type CostBreakdown,
   type OpportunityCandidate,
   type OrderIntent,
+  type ReduceRiskDecision,
   type RiskDecision,
   type RiskReasonCode,
   type StateName,
   type SystemMode,
 } from "@agenttrading/contracts";
 import { StateGraph, type TransitionOutcome } from "../stategraph/state-graph.ts";
-import { MODULE_ACTORS } from "../stategraph/topology.ts";
+import {
+  isExecutableRiskOutcome,
+  MODULE_ACTORS,
+} from "../stategraph/topology.ts";
 import { RiskGate } from "../risk/risk-gate.ts";
 
 /**
@@ -51,6 +56,7 @@ export interface SimulatedFlowResult {
   logs: readonly string[];
 }
 
+/** Inputs that drive one deterministic simulated opportunity walk. */
 export interface SimulatedFlowOptions {
   graph: StateGraph;
   riskGate: RiskGate;
@@ -75,6 +81,13 @@ function decisionReasonCodes(
 ): RiskReasonCode[] | undefined {
   const codes = "reasonCodes" in decision ? decision.reasonCodes : undefined;
   return codes === undefined ? undefined : [...codes];
+}
+
+/** Narrowing wrapper: an executable decision carries the approval payload. */
+function isExecutableRiskDecision(
+  decision: RiskDecision,
+): decision is ApprovedRiskDecision | ReduceRiskDecision {
+  return isExecutableRiskOutcome(decision.decision);
 }
 
 export function runSimulatedOpportunityFlow(
@@ -141,17 +154,24 @@ export function runSimulatedOpportunityFlow(
     },
   });
 
-  // 4. Detect opportunity (no LLM; candidates computed from the scenario).
+  // 4. Detect opportunity (no LLM; candidates computed from the scenario). A
+  //    non-profitable candidate is immediately invalidated so the detected
+  //    audit event records the discard reason (US29: candidate opportunities
+  //    audited with graph snapshot id, costs, and invalidation reasons).
   const candidate: OpportunityCandidate = {
     id: `opp-${scenario.id}`,
     snapshotId,
     route: [...(scenario.route ?? ["venue:bybit", "asset:BTC"])],
     grossSpreadUsd: scenario.grossSpreadUsd ?? 10,
-    costs: EMPTY_COSTS,
+    costs: { ...EMPTY_COSTS },
     expectedNetProfitUsd: scenario.expectedNetProfitUsd,
     createdAtMs: timestampMs,
     status: "CANDIDATE",
   };
+  if (candidate.expectedNetProfitUsd <= 0) {
+    candidate.status = "INVALID";
+    candidate.invalidationReasons = ["MIN_EDGE"];
+  }
   audit.record({
     eventId: `detected-${scenario.id}`,
     timestampMs,
@@ -166,6 +186,7 @@ export function runSimulatedOpportunityFlow(
       costs: candidate.costs,
       route: candidate.route,
       status: candidate.status,
+      invalidationReasons: candidate.invalidationReasons,
     },
   });
 
@@ -178,8 +199,6 @@ export function runSimulatedOpportunityFlow(
 
   // Non-profitable opportunities are discarded and audited; no intent is built.
   if (candidate.expectedNetProfitUsd <= 0) {
-    candidate.status = "INVALID";
-    candidate.invalidationReasons = ["MIN_EDGE"];
     step("AUDIT_DECISION", MODULE_ACTORS.audit, {
       candidates: [candidate],
       invalidationReasons: candidate.invalidationReasons,
@@ -259,10 +278,9 @@ export function runSimulatedOpportunityFlow(
     action: "RISK_DECISION",
     actor: MODULE_ACTORS.riskEngine,
     state: "RISK_VALIDATE",
-    reasonCodes:
-      riskDecision.decision === "APPROVE" || riskDecision.decision === "REDUCE_SIZE"
-        ? ["RISK_APPROVED"]
-        : ["RISK_REJECTED"],
+    reasonCodes: isExecutableRiskOutcome(riskDecision.decision)
+      ? ["RISK_APPROVED"]
+      : ["RISK_REJECTED"],
     data: {
       idempotencyKey: orderIntent.idempotencyKey,
       decision: riskDecision.decision,
@@ -270,7 +288,7 @@ export function runSimulatedOpportunityFlow(
     },
   });
 
-  if (riskDecision.decision === "APPROVE" || riskDecision.decision === "REDUCE_SIZE") {
+  if (isExecutableRiskDecision(riskDecision)) {
     // 8-10. Approved path: precheck, simulated execution, reconcile, audit.
     approved = true;
     step(
@@ -315,9 +333,10 @@ export function runSimulatedOpportunityFlow(
     ]);
   } else {
     // Rejected path: record the rejected hypothesis and complete the cycle.
-    const rejectedReasonCodes = decisionReasonCodes(riskDecision);
+    // REJECT and defensive outcomes always carry non-empty reason codes, so
+    // the candidate is invalidated with the decision's own codes (RISK.md:45).
     candidate.status = "REJECTED";
-    candidate.invalidationReasons = rejectedReasonCodes ?? [];
+    candidate.invalidationReasons = decisionReasonCodes(riskDecision);
     step(
       "AUDIT_DECISION",
       MODULE_ACTORS.riskEngine,
@@ -344,11 +363,9 @@ export function runSimulatedOpportunityFlow(
     opportunity: candidate,
     orderIntent,
     riskDecision,
-    executedSize:
-      riskDecision.decision === "APPROVE" ||
-      riskDecision.decision === "REDUCE_SIZE"
-        ? riskDecision.approvedSize
-        : undefined,
+    executedSize: isExecutableRiskDecision(riskDecision)
+      ? riskDecision.approvedSize
+      : undefined,
     logs: audit.toLogLines(),
   };
 }

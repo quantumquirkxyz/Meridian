@@ -1,7 +1,6 @@
 import {
   CANDIDATE_STATUS,
   isRiskDecision,
-  type OpportunityStatus,
   type Permission,
   type StateContext,
   type StateName,
@@ -62,12 +61,9 @@ export const DEFENSIVE_STATE_MODE: Record<DefensiveState, SystemMode> = {
 const EXECUTABLE_RISK_OUTCOMES: readonly string[] = ["APPROVE", "REDUCE_SIZE"];
 
 /** True when the recorded risk decision outcome permits execution. */
-function isExecutableRiskOutcome(outcome: unknown): boolean {
+export function isExecutableRiskOutcome(outcome: unknown): boolean {
   return EXECUTABLE_RISK_OUTCOMES.includes(String(outcome));
 }
-
-/** CANDIDATE status from the shared OPPORTUNITY_STATUS vocabulary. */
-const CANDIDATE_STATUS_VALUE: OpportunityStatus = CANDIDATE_STATUS;
 
 /**
  * True when the transition data carries at least one candidate still in
@@ -77,9 +73,7 @@ function hasCandidateStatus(ctx: StateContext): boolean {
   const candidates = (ctx.data?.candidates ?? []) as Array<{
     status?: string;
   }>;
-  return candidates.some(
-    (candidate) => candidate.status === CANDIDATE_STATUS_VALUE,
-  );
+  return candidates.some((candidate) => candidate.status === CANDIDATE_STATUS);
 }
 
 /**
@@ -384,6 +378,18 @@ function flowTransitions(): Transition[] {
       audit: true,
     },
     {
+      id: "precheck-to-audit",
+      from: "EXECUTION_PRECHECK",
+      to: "AUDIT_DECISION",
+      guard: allowWhen(
+        "precheckFailed",
+        (ctx) => ctx.data?.precheck !== "PASS",
+        "precheck failure must be audited, not stranded",
+      ),
+      requiredPermissions: ["SUBMIT_ORDER"],
+      audit: true,
+    },
+    {
       id: "execute-to-reconcile",
       from: "EXECUTE_ORDER",
       to: "RECONCILE",
@@ -396,9 +402,9 @@ function flowTransitions(): Transition[] {
       from: "RECONCILE",
       to: "AUDIT_DECISION",
       guard: allowWhen(
-        "reconciliationResolved",
-        (ctx) => ctx.data?.reconciliation === "OK",
-        "reconciliation unresolved",
+        "reconciliationRecorded",
+        (ctx) => ctx.data?.reconciliation !== undefined,
+        "no reconciliation result",
       ),
       requiredPermissions: ["OBSERVE_STATE"],
       audit: true,
@@ -457,26 +463,6 @@ const NORMAL_STATES: readonly StateName[] = [
   "AUDIT_DECISION",
 ];
 
-const NODE_PERMISSIONS: Record<StateName, readonly Permission[]> = {
-  IDLE: ["OBSERVE_STATE"],
-  INGEST_MARKET_DATA: ["OBSERVE_MARKET_DATA"],
-  NORMALIZE_MARKET_STATE: ["OBSERVE_MARKET_DATA"],
-  UPDATE_MARKET_GRAPH: ["OBSERVE_MARKET_DATA", "OBSERVE_STATE"],
-  DETECT_OPPORTUNITY: ["OBSERVE_MARKET_DATA", "OBSERVE_STATE", "PROPOSE_SIGNAL"],
-  BUILD_ORDER_INTENT: ["OBSERVE_STATE", "PROPOSE_SIGNAL", "PROPOSE_EXECUTION_PLAN"],
-  REQUEST_AGENT_REVIEW: ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
-  RISK_VALIDATE: ["APPROVE_RISK", "OBSERVE_STATE"],
-  EXECUTION_PRECHECK: ["SUBMIT_ORDER", "OBSERVE_STATE"],
-  EXECUTE_ORDER: ["SUBMIT_ORDER", "SIGN_TRANSACTION", "OBSERVE_STATE"],
-  RECONCILE: ["OBSERVE_STATE"],
-  AUDIT_DECISION: ["OBSERVE_AUDIT", "OBSERVE_STATE"],
-  HALT: ["TRIGGER_HALT"],
-  DEGRADED_MODE: ["TRIGGER_DEGRADED_MODE"],
-  CASH_ONLY_MODE: ["TRIGGER_CASH_ONLY"],
-  CANCEL_ONLY_MODE: ["TRIGGER_CANCEL_ONLY"],
-  REDUCE_ONLY_MODE: ["TRIGGER_REDUCE_ONLY"],
-};
-
 /**
  * Builds the default graph: canonical flow, reject forks, defensive fan-out
  * from every state, and operator recovery edges. Defensive fan-out keeps
@@ -487,8 +473,6 @@ export function buildDefaultGraph(): DefaultGraph {
     (name) => ({
       name,
       description: undefined,
-      canEnter: true,
-      permissions: [...NODE_PERMISSIONS[name]],
     }),
   );
 

@@ -97,10 +97,19 @@ describe("simulated opportunity flow (issue #13 AC4, Phase Zero exit criterion)"
     expect(reasons).toContain("RISK_REJECTED");
     expect(reasons).not.toContain("EXECUTION_SIMULATED");
     expect(audit.all().every(isAuditEvent)).toBe(true);
+
+    // US29: the decision event records the reject reasons, so the trail
+    // reconstructs why the opportunity was rejected.
+    const decisionEvent = audit
+      .all()
+      .find((e) => e.action === "RISK_DECISION");
+    const decisionData = decisionEvent?.data as Record<string, unknown> | undefined;
+    expect(decisionData?.decision).toBe("REJECT");
+    expect(decisionData?.reasonCodes).toContain("MIN_EDGE");
   });
 
   test("discard: a non-profitable candidate is invalidated before any intent", () => {
-    const { run } = flowHarness();
+    const { audit, run } = flowHarness();
     const result = run("discard-1", -3);
 
     expect(result.approved).toBe(false);
@@ -109,6 +118,14 @@ describe("simulated opportunity flow (issue #13 AC4, Phase Zero exit criterion)"
     expect(result.orderIntent).toBeUndefined();
     expect(result.path).not.toContain("BUILD_ORDER_INTENT");
     expect(result.path).not.toContain("EXECUTE_ORDER");
+
+    // US29: the candidate's own audit event reconstructs the discard.
+    const detected = audit
+      .all()
+      .find((e) => e.action === "OPPORTUNITY_DETECTED");
+    const detectedData = detected?.data as Record<string, unknown> | undefined;
+    expect(detectedData?.status).toBe("INVALID");
+    expect(detectedData?.invalidationReasons).toContain("MIN_EDGE");
   });
 
   test("deterministic: identical scenario yields identical path and logs", () => {

@@ -39,6 +39,10 @@ export interface TransitionInput {
   eventId?: string;
 }
 
+/**
+ * Result of a transition attempt: the new state/mode and the emitted audit
+ * event on success, or the blocking reason code and event on failure.
+ */
 export type TransitionOutcome =
   | {
       ok: true;
@@ -137,6 +141,7 @@ export class StateGraph {
   transition(input: TransitionInput): TransitionOutcome {
     const { to, actor } = input;
     const timestampMs = input.timestampMs ?? this.now();
+    const sourceState = this.state;
     const edge = this.transitions.get(transitionKey(this.state, to));
 
     if (edge === undefined) {
@@ -144,9 +149,9 @@ export class StateGraph {
         input,
         timestampMs,
         action: "STATE_TRANSITION",
-        state: this.state,
+        state: sourceState,
         reasonCodes: ["TRANSITION_BLOCKED", "INVALID_TRANSITION"],
-        data: { from: this.state, to, attemptedActor: actor },
+        data: { from: sourceState, to, attemptedActor: actor },
       });
       return {
         ok: false,
@@ -160,11 +165,11 @@ export class StateGraph {
         input,
         timestampMs,
         action: "STATE_TRANSITION",
-        state: this.state,
+        state: sourceState,
         reasonCodes: ["TRANSITION_BLOCKED", "PERMISSION_DENIED"],
         data: {
           transitionId: edge.id,
-          from: this.state,
+          from: sourceState,
           to,
           missingPermissions: edge.requiredPermissions.filter(
             (permission) => !this.permissions.has(actor, permission),
@@ -178,10 +183,12 @@ export class StateGraph {
       };
     }
 
+    // Guards evaluate against the injectable clock, so a caller cannot defeat
+    // time-based checks (e.g. approval expiry) by forwarding a stale timestamp.
     const prospectiveContext: StateContext = {
       state: this.state,
       mode: this.mode,
-      updatedAtMs: timestampMs,
+      updatedAtMs: this.now(),
       data: { ...this.data, ...(input.data ?? {}) },
     };
     const guardResult = edge.guard.evaluate(prospectiveContext);
@@ -190,11 +197,11 @@ export class StateGraph {
         input,
         timestampMs,
         action: "STATE_TRANSITION",
-        state: this.state,
+        state: sourceState,
         reasonCodes: ["TRANSITION_BLOCKED", "GUARD_FAILED"],
         data: {
           transitionId: edge.id,
-          from: this.state,
+          from: sourceState,
           to,
           guardName: edge.guard.name,
           guardReason: guardResult.reason,
@@ -213,11 +220,11 @@ export class StateGraph {
       input,
       timestampMs,
       action: "STATE_TRANSITION",
-      state: this.state,
+      state: sourceState,
       reasonCodes: this.reasonCodesFor(edge, input),
       data: {
         transitionId: edge.id,
-        from: edge.from,
+        from: sourceState,
         to: edge.to,
         guardName: edge.guard.name,
         guardReason: guardResult.reason,
@@ -285,7 +292,7 @@ export class StateGraph {
       actor: options.input.actor,
       state: options.state,
       reasonCodes: options.reasonCodes,
-      data: options.data,
+      data: { ...options.data, mode: this.mode },
     });
   }
 }

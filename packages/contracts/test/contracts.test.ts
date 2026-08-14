@@ -429,13 +429,14 @@ describe("StateGraph contracts", () => {
     expect(isStateContext({ ...ctx, state: "NOPE" })).toBe(false);
   });
 
-  test("state node with agent-safe permissions only", () => {
+  test("state node validates with name and optional description", () => {
     const node = {
       name: "RISK_VALIDATE",
-      canEnter: true,
-      permissions: ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
+      description: "risk validation state",
     };
     expect(isStateNode(node)).toBe(true);
+    expect(isStateNode({ name: "RISK_VALIDATE" })).toBe(true);
+    expect(isStateNode({ name: "NOPE" })).toBe(false);
   });
 
   test("permission model: execution permissions never granted to agents", () => {
