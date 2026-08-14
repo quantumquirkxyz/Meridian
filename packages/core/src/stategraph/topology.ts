@@ -421,10 +421,10 @@ function flowTransitions(): Transition[] {
 }
 
 /** Edge guard factory for entering a defensive state. */
-function defensiveGuard(to: DefensiveState): Transition {
+function defensiveGuard(from: StateName, to: DefensiveState): Transition {
   return {
     id: `any-to-${to}`,
-    from: "" as StateName, // placeholder, replaced per source state
+    from,
     to,
     guard: defensiveEntry(`enter-${to}`, DEFENSIVE_STATE_MODE[to]),
     requiredPermissions: [TRIGGER_BY_DEFENSIVE_STATE[to]],
@@ -480,13 +480,13 @@ export function buildDefaultGraph(): DefaultGraph {
     ...flowTransitions(),
     ...NORMAL_STATES.flatMap((source) =>
       DEFENSIVE_STATES.map((defensive) => ({
-        ...defensiveGuard(defensive),
+        ...defensiveGuard(source, defensive),
         from: source,
       })),
     ),
     ...DEFENSIVE_STATES.flatMap((defensive) =>
       DEFENSIVE_STATES.filter((target) => target !== defensive).map((target) => ({
-        ...defensiveGuard(target),
+        ...defensiveGuard(defensive, target),
         from: defensive,
       })),
     ),

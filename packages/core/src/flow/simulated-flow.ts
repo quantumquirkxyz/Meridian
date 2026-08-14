@@ -27,6 +27,7 @@ import { RiskGate } from "../risk/risk-gate.ts";
  * execution is simulated, exactly as Alpha requires.
  */
 
+/** Scenario inputs for one deterministic opportunity walk. */
 export interface SimulatedFlowScenario {
   id: string;
   expectedNetProfitUsd: number;
@@ -90,6 +91,7 @@ function isExecutableRiskDecision(
   return isExecutableRiskOutcome(decision.decision);
 }
 
+/** Runs the simulated opportunity flow and returns the deterministic result. */
 export function runSimulatedOpportunityFlow(
   options: SimulatedFlowOptions,
 ): SimulatedFlowResult {

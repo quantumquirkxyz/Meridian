@@ -182,7 +182,7 @@ export function defensiveEntry(
     name,
     evaluate(context: StateContext): GuardResult {
       const currentRank = MODE_RANK.get(context.mode) ?? 0;
-      const targetRank = MODE_RANK.get(targetMode) ?? MODE_ORDER.length;
+      const targetRank = MODE_RANK.get(targetMode) ?? 0;
       if (targetRank >= currentRank) {
         return {
           ok: true,
