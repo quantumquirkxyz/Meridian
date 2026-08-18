@@ -15,9 +15,11 @@ export {
   findRoutes,
   findArbitrageCycles,
   computeRouteCost,
+  computeRiskConcentration,
   scoreRoute,
   findAndScoreRoutes,
   discardNonExecutable,
+  detectCycleCandidates,
 } from "./pathfinding.ts";
 
 export type {
