@@ -57,6 +57,8 @@ export interface EdgeWeights {
   expectedSlippage?: number;
   latencyMs?: number;
   liquidityUsd?: number;
+  /** Funding cost in USD (from FUNDING_UPDATE events). */
+  fundingCost?: number;
   /** In [0, 1]. */
   failureProbability?: number;
   /** In [0, 1]. */
@@ -106,6 +108,7 @@ export const isEdgeWeights: Validator<EdgeWeights> = isObjectOf({
   expectedSlippage: isOptional(isNumber),
   latencyMs: isOptional(isNumber),
   liquidityUsd: isOptional(isNumber),
+  fundingCost: isOptional(isNumber),
   failureProbability: isOptional(isInRange(0, 1)),
   confidence: isOptional(isInRange(0, 1)),
   riskScore: isOptional(isInRange(0, 1)),
