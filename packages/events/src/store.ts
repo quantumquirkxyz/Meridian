@@ -164,6 +164,37 @@ export class EventStore {
     return row.count;
   }
 
+  // ── Query methods (issue #22 AC3) ──────────────────────────────
+
+  /** All events of the given type, in sequence order. */
+  queryByType(type: BaseEventType): EventEnvelope[] {
+    const stmt = this.db.query(
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE type = ? ORDER BY sequence ASC`,
+    );
+    return (stmt.all(type) as Row[]).map((row) => this.toEnvelope(row));
+  }
+
+  /** All events from the given source, in sequence order. */
+  queryBySource(source: string): EventEnvelope[] {
+    const stmt = this.db.query(
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE source = ? ORDER BY sequence ASC`,
+    );
+    return (stmt.all(source) as Row[]).map((row) => this.toEnvelope(row));
+  }
+
+  /** All events within the given time range [fromMs, toMs), in sequence order. */
+  queryByTimeRange(fromMs: number, toMs: number): EventEnvelope[] {
+    const stmt = this.db.query(
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE timestamp_ms >= ? AND timestamp_ms < ? ORDER BY sequence ASC`,
+    );
+    return (stmt.all(fromMs, toMs) as Row[]).map((row) => this.toEnvelope(row));
+  }
+
+  /** All AUDIT_EVENTs in sequence order. */
+  queryAuditEvents(): EventEnvelope[] {
+    return this.queryByType("AUDIT_EVENT");
+  }
+
   close(): void {
     this.db.close();
   }
