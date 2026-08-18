@@ -21,6 +21,7 @@ import {
   type EdgeWeights,
   type OpportunityCandidate,
   type CostBreakdown,
+  type RiskReasonCode,
 } from "@agenttrading/contracts";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -472,6 +473,8 @@ export function scoreRoute(
     | undefined =
     expectedNetProfitUsd <= 0 ? ["MIN_EDGE"] : undefined;
 
+  const riskConcentration = computeRiskConcentration(snapshot, route);
+
   return {
     id: `opp:${route.join(":")}:${Date.now()}`,
     snapshotId: snapshot.snapshotId,
@@ -482,6 +485,9 @@ export function scoreRoute(
     createdAtMs: Date.now(),
     status: expectedNetProfitUsd > 0 ? "CANDIDATE" : "INVALID",
     invalidationReasons,
+    maxCapitalUsd: routeCost.bottleneckLiquidityUsd,
+    confidence: routeCost.totalConfidence / Math.max(routeCost.hops, 1),
+    riskConcentration,
   };
 }
 
@@ -616,4 +622,129 @@ export function discardNonExecutable(
   }
 
   return executable;
+}
+
+// ── Risk concentration ─────────────────────────────────────────────
+
+/**
+ * Scaling factor for risk concentration.  The raw product
+ * riskScore × failureProbability is in [0, 1]; multiplying by this
+ * factor stretches the range so that moderate risk combinations
+ * (e.g. 0.3 × 0.2 = 0.06) produce non-trivial concentration values
+ * before clamping to [0, 1].
+ */
+const RISK_CONCENTRATION_SCALE = 10;
+
+/**
+ * Compute risk concentration per node and edge along a route.
+ * For each edge, concentration = riskScore * failureProbability.
+ * For each node, concentration = max risk of adjacent edges.
+ * Values are normalized to [0, 1].
+ */
+export function computeRiskConcentration(
+  snapshot: MarketGraphSnapshot,
+  route: Route,
+): Record<string, number> {
+  const concentration: Record<string, number> = {};
+
+  // Index edges by from→to.
+  const edgeIndex = new Map<string, MarketEdge>();
+  for (const edge of snapshot.edges) {
+    const key = `${edge.from}→${edge.to}`;
+    if (!edgeIndex.has(key)) edgeIndex.set(key, edge);
+  }
+
+  // Compute per-edge concentration.
+  const nodeConcentration = new Map<string, number>();
+
+  for (let i = 0; i < route.length - 1; i++) {
+    const edgeId = `${route[i]}→${route[i + 1]}`;
+    const edge = edgeIndex.get(edgeId);
+    if (!edge) continue;
+
+    const riskScore = edge.weights.riskScore ?? 0;
+    const failureProb = edge.weights.failureProbability ?? 0;
+    const edgeConc = Math.min(riskScore * failureProb * RISK_CONCENTRATION_SCALE, 1);
+    concentration[edgeId] = edgeConc;
+
+    // Track per-node: max concentration across incident edges.
+    for (const nodeId of [route[i], route[i + 1]]) {
+      const current = nodeConcentration.get(nodeId) ?? 0;
+      if (edgeConc > current) nodeConcentration.set(nodeId, edgeConc);
+    }
+  }
+
+  // Record per-node concentration.
+  for (const [nodeId, conc] of nodeConcentration) {
+    concentration[nodeId] = conc;
+  }
+
+  return concentration;
+}
+
+// ── Cycle candidate detection ──────────────────────────────────────
+
+/**
+ * Detect profitable arbitrage cycles and return fully-enriched
+ * `ScoredRoute[]` candidates.  Each candidate includes:
+ * - Expected net profit after the full cost stack
+ * - Max capital (bottleneck liquidity)
+ * - Confidence score (averaged across edges)
+ * - Risk concentration per node/edge
+ * - Invalidation reasons when the net-cost stack fails
+ *
+ * Cycles that fail the net-cost stack are discarded.
+ */
+export function detectCycleCandidates(
+  snapshot: MarketGraphSnapshot,
+  options: {
+    maxCycles?: number;
+    maxNodes?: number;
+    grossSpreadUsd?: number;
+    cost?: CostOptions;
+    filter?: FilterOptions;
+  } = {},
+): ScoredRoute[] {
+  const {
+    grossSpreadUsd = 0,
+    filter: {
+      minLiquidityUsd = 0,
+      maxHops = 8,
+      maxFailureProbability = 0.5,
+      minNetProfitUsd = 0,
+    } = {},
+  } = options;
+
+  // Step 1: find raw cycles.
+  const cycles = findArbitrageCycles(snapshot, {
+    maxCycles: options.maxCycles,
+    maxNodes: options.maxNodes,
+  });
+
+  // Step 2: compute cost and score each cycle.
+  const scored: ScoredRoute[] = [];
+  for (const route of cycles) {
+    const cost = computeRouteCost(snapshot, route, options.cost);
+    const candidate = scoreRoute(snapshot, route, grossSpreadUsd, options.cost);
+    if (!candidate) continue;
+    scored.push({ cost, candidate });
+  }
+
+  // Step 3: filter non-executable candidates.
+  const filtered = scored.filter((s) => {
+    if (s.cost.bottleneckLiquidityUsd < minLiquidityUsd) return false;
+    if (s.cost.hops > maxHops) return false;
+    if (s.cost.combinedFailureProbability > maxFailureProbability) return false;
+    if (s.candidate.expectedNetProfitUsd < minNetProfitUsd) return false;
+    if (s.candidate.status === "INVALID") return false;
+    return true;
+  });
+
+  // Sort by net profit descending.
+  filtered.sort(
+    (a, b) =>
+      b.candidate.expectedNetProfitUsd - a.candidate.expectedNetProfitUsd,
+  );
+
+  return filtered;
 }

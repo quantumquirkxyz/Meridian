@@ -4,6 +4,7 @@ import {
   isNumber,
   isObjectOf,
   isOptional,
+  isRecordOf,
   isString,
   parse,
   type Validator,
@@ -57,6 +58,12 @@ export interface OpportunityCandidate {
   status: OpportunityStatus;
   /** Reason codes when the route was discarded or rejected. */
   invalidationReasons?: RiskReasonCode[];
+  /** Maximum capital (USD) the route can absorb (bottleneck liquidity). */
+  maxCapitalUsd?: number;
+  /** Aggregate confidence score across all edges in the route. */
+  confidence?: number;
+  /** Risk concentration map: node or edge id → concentration value in [0,1]. */
+  riskConcentration?: Record<string, number>;
 }
 
 const isOpportunityStatus: Validator<OpportunityStatus> =
@@ -83,6 +90,9 @@ const isOpportunityCandidateShape: Validator<OpportunityCandidate> = isObjectOf(
   createdAtMs: isNumber,
   status: isOpportunityStatus,
   invalidationReasons: isOptional(isArrayOf(isRiskReasonCode)),
+  maxCapitalUsd: isOptional(isNumber),
+  confidence: isOptional(isNumber),
+  riskConcentration: isOptional(isRecordOf(isNumber)),
 });
 
 /**
