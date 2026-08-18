@@ -152,26 +152,6 @@ export class MarketGraph {
     return this.getEdges().filter((e) => e.to === nodeId && e.tradable);
   }
 
-  /** Ensure asset, venue, and optionally chain nodes exist, returning their ids. */
-  ensureAssetAndVenueNodes(
-    symbol: string,
-    venue: string,
-    chain?: string,
-  ): { assetId: string; venueId: string; chainId?: string } {
-    const assetId = `asset:${symbol}`;
-    const venueId = `venue:${venue}`;
-    let chainId: string | undefined;
-
-    this.upsertNode({ id: assetId, type: "ASSET" });
-    this.upsertNode({ id: venueId, type: "VENUE" });
-    if (chain) {
-      chainId = `chain:${chain}`;
-      this.upsertNode({ id: chainId, type: "CHAIN" });
-    }
-
-    return { assetId, venueId, chainId };
-  }
-
   // ── Snapshot ─────────────────────────────────────────────────────
 
   /** Current graph version (bumped on every structural change). */

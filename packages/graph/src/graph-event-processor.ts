@@ -17,12 +17,32 @@ import type { EdgeWeights } from "@agenttrading/contracts";
 export class GraphEventProcessor {
   constructor(private graph: MarketGraph) {}
 
+  /** Ensure asset, venue, and optionally chain nodes exist, returning their ids. */
+  private ensureAssetAndVenueNodes(
+    symbol: string,
+    venue: string,
+    chain?: string,
+  ): { assetId: string; venueId: string; chainId?: string } {
+    const assetId = `asset:${symbol}`;
+    const venueId = `venue:${venue}`;
+    let chainId: string | undefined;
+
+    this.graph.upsertNode({ id: assetId, type: "ASSET" });
+    this.graph.upsertNode({ id: venueId, type: "VENUE" });
+    if (chain) {
+      chainId = `chain:${chain}`;
+      this.graph.upsertNode({ id: chainId, type: "CHAIN" });
+    }
+
+    return { assetId, venueId, chainId };
+  }
+
   /**
    * Process a MARKET_TICK / MarketDataSnapshot.
    */
   applyTick(tick: MarketDataSnapshot): string[] {
     const touched: string[] = [];
-    const { assetId, venueId, chainId } = this.graph.ensureAssetAndVenueNodes(
+    const { assetId, venueId, chainId } = this.ensureAssetAndVenueNodes(
       tick.symbol,
       tick.venue,
       tick.chain,
@@ -52,7 +72,7 @@ export class GraphEventProcessor {
    */
   applyOrderBook(ob: OrderBookSnapshotPayload): string[] {
     const touched: string[] = [];
-    const { assetId, venueId } = this.graph.ensureAssetAndVenueNodes(ob.symbol, ob.venue);
+    const { assetId, venueId } = this.ensureAssetAndVenueNodes(ob.symbol, ob.venue);
     touched.push(assetId, venueId);
 
     const bestBid = ob.bids[0]?.price ?? 0;
@@ -83,7 +103,7 @@ export class GraphEventProcessor {
     const touched: string[] = [];
     const poolNodeId = `pool:${pool.venue}:${pool.poolAddress}`;
     this.graph.upsertNode({ id: poolNodeId, type: "POOL", meta: { address: pool.poolAddress } });
-    const { assetId, venueId } = this.graph.ensureAssetAndVenueNodes(pool.symbol, pool.venue);
+    const { assetId, venueId } = this.ensureAssetAndVenueNodes(pool.symbol, pool.venue);
     touched.push(poolNodeId, assetId, venueId);
 
     const weights: EdgeWeights = {};
