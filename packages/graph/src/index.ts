@@ -9,6 +9,7 @@ export {
 } from "./quality.ts";
 
 export { MarketGraph } from "./market-graph.ts";
+export { GraphEventProcessor } from "./graph-event-processor.ts";
 
 export {
   findRoutes,

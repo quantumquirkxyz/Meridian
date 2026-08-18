@@ -1,17 +1,10 @@
 import {
-  isMarketNode,
-  isMarketEdge,
   type MarketEdge,
   type MarketNode,
   type MarketGraphSnapshot,
   type MarketNodeType,
   type MarketEdgeType,
   type EdgeWeights,
-  type MarketDataSnapshot,
-  type PoolStateUpdatePayload,
-  type GasUpdatePayload,
-  type FundingUpdatePayload,
-  type OrderBookSnapshotPayload,
 } from "@agenttrading/contracts";
 
 /**
@@ -22,14 +15,18 @@ import {
  * FUNDING, CORRELATION).  Supports:
  *
  * - **Incremental updates** from normalized events (ticks, order books,
- *   pool state, gas, funding).
+ *   pool state, gas, funding) via the `GraphEventProcessor`.
  * - **Versioned snapshots** tied to every decision.
  * - **Route filtering** that discards non-executable paths (too illiquid,
  *   too risky, too many hops, or containing dead edges).
  *
  * The engine is a pure, dependency-free state container — it does not own
- * an event bus; callers push events through `applyTick()`,
- * `applyOrderBook()`, etc.
+ * an event bus. Event handling is delegated to `GraphEventProcessor` to
+ * maintain a clean separation of concerns.
+ *
+ * NOTE: While `ACCOUNT`, `STRATEGY`, `TRANSFER`, and `CORRELATION` are
+ * valid types in the contracts, their event-processing logic is deferred
+ * until their respective event payloads are defined in `@agenttrading/contracts`.
  */
 export class MarketGraph {
   private nodes = new Map<string, MarketNode>();
@@ -155,6 +152,26 @@ export class MarketGraph {
     return this.getEdges().filter((e) => e.to === nodeId && e.tradable);
   }
 
+  /** Ensure asset, venue, and optionally chain nodes exist, returning their ids. */
+  ensureAssetAndVenueNodes(
+    symbol: string,
+    venue: string,
+    chain?: string,
+  ): { assetId: string; venueId: string; chainId?: string } {
+    const assetId = `asset:${symbol}`;
+    const venueId = `venue:${venue}`;
+    let chainId: string | undefined;
+
+    this.upsertNode({ id: assetId, type: "ASSET" });
+    this.upsertNode({ id: venueId, type: "VENUE" });
+    if (chain) {
+      chainId = `chain:${chain}`;
+      this.upsertNode({ id: chainId, type: "CHAIN" });
+    }
+
+    return { assetId, venueId, chainId };
+  }
+
   // ── Snapshot ─────────────────────────────────────────────────────
 
   /** Current graph version (bumped on every structural change). */
@@ -182,191 +199,7 @@ export class MarketGraph {
     };
   }
 
-  // ── Incremental updates from normalized events ───────────────────
 
-  /**
-   * Process a MARKET_TICK / MarketDataSnapshot. Creates or updates:
-   * - An ASSET node for `tick.symbol`
-   * - A VENUE node for `tick.venue`
-   * - An ORDER_BOOK edge between them carrying bid/ask/mid and depth
-   *
-   * Returns the ids of all touched nodes/edges.
-   */
-  applyTick(tick: MarketDataSnapshot): string[] {
-    const touched: string[] = [];
-    const assetId = `asset:${tick.symbol}`;
-    const venueId = `venue:${tick.venue}`;
-
-    this.upsertNode({ id: assetId, type: "ASSET" });
-    this.upsertNode({ id: venueId, type: "VENUE" });
-    if (tick.chain) {
-      const chainId = `chain:${tick.chain}`;
-      this.upsertNode({ id: chainId, type: "CHAIN" });
-      touched.push(chainId);
-    }
-    touched.push(assetId, venueId);
-
-    const mid = tick.mid ?? ((tick.bid ?? 0) + (tick.ask ?? 0)) / 2;
-    const weights: EdgeWeights = {};
-    if (mid > 0) weights.price = mid;
-    if (tick.depth > 0) weights.liquidityUsd = tick.depth;
-    if (tick.latencyMs > 0) weights.latencyMs = tick.latencyMs;
-
-    const edgeId = this.upsertEdge(
-      assetId,
-      venueId,
-      "ORDER_BOOK",
-      weights,
-      tick.source,
-    );
-    touched.push(edgeId);
-    return touched;
-  }
-
-  /**
-   * Process an ORDERBOOK_SNAPSHOT event. Creates or updates the
-   * ORDER_BOOK edge between asset and venue with bid/ask depth.
-   */
-  applyOrderBook(ob: OrderBookSnapshotPayload): string[] {
-    const touched: string[] = [];
-    const assetId = `asset:${ob.symbol}`;
-    const venueId = `venue:${ob.venue}`;
-
-    this.upsertNode({ id: assetId, type: "ASSET" });
-    this.upsertNode({ id: venueId, type: "VENUE" });
-    touched.push(assetId, venueId);
-
-    const bestBid = ob.bids[0]?.price ?? 0;
-    const bestAsk = ob.asks[0]?.price ?? 0;
-    const mid = bestBid > 0 && bestAsk > 0 ? (bestBid + bestAsk) / 2 : 0;
-    const bidDepth = ob.bids.reduce((sum, l) => sum + l.size * l.price, 0);
-    const askDepth = ob.asks.reduce((sum, l) => sum + l.size * l.price, 0);
-
-    const weights: EdgeWeights = {};
-    if (mid > 0) weights.price = mid;
-    weights.liquidityUsd = bidDepth + askDepth;
-
-    const edgeId = this.upsertEdge(
-      assetId,
-      venueId,
-      "ORDER_BOOK",
-      weights,
-      ob.venue,
-    );
-    touched.push(edgeId);
-    return touched;
-  }
-
-  /**
-   * Process a POOL_STATE_UPDATE event. Creates or updates a POOL node
-   * and a SWAP edge from pool to asset carrying the derived price and
-   * pool liquidity.
-   */
-  applyPoolState(pool: PoolStateUpdatePayload): string[] {
-    const touched: string[] = [];
-    const poolNodeId = `pool:${pool.venue}:${pool.poolAddress}`;
-    const assetId = `asset:${pool.symbol}`;
-    const venueId = `venue:${pool.venue}`;
-
-    this.upsertNode({ id: poolNodeId, type: "POOL", meta: { address: pool.poolAddress } });
-    this.upsertNode({ id: assetId, type: "ASSET" });
-    this.upsertNode({ id: venueId, type: "VENUE" });
-    touched.push(poolNodeId, assetId, venueId);
-
-    const weights: EdgeWeights = {};
-    if (pool.price !== undefined) weights.price = pool.price;
-    if (pool.liquidityUsd !== undefined) weights.liquidityUsd = pool.liquidityUsd;
-
-    const edgeId = this.upsertEdge(
-      poolNodeId,
-      assetId,
-      "SWAP",
-      weights,
-      pool.venue,
-    );
-    touched.push(edgeId);
-    return touched;
-  }
-
-  /**
-   * Process a GAS_UPDATE event. Updates all ORDER_BOOK and SWAP edges
-   * from the matching venue with the new gas cost estimate.
-   */
-  applyGasUpdate(gas: GasUpdatePayload): string[] {
-    const touched: string[] = [];
-    for (const edge of this.edges.values()) {
-      if (edge.source === gas.venue || edge.source.startsWith(`${gas.venue}:`)) {
-        if (edge.type === "ORDER_BOOK" || edge.type === "SWAP") {
-          this.edges.set(edge.id, {
-            ...edge,
-            weights: { ...edge.weights, gasCost: gas.gasPriceGwei },
-          });
-          touched.push(edge.id);
-        }
-      }
-    }
-    if (touched.length > 0) this._version++;
-    return touched;
-  }
-
-  /**
-   * Process a FUNDING_UPDATE event. Updates all ORDER_BOOK edges from
-   * the matching venue with the funding rate.
-   */
-  applyFundingUpdate(funding: FundingUpdatePayload): string[] {
-    const touched: string[] = [];
-    for (const edge of this.edges.values()) {
-      if (
-        edge.source === funding.venue &&
-        edge.type === "ORDER_BOOK"
-      ) {
-        this.edges.set(edge.id, {
-          ...edge,
-          weights: { ...edge.weights, fundingCost: funding.fundingRate },
-        });
-        touched.push(edge.id);
-      }
-    }
-    if (touched.length > 0) this._version++;
-    return touched;
-  }
-
-  /**
-   * Apply a batch of normalized events in sequence. Each event type is
-   * dispatched to the appropriate `apply*` method. Returns the total
-   * count of touched elements.
-   */
-  applyEvents(
-    events: ReadonlyArray<
-      | { type: "MARKET_TICK"; payload: MarketDataSnapshot }
-      | { type: "ORDERBOOK_SNAPSHOT"; payload: OrderBookSnapshotPayload }
-      | { type: "POOL_STATE_UPDATE"; payload: PoolStateUpdatePayload }
-      | { type: "GAS_UPDATE"; payload: GasUpdatePayload }
-      | { type: "FUNDING_UPDATE"; payload: FundingUpdatePayload }
-    >,
-  ): number {
-    let total = 0;
-    for (const event of events) {
-      switch (event.type) {
-        case "MARKET_TICK":
-          total += this.applyTick(event.payload).length;
-          break;
-        case "ORDERBOOK_SNAPSHOT":
-          total += this.applyOrderBook(event.payload).length;
-          break;
-        case "POOL_STATE_UPDATE":
-          total += this.applyPoolState(event.payload).length;
-          break;
-        case "GAS_UPDATE":
-          total += this.applyGasUpdate(event.payload).length;
-          break;
-        case "FUNDING_UPDATE":
-          total += this.applyFundingUpdate(event.payload).length;
-          break;
-      }
-    }
-    return total;
-  }
 
   // ── Route filtering ──────────────────────────────────────────────
 

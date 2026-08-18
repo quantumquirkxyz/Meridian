@@ -294,6 +294,15 @@ describe("computeRouteCost", () => {
     });
     expect(cost.costs.safetyBufferUsd).toBe(5.0);
   });
+
+  test("aggregates fundingCostUsd from edge weights", () => {
+    const snap = makeSnapshot(
+      [asset("A"), asset("B")],
+      [swapEdge("asset:A", "asset:B", { fundingCost: 2.5 })],
+    );
+    const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
+    expect(cost.costs.fundingCostUsd).toBe(2.5);
+  });
 });
 
 describe("scoreRoute", () => {

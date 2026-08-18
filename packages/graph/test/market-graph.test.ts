@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MarketGraph } from "../src/market-graph.ts";
+import { GraphEventProcessor } from "../src/graph-event-processor.ts";
 import type {
   MarketNode,
   MarketEdge,
@@ -242,7 +243,8 @@ describe("MarketGraph", () => {
   describe("incremental updates from normalized events", () => {
     test("applyTick creates asset, venue, and ORDER_BOOK edge", () => {
       const graph = new MarketGraph();
-      const touched = graph.applyTick(makeTick());
+      const processor = new GraphEventProcessor(graph);
+      const touched = processor.applyTick(makeTick());
       expect(touched).toContain("asset:BTC/USDT");
       expect(touched).toContain("venue:bybit");
       expect(graph.getNode("asset:BTC/USDT")?.type).toBe("ASSET");
@@ -255,21 +257,24 @@ describe("MarketGraph", () => {
 
     test("applyTick updates existing edge on second tick", () => {
       const graph = new MarketGraph();
-      graph.applyTick(makeTick({ mid: 42_000 }));
-      graph.applyTick(makeTick({ mid: 42_500 }));
+      const processor = new GraphEventProcessor(graph);
+      processor.applyTick(makeTick({ mid: 42_000 }));
+      processor.applyTick(makeTick({ mid: 42_500 }));
       const edge = graph.getEdge("asset:BTC/USDT→venue:bybit:ORDER_BOOK");
       expect(edge?.weights.price).toBe(42_500);
     });
 
     test("applyTick with chain creates CHAIN node", () => {
       const graph = new MarketGraph();
-      graph.applyTick(makeTick({ chain: "ethereum" }));
+      const processor = new GraphEventProcessor(graph);
+      processor.applyTick(makeTick({ chain: "ethereum" }));
       expect(graph.getNode("chain:ethereum")?.type).toBe("CHAIN");
     });
 
     test("applyOrderBook computes depth from bids and asks", () => {
       const graph = new MarketGraph();
-      const touched = graph.applyOrderBook(makeOrderBook());
+      const processor = new GraphEventProcessor(graph);
+      const touched = processor.applyOrderBook(makeOrderBook());
       expect(touched).toContain("asset:BTC/USDT");
       expect(touched).toContain("venue:bybit");
       const edge = graph.getEdge("asset:BTC/USDT→venue:bybit:ORDER_BOOK");
@@ -281,7 +286,8 @@ describe("MarketGraph", () => {
 
     test("applyPoolState creates POOL node and SWAP edge", () => {
       const graph = new MarketGraph();
-      const touched = graph.applyPoolState(makePool());
+      const processor = new GraphEventProcessor(graph);
+      const touched = processor.applyPoolState(makePool());
       expect(touched).toContain("pool:pancakeswap-v4:0xabc");
       expect(touched).toContain("asset:ETH/USDC");
       const poolNode = graph.getNode("pool:pancakeswap-v4:0xabc");
@@ -294,23 +300,26 @@ describe("MarketGraph", () => {
 
     test("applyGasUpdate updates gas cost on matching edges", () => {
       const graph = new MarketGraph();
-      graph.applyTick(makeTick({ venue: "pancakeswap-v4", source: "pancakeswap-v4" }));
-      graph.applyGasUpdate(makeGasUpdate());
+      const processor = new GraphEventProcessor(graph);
+      processor.applyTick(makeTick({ venue: "pancakeswap-v4", source: "pancakeswap-v4" }));
+      processor.applyGasUpdate(makeGasUpdate());
       const edge = graph.getEdge("asset:BTC/USDT→venue:pancakeswap-v4:ORDER_BOOK");
       expect(edge?.weights.gasCost).toBe(25);
     });
 
     test("applyFundingUpdate updates funding rate on matching edges", () => {
       const graph = new MarketGraph();
-      graph.applyTick(makeTick({ source: "bybit" }));
-      graph.applyFundingUpdate(makeFundingUpdate());
+      const processor = new GraphEventProcessor(graph);
+      processor.applyTick(makeTick({ source: "bybit" }));
+      processor.applyFundingUpdate(makeFundingUpdate());
       const edge = graph.getEdge("asset:BTC/USDT→venue:bybit:ORDER_BOOK");
       expect(edge?.weights.fundingCost).toBe(0.0001);
     });
 
     test("applyEvents processes multiple events in sequence", () => {
       const graph = new MarketGraph();
-      const total = graph.applyEvents([
+      const processor = new GraphEventProcessor(graph);
+      const total = processor.applyEvents([
         { type: "MARKET_TICK", payload: makeTick() },
         { type: "ORDERBOOK_SNAPSHOT", payload: makeOrderBook({ symbol: "ETH/USDT" }) },
         { type: "POOL_STATE_UPDATE", payload: makePool() },
