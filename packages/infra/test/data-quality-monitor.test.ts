@@ -230,12 +230,12 @@ describe("DataQualityMonitor", () => {
     expect(monitor.sourcesAtLeast("HEALTHY")).toEqual(["a", "b", "c"]);
   });
 
-  test("removeSource preserves tracking for state continuity", () => {
+  test("markReconnecting preserves tracking for state continuity", () => {
     const monitor = new DataQualityMonitor();
     monitor.evaluate(healthyMetrics(), 1_000);
     expect(monitor.size).toBe(1);
 
-    monitor.removeSource("bybit-ws-linear");
+    monitor.markReconnecting("bybit-ws-linear");
     // Tracking preserved so evaluate() can see previousState
     expect(monitor.size).toBe(1);
     expect(monitor.getReport("bybit-ws-linear")).toBeDefined();

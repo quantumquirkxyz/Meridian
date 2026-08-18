@@ -259,7 +259,7 @@ export function deriveDataQualityState(
 
   if (isStale) return "STALE";
 
-  const { latency, staleness, gaps, consistency } = computeQualityComponents(
+  const { latency, staleness, gaps } = computeQualityComponents(
     metrics,
     thresholds,
   );

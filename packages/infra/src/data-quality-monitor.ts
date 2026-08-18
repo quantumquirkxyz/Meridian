@@ -181,13 +181,12 @@ export class DataQualityMonitor {
   }
 
   /**
-   * Mark a source as reconnecting — retains the last report so
-   * state-change observers see DISCONNECTED → next state, not null → next
-   * state (issue #18 AC4).
+   * No-op — tracking is intentionally preserved so evaluate() preserves
+   * previousState (DISCONNECTED → next state, not null → next state).
+   * Callers should re-evaluate with fresh metrics after reconnection.
    */
-  removeSource(source: string): void {
-    // Intentionally keep the tracking so evaluate() preserves previousState.
-    // Callers should re-evaluate with fresh metrics after reconnection.
+  markReconnecting(_source: string): void {
+    // Intentionally empty: retaining tracking preserves previousState.
   }
 
   /**
@@ -201,9 +200,11 @@ export class DataQualityMonitor {
       const elapsed = nowMs - tracking.report.lastSeenMs;
       if (elapsed >= this.thresholds.stalenessMaxMs &&
           tracking.report.state !== "DISCONNECTED") {
+        // Synthetic metrics force DISCONNECTED via deriveDataQualityState.
+        // Real metrics from the source will overwrite this report on recovery.
         const staleMetrics: DataQualityMetrics = {
           source,
-          latencyMs: tracking.report.score,
+          latencyMs: 0,
           stalenessMs: elapsed,
           gapCount: 0,
           wsRestConsistent: true,
