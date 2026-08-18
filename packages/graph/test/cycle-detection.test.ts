@@ -45,23 +45,6 @@ function swapEdge(
   };
 }
 
-function bridgeEdge(
-  from: string,
-  to: string,
-  weights: Record<string, number> = {},
-  tradable = true,
-) {
-  return {
-    id: `${from}→${to}:BRIDGE`,
-    from,
-    to,
-    type: "BRIDGE" as const,
-    weights,
-    tradable,
-    source: "bridge",
-  };
-}
-
 // ── scoreRoute: enriched fields ────────────────────────────────────
 
 describe("scoreRoute enriched fields", () => {

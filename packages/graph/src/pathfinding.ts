@@ -627,6 +627,15 @@ export function discardNonExecutable(
 // ── Risk concentration ─────────────────────────────────────────────
 
 /**
+ * Scaling factor for risk concentration.  The raw product
+ * riskScore × failureProbability is in [0, 1]; multiplying by this
+ * factor stretches the range so that moderate risk combinations
+ * (e.g. 0.3 × 0.2 = 0.06) produce non-trivial concentration values
+ * before clamping to [0, 1].
+ */
+const RISK_CONCENTRATION_SCALE = 10;
+
+/**
  * Compute risk concentration per node and edge along a route.
  * For each edge, concentration = riskScore * failureProbability.
  * For each node, concentration = max risk of adjacent edges.
@@ -655,7 +664,7 @@ export function computeRiskConcentration(
 
     const riskScore = edge.weights.riskScore ?? 0;
     const failureProb = edge.weights.failureProbability ?? 0;
-    const edgeConc = Math.min(riskScore * failureProb * 10, 1); // scale & clamp
+    const edgeConc = Math.min(riskScore * failureProb * RISK_CONCENTRATION_SCALE, 1);
     concentration[edgeId] = edgeConc;
 
     // Track per-node: max concentration across incident edges.
