@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   applyDataQualityToGraph,
-  markEdgesFromSources,
-  graphSourceIds,
-  tradableEdges,
-  nonTradableEdges,
 } from "../src/quality.ts";
 import type {
   DataQualityReport,
@@ -74,11 +70,23 @@ describe("applyDataQualityToGraph", () => {
       makeEdge("e1", "bybit-ws"),
       makeEdge("e2", "pancakeswap-rpc"),
     ]);
-    const reports = [degradedReport("bybit-ws")];
+    const reports = [degradedReport("bybit-ws"), healthyReport("pancakeswap-rpc")];
 
     const result = applyDataQualityToGraph(snapshot, reports);
     expect(result.edges[0].tradable).toBe(false);
     expect(result.edges[1].tradable).toBe(true);
+  });
+
+  test("marks edges with no report as non-tradable (fail closed)", () => {
+    const snapshot = makeSnapshot([
+      makeEdge("e1", "bybit-ws"),
+      makeEdge("e2", "pancakeswap-rpc"),
+    ]);
+    const reports = [degradedReport("bybit-ws")];
+
+    const result = applyDataQualityToGraph(snapshot, reports);
+    expect(result.edges[0].tradable).toBe(false);
+    expect(result.edges[1].tradable).toBe(false);
   });
 
   test("does not mutate original snapshot", () => {
@@ -110,54 +118,18 @@ describe("applyDataQualityToGraph", () => {
     expect(result.edges[0].tradable).toBe(true);
     expect(result.edges[1].tradable).toBe(false);
   });
-});
 
-describe("markEdgesFromSources", () => {
-  test("marks edges from degraded sources", () => {
-    const edges = [makeEdge("e1", "bybit-ws"), makeEdge("e2", "other")];
-    const reports = [degradedReport("bybit-ws")];
-
-    const result = markEdgesFromSources(edges, reports);
-    expect(result[0].tradable).toBe(false);
-    expect(result[1].tradable).toBe(true);
-  });
-
-  test("returns new array, does not mutate", () => {
-    const edges = [makeEdge("e1", "bybit-ws")];
-    const reports = [staleReport("bybit-ws")];
-
-    const result = markEdgesFromSources(edges, reports);
-    expect(result).not.toBe(edges);
-    expect(edges[0].tradable).toBe(true);
-  });
-});
-
-describe("graphSourceIds", () => {
-  test("returns unique source ids", () => {
+  test("edges with no matching report are non-tradable (fail closed)", () => {
     const snapshot = makeSnapshot([
-      makeEdge("e1", "bybit-ws"),
+      makeEdge("e1", "unknown-source"),
       makeEdge("e2", "bybit-ws"),
-      makeEdge("e3", "pancakeswap-rpc"),
     ]);
+    const reports = [healthyReport("bybit-ws")];
 
-    expect(graphSourceIds(snapshot)).toEqual(["bybit-ws", "pancakeswap-rpc"]);
-  });
-
-  test("empty graph returns empty array", () => {
-    expect(graphSourceIds(makeSnapshot([]))).toEqual([]);
+    const result = applyDataQualityToGraph(snapshot, reports);
+    expect(result.edges[0].tradable).toBe(false);
+    expect(result.edges[1].tradable).toBe(true);
   });
 });
 
-describe("tradableEdges / nonTradableEdges", () => {
-  test("filters correctly", () => {
-    const snapshot = makeSnapshot([
-      makeEdge("e1", "bybit-ws", true),
-      makeEdge("e2", "other", false),
-    ]);
 
-    expect(tradableEdges(snapshot)).toHaveLength(1);
-    expect(tradableEdges(snapshot)[0].id).toBe("e1");
-    expect(nonTradableEdges(snapshot)).toHaveLength(1);
-    expect(nonTradableEdges(snapshot)[0].id).toBe("e2");
-  });
-});

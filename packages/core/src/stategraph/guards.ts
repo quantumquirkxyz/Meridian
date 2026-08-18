@@ -1,4 +1,5 @@
 import {
+  isDataQualityReport,
   type DataQualityReport,
   type DataQualityState,
   isStateAtLeast,
@@ -231,8 +232,14 @@ export function dataQualityBlocksSignal(
   return {
     name,
     evaluate(context: StateContext): GuardResult {
-      const reports = (context.data?.dataQualityReports ??
-        []) as DataQualityReport[];
+      const rawReports = context.data?.dataQualityReports ?? [];
+      if (!Array.isArray(rawReports)) {
+        return {
+          ok: false,
+          reason: "dataQualityReports is not an array; blocking signal generation",
+        };
+      }
+      const reports = rawReports.filter(isDataQualityReport);
 
       if (reports.length === 0) {
         return {
@@ -244,24 +251,29 @@ export function dataQualityBlocksSignal(
       const dependentSourceIds = new Set(
         sourceKeys.flatMap((key) => {
           const value = context.data?.[key];
-          if (Array.isArray(value)) return value as string[];
+          if (Array.isArray(value)) {
+            return value.filter((v): v is string => typeof v === "string");
+          }
           return typeof value === "string" ? [value] : [];
         }),
       );
 
-      const dependentReports = reports.filter((report) =>
-        dependentSourceIds.has(report.source),
+      // Fail closed: every dependent source must have a report.
+      const reportsBySource = new Map(
+        reports.map((r) => [r.source, r] as const),
       );
-
-      if (dependentReports.length === 0) {
-        return {
-          ok: false,
-          reason:
-            "no data quality reports for the dependent sources; blocking signal generation",
-        };
+      for (const sourceId of dependentSourceIds) {
+        if (!reportsBySource.has(sourceId)) {
+          return {
+            ok: false,
+            reason:
+              `missing report for dependent source ${sourceId}; blocking signal generation`,
+          };
+        }
       }
 
-      for (const report of dependentReports) {
+      for (const sourceId of dependentSourceIds) {
+        const report = reportsBySource.get(sourceId)!;
         if (isStateAtLeast(report.state, threshold)) {
           return {
             ok: false,

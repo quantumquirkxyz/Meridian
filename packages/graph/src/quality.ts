@@ -3,7 +3,6 @@ import {
   type DataQualityState,
   type MarketEdge,
   type MarketGraphSnapshot,
-  isStateAtLeast,
   markEdgesByQuality,
 } from "@agenttrading/contracts";
 
@@ -22,42 +21,11 @@ export function applyDataQualityToGraph(
   reports: readonly DataQualityReport[],
   threshold: DataQualityState = "DEGRADED",
 ): MarketGraphSnapshot {
-  const updatedEdges = markEdgesFromSources(snapshot.edges, reports, threshold);
+  const updatedEdges = markEdgesByQuality(snapshot.edges, reports, threshold);
   return {
     ...snapshot,
     edges: updatedEdges,
   };
 }
 
-/**
- * Marks edges as non-tradable when their source is at least as restrictive
- * as the given threshold. Pure function — returns new edge array.
- */
-export function markEdgesFromSources(
-  edges: readonly MarketEdge[],
-  reports: readonly DataQualityReport[],
-  threshold: DataQualityState = "DEGRADED",
-): MarketEdge[] {
-  return markEdgesByQuality(edges, reports, threshold);
-}
 
-/**
- * Returns the set of source ids that are feeding edges in the graph.
- */
-export function graphSourceIds(snapshot: MarketGraphSnapshot): string[] {
-  return [...new Set(snapshot.edges.map((e) => e.source))];
-}
-
-/**
- * Returns edges that are tradable.
- */
-export function tradableEdges(snapshot: MarketGraphSnapshot): MarketEdge[] {
-  return snapshot.edges.filter((e) => e.tradable);
-}
-
-/**
- * Returns edges that are non-tradable.
- */
-export function nonTradableEdges(snapshot: MarketGraphSnapshot): MarketEdge[] {
-  return snapshot.edges.filter((e) => !e.tradable);
-}

@@ -230,13 +230,62 @@ describe("DataQualityMonitor", () => {
     expect(monitor.sourcesAtLeast("HEALTHY")).toEqual(["a", "b", "c"]);
   });
 
-  test("removeSource clears tracking", () => {
+  test("removeSource preserves tracking for state continuity", () => {
     const monitor = new DataQualityMonitor();
     monitor.evaluate(healthyMetrics(), 1_000);
     expect(monitor.size).toBe(1);
 
     monitor.removeSource("bybit-ws-linear");
-    expect(monitor.size).toBe(0);
-    expect(monitor.getReport("bybit-ws-linear")).toBeUndefined();
+    // Tracking preserved so evaluate() can see previousState
+    expect(monitor.size).toBe(1);
+    expect(monitor.getReport("bybit-ws-linear")).toBeDefined();
+  });
+
+  test("checkStaleness transitions silent sources to DISCONNECTED", () => {
+    const monitor = new DataQualityMonitor();
+    const transitions: Array<{ source: string; prev: string | null; state: string }> = [];
+
+    monitor.onStateChange((source, prev, report) => {
+      transitions.push({ source, prev, state: report.state });
+    });
+
+    // Source seen at t=1000
+    monitor.evaluate(healthyMetrics(), 1_000);
+    expect(transitions).toHaveLength(1);
+
+    // Source silent for 35s (exceeds stalenessMaxMs=30000)
+    const staleSources = monitor.checkStaleness(1_036_000);
+    expect(staleSources).toContain("bybit-ws-linear");
+    expect(monitor.getReport("bybit-ws-linear")?.state).toBe("DISCONNECTED");
+    expect(transitions).toHaveLength(2);
+    expect(transitions[1].state).toBe("DISCONNECTED");
+  });
+
+  test("checkStaleness does not double-fire for already DISCONNECTED", () => {
+    const monitor = new DataQualityMonitor();
+    const alerts: string[] = [];
+    monitor.onAlert((source) => alerts.push(source));
+
+    monitor.evaluate(healthyMetrics(), 1_000);
+    monitor.checkStaleness(1_036_000);
+    expect(alerts).toHaveLength(1);
+
+    // Second check should not fire another alert
+    monitor.checkStaleness(1_072_000);
+    expect(alerts).toHaveLength(1);
+  });
+
+  test("onDataQualityUpdate fires on every evaluation", () => {
+    const monitor = new DataQualityMonitor();
+    const updates: Array<{ source: string; state: string }> = [];
+    monitor.onDataQualityUpdate((source, report) => {
+      updates.push({ source, state: report.state });
+    });
+
+    monitor.evaluate(healthyMetrics(), 1_000);
+    monitor.evaluate(degradedMetrics(), 2_000);
+    expect(updates).toHaveLength(2);
+    expect(updates[0]).toEqual({ source: "bybit-ws-linear", state: "HEALTHY" });
+    expect(updates[1]).toEqual({ source: "bybit-ws-linear", state: "DEGRADED" });
   });
 });

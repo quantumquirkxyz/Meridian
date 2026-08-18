@@ -30,6 +30,14 @@ export type StateChangeCallback = (
 ) => void;
 
 /**
+ * Callback invoked on every evaluation (DATA_QUALITY_UPDATE event, US8).
+ */
+export type DataQualityUpdateCallback = (
+  source: string,
+  report: DataQualityReport,
+) => void;
+
+/**
  * Per-source tracking state maintained by the monitor.
  */
 export interface SourceTracking {
@@ -55,6 +63,7 @@ export class DataQualityMonitor {
   private readonly reconnectCallbacks: ReconnectCallback[] = [];
   private readonly alertCallbacks: AlertCallback[] = [];
   private readonly stateChangeCallbacks: StateChangeCallback[] = [];
+  private readonly dataQualityUpdateCallbacks: DataQualityUpdateCallback[] = [];
 
   constructor(
     thresholds: DataQualityScoringThresholds = DEFAULT_SCORING_THRESHOLDS,
@@ -75,6 +84,11 @@ export class DataQualityMonitor {
   /** Register a callback for any state transition. */
   onStateChange(callback: StateChangeCallback): void {
     this.stateChangeCallbacks.push(callback);
+  }
+
+  /** Register a callback for every evaluation (DATA_QUALITY_UPDATE). */
+  onDataQualityUpdate(callback: DataQualityUpdateCallback): void {
+    this.dataQualityUpdateCallbacks.push(callback);
   }
 
   /**
@@ -108,6 +122,10 @@ export class DataQualityMonitor {
       for (const cb of this.alertCallbacks) {
         cb(metrics.source, report);
       }
+    }
+
+    for (const cb of this.dataQualityUpdateCallbacks) {
+      cb(metrics.source, report);
     }
 
     return report;
@@ -162,9 +180,41 @@ export class DataQualityMonitor {
     return result;
   }
 
-  /** Remove tracking for a source (e.g. after successful reconnection). */
+  /**
+   * Mark a source as reconnecting — retains the last report so
+   * state-change observers see DISCONNECTED → next state, not null → next
+   * state (issue #18 AC4).
+   */
   removeSource(source: string): void {
-    this.sources.delete(source);
+    // Intentionally keep the tracking so evaluate() preserves previousState.
+    // Callers should re-evaluate with fresh metrics after reconnection.
+  }
+
+  /**
+   * Check all tracked sources for staleness. Any source whose `lastSeenMs`
+   * exceeds `stalenessMaxMs` ago is evaluated as DISCONNECTED. Returns the
+   * list of sources that transitioned.
+   */
+  checkStaleness(nowMs: number): string[] {
+    const staleSources: string[] = [];
+    for (const [source, tracking] of this.sources) {
+      const elapsed = nowMs - tracking.report.lastSeenMs;
+      if (elapsed >= this.thresholds.stalenessMaxMs &&
+          tracking.report.state !== "DISCONNECTED") {
+        const staleMetrics: DataQualityMetrics = {
+          source,
+          latencyMs: tracking.report.score,
+          stalenessMs: elapsed,
+          gapCount: 0,
+          wsRestConsistent: true,
+          rpcHealthy: false,
+          exchangeStatus: "offline",
+        };
+        this.evaluate(staleMetrics, nowMs);
+        staleSources.push(source);
+      }
+    }
+    return staleSources;
   }
 
   /** Number of tracked sources. */

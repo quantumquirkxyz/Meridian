@@ -268,7 +268,8 @@ export function deriveDataQualityState(
     latency < 0.5 ||
     staleness < 0.5 ||
     gaps < 0.5 ||
-    !metrics.wsRestConsistent;
+    !metrics.wsRestConsistent ||
+    !metrics.rpcHealthy;
 
   const isDegraded =
     score < 0.7 || hasWeakComponent || metrics.exchangeStatus === "degraded";
@@ -375,9 +376,11 @@ export const STATE_RULES: Record<
 export function markEdgesByQuality<
   E extends { source: string; tradable: boolean },
 >(edges: readonly E[], reports: readonly DataQualityReport[], threshold: DataQualityState = "DEGRADED"): E[] {
+  const reportsBySource = new Map(reports.map((r) => [r.source, r] as const));
   return edges.map((edge) => {
-    const report = reports.find((r) => r.source === edge.source);
-    if (report && isStateAtLeast(report.state, threshold)) {
+    const report = reportsBySource.get(edge.source);
+    // Fail closed: no report for an edge's source → mark non-tradable.
+    if (!report || isStateAtLeast(report.state, threshold)) {
       return { ...edge, tradable: false };
     }
     return edge;

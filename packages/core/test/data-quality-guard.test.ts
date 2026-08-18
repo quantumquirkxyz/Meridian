@@ -138,7 +138,20 @@ describe("dataQualityBlocksSignal", () => {
     });
     const result = guard.evaluate(ctx);
     expect(result.ok).toBe(false);
-    expect(result.reason).toContain("no data quality reports for the dependent sources");
+    expect(result.reason).toContain("missing report for dependent source");
+  });
+
+  test("blocks when some but not all dependent sources have reports", () => {
+    const guard = dataQualityBlocksSignal("testGuard", {
+      sourceKeys: ["sources"],
+    });
+    const ctx = makeCtx({
+      sources: ["bybit-ws", "pancakeswap-rpc"],
+      dataQualityReports: [healthyReport("bybit-ws")],
+    });
+    const result = guard.evaluate(ctx);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("missing report for dependent source pancakeswap-rpc");
   });
 
   test("supports sourceKeys with an array of dependent sources", () => {
@@ -164,11 +177,23 @@ describe("markEdgesByQuality", () => {
       { id: "e1", source: "bybit-ws", tradable: true },
       { id: "e2", source: "pancakeswap-rpc", tradable: true },
     ];
-    const reports = [staleReport("bybit-ws")];
+    const reports = [staleReport("bybit-ws"), healthyReport("pancakeswap-rpc")];
 
     const result = markEdgesByQuality(edges, reports);
     expect(result[0].tradable).toBe(false);
     expect(result[1].tradable).toBe(true);
+  });
+
+  test("marks edges with no report as non-tradable (fail closed)", () => {
+    const edges = [
+      { id: "e1", source: "bybit-ws", tradable: true },
+      { id: "e2", source: "pancakeswap-rpc", tradable: true },
+    ];
+    const reports = [staleReport("bybit-ws")];
+
+    const result = markEdgesByQuality(edges, reports);
+    expect(result[0].tradable).toBe(false);
+    expect(result[1].tradable).toBe(false);
   });
 
   test("marks DISCONNECTED source edge as non-tradable", () => {
@@ -203,11 +228,11 @@ describe("markEdgesByQuality", () => {
     expect(edges[0].tradable).toBe(true);
   });
 
-  test("handles edges with no matching report", () => {
+  test("marks edge with no matching report as non-tradable (fail closed)", () => {
     const edges = [{ id: "e1", source: "unknown-source", tradable: true }];
     const reports = [staleReport("bybit-ws")];
 
     const result = markEdgesByQuality(edges, reports);
-    expect(result[0].tradable).toBe(true);
+    expect(result[0].tradable).toBe(false);
   });
 });

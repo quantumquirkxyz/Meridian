@@ -239,6 +239,16 @@ describe("deriveDataQualityState", () => {
     expect(score).toBeGreaterThan(0.9);
     expect(deriveDataQualityState(score, m)).toBe("DEGRADED");
   });
+
+  test("RPC unhealthy alone -> DEGRADED (not HEALTHY)", () => {
+    const m: DataQualityMetrics = {
+      ...healthyMetrics(),
+      rpcHealthy: false,
+    };
+    const score = computeDataQualityScore(m);
+    expect(score).toBeGreaterThan(0.85);
+    expect(deriveDataQualityState(score, m)).toBe("DEGRADED");
+  });
 });
 
 describe("evaluateDataQuality", () => {
