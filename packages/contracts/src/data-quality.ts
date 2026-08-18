@@ -341,6 +341,7 @@ export function evaluateDataQuality(
     if (staleness < 0.5) parts.push("staleness");
     if (gaps < 0.5) parts.push("gaps");
     if (!metrics.wsRestConsistent) parts.push("WS/REST inconsistent");
+    if (!metrics.rpcHealthy) parts.push("RPC unhealthy");
     if (metrics.exchangeStatus === "degraded") parts.push("exchange status degraded");
     reason = parts.length > 0 ? parts.join("; ") : undefined;
   }
