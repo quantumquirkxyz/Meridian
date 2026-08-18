@@ -86,7 +86,7 @@ packages/
   infra        health, failover, circuit breakers, secrets, control TUI
 ```
 
-Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `connectors` depend only on `contracts`; `harness` depends on `contracts`, `events`, and `graph` (ADR-0007).
+Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `connectors` depend only on `contracts`; `harness` depends on `contracts`, `events`, and `graph` (ADR-0007); `infra` depends on `contracts` and `events` (ADR-0008).
 
 ## Persistence
 

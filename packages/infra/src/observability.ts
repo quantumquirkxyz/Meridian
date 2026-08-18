@@ -1,5 +1,7 @@
 import type {
+  AuditAction,
   AuditEvent,
+  AuditReasonCode,
   DataQualityReport,
   EventEnvelope,
   MarketGraphSnapshot,
@@ -7,12 +9,18 @@ import type {
 import { makeEventId } from "@agenttrading/contracts";
 import type { EventBus, PublishEvent } from "@agenttrading/events";
 
+/** Source id used by ObservabilityService when publishing audit events. */
+export const OBSERVABILITY_SOURCE = "observability" as const;
+
+/** Source id used by OpportunityRecorder when publishing audit events. */
+export const OPPORTUNITY_RECORDER_SOURCE = "opportunity-recorder" as const;
+
 /**
  * ObservabilityService: base observability layer for the system (issue #22 AC2).
  *
  * Tracks and records:
  * - **Connector events**: every publish from a connector source.
- * - **Event bus activity**: publish counts, deduplication counts.
+ * - **Event bus activity**: publish counts.
  * - **Graph updates**: when the graph snapshot version changes.
  * - **Data quality state**: when quality reports are produced.
  *
@@ -21,7 +29,6 @@ import type { EventBus, PublishEvent } from "@agenttrading/events";
  */
 export class ObservabilityService {
   private _eventCount = 0;
-  private deduplicatedCount = 0;
   private _lastGraphVersion = -1;
   private readonly snapshotEvents: EventEnvelope[] = [];
 
@@ -55,7 +62,7 @@ export class ObservabilityService {
 
   private onEvent(event: EventEnvelope): void {
     // Don't count self-generated audit events.
-    if (event.type === "AUDIT_EVENT" && event.source === "observability") {
+    if (event.type === "AUDIT_EVENT" && event.source === OBSERVABILITY_SOURCE) {
       return;
     }
     this._eventCount++;
@@ -84,32 +91,54 @@ export class ObservabilityService {
     }
   }
 
-  private recordConnectorEvent(event: EventEnvelope): void {
+  /**
+   * Publish an AuditEvent as an AUDIT_EVENT on the bus. Single publish
+   * point — all record* methods funnel through here.
+   */
+  private publishAuditEvent(
+    eventId: string,
+    action: AuditAction,
+    actor: string,
+    data: Record<string, unknown>,
+    reasonCodes: AuditReasonCode[],
+    timestampMs: number,
+  ): void {
     const auditEvent: AuditEvent = {
-      eventId: makeEventId(["audit", "connector", event.eventId]),
+      eventId,
       sequence: 0,
-      timestampMs: event.timestampMs,
-      action: "CONNECTOR_EVENT",
-      actor: event.source,
-      data: {
-        eventType: event.type,
-        originalEventId: event.eventId,
-        source: event.source,
-        kind: event.kind,
-      },
-      reasonCodes: ["CONNECTOR_PUBLISHED"],
+      timestampMs,
+      action,
+      actor,
+      data,
+      reasonCodes,
     };
 
     const envelope: PublishEvent = {
       eventId: auditEvent.eventId,
       type: "AUDIT_EVENT",
       kind: "normalized",
-      timestampMs: event.timestampMs,
-      source: "observability",
+      timestampMs,
+      source: OBSERVABILITY_SOURCE,
       payload: auditEvent as unknown as Record<string, unknown>,
     };
 
     this.bus.publish(envelope);
+  }
+
+  private recordConnectorEvent(event: EventEnvelope): void {
+    this.publishAuditEvent(
+      makeEventId(["audit", "connector", event.eventId]),
+      "CONNECTOR_EVENT",
+      event.source,
+      {
+        eventType: event.type,
+        originalEventId: event.eventId,
+        source: event.source,
+        kind: event.kind,
+      },
+      ["CONNECTOR_PUBLISHED"],
+      event.timestampMs,
+    );
   }
 
   private recordGraphUpdate(event: EventEnvelope): void {
@@ -120,13 +149,11 @@ export class ObservabilityService {
     if (version !== undefined && version !== this._lastGraphVersion) {
       this._lastGraphVersion = version;
 
-      const auditEvent: AuditEvent = {
-        eventId: makeEventId(["audit", "graph-update", event.eventId]),
-        sequence: 0,
-        timestampMs: event.timestampMs,
-        action: "GRAPH_UPDATE",
-        actor: "graph-engine",
-        data: {
+      this.publishAuditEvent(
+        makeEventId(["audit", "graph-update", event.eventId]),
+        "GRAPH_UPDATE",
+        "graph-engine",
+        {
           eventType: event.type,
           originalEventId: event.eventId,
           graphVersion: version,
@@ -138,19 +165,9 @@ export class ObservabilityService {
             ? payload.edges.length
             : undefined,
         },
-        reasonCodes: ["GRAPH_NODE_UPSERTED", "GRAPH_EDGE_UPSERTED"],
-      };
-
-      const envelope: PublishEvent = {
-        eventId: auditEvent.eventId,
-        type: "AUDIT_EVENT",
-        kind: "normalized",
-        timestampMs: event.timestampMs,
-        source: "observability",
-        payload: auditEvent as unknown as Record<string, unknown>,
-      };
-
-      this.bus.publish(envelope);
+        ["GRAPH_NODE_UPSERTED", "GRAPH_EDGE_UPSERTED"],
+        event.timestampMs,
+      );
     }
 
     this.snapshotEvents.push(event);
@@ -159,13 +176,11 @@ export class ObservabilityService {
   private recordDataQualityEvent(event: EventEnvelope): void {
     const payload = event.payload as Record<string, unknown>;
 
-    const auditEvent: AuditEvent = {
-      eventId: makeEventId(["audit", "data-quality", event.eventId]),
-      sequence: 0,
-      timestampMs: event.timestampMs,
-      action: "DATA_QUALITY_EVENT",
-      actor: "data-quality-monitor",
-      data: {
+    this.publishAuditEvent(
+      makeEventId(["audit", "data-quality", event.eventId]),
+      "DATA_QUALITY_EVENT",
+      "data-quality-monitor",
+      {
         eventType: event.type,
         originalEventId: event.eventId,
         source: payload.source,
@@ -173,19 +188,9 @@ export class ObservabilityService {
         score: payload.score,
         reason: payload.reason,
       },
-      reasonCodes: ["DATA_QUALITY_EVALUATED"],
-    };
-
-    const envelope: PublishEvent = {
-      eventId: auditEvent.eventId,
-      type: "AUDIT_EVENT",
-      kind: "normalized",
-      timestampMs: event.timestampMs,
-      source: "observability",
-      payload: auditEvent as unknown as Record<string, unknown>,
-    };
-
-    this.bus.publish(envelope);
+      ["DATA_QUALITY_EVALUATED"],
+      event.timestampMs,
+    );
   }
 
   // ── Snapshot queries ──────────────────────────────────────────────
@@ -216,7 +221,7 @@ export class ObservabilityService {
    */
   getAuditEvents(): EventEnvelope[] {
     return this.bus.store.queryByType("AUDIT_EVENT").filter(
-      (e) => e.source === "observability" || e.source === "opportunity-recorder",
+      (e) => e.source === OBSERVABILITY_SOURCE || e.source === OPPORTUNITY_RECORDER_SOURCE,
     );
   }
 
@@ -225,7 +230,7 @@ export class ObservabilityService {
    */
   getConnectorEvents(source?: string): EventEnvelope[] {
     const events = this.bus.store.queryByType("AUDIT_EVENT").filter(
-      (e) => e.source === "observability",
+      (e) => e.source === OBSERVABILITY_SOURCE,
     );
     if (source) {
       return events.filter((e) => {

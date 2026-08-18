@@ -15,4 +15,4 @@ export type {
 } from "./data-quality-monitor.ts";
 
 export { OpportunityRecorder } from "./opportunity-recorder.ts";
-export { ObservabilityService } from "./observability.ts";
+export { ObservabilityService, OBSERVABILITY_SOURCE, OPPORTUNITY_RECORDER_SOURCE } from "./observability.ts";

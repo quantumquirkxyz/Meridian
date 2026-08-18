@@ -6,6 +6,7 @@ import type {
 } from "@agenttrading/contracts";
 import { makeEventId } from "@agenttrading/contracts";
 import type { EventBus, PublishEvent } from "@agenttrading/events";
+import { OPPORTUNITY_RECORDER_SOURCE } from "./observability.ts";
 
 /**
  * OpportunityRecorder: records every OpportunityCandidate as an AUDIT_EVENT
@@ -18,8 +19,6 @@ import type { EventBus, PublishEvent } from "@agenttrading/events";
  * costs were considered, and why it was accepted or rejected.
  */
 export class OpportunityRecorder {
-  private sequence = 0;
-
   constructor(private readonly bus: EventBus) {}
 
   /**
@@ -73,7 +72,7 @@ export class OpportunityRecorder {
       type: "AUDIT_EVENT",
       kind: "normalized",
       timestampMs: candidate.createdAtMs,
-      source: "opportunity-recorder",
+      source: OPPORTUNITY_RECORDER_SOURCE,
       payload: auditEvent as unknown as Record<string, unknown>,
     };
 
