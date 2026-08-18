@@ -7,3 +7,23 @@ export const GRAPH_VERSION = "0.1.0";
 export {
   applyDataQualityToGraph,
 } from "./quality.ts";
+
+export { MarketGraph } from "./market-graph.ts";
+
+export {
+  findRoutes,
+  findArbitrageCycles,
+  computeRouteCost,
+  scoreRoute,
+  findAndScoreRoutes,
+  discardNonExecutable,
+} from "./pathfinding.ts";
+
+export type {
+  Route,
+  RouteCost,
+  ScoredRoute,
+  RouteDiscoveryOptions,
+  CostOptions,
+  FilterOptions,
+} from "./pathfinding.ts";
