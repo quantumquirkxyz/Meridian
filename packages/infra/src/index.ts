@@ -1,6 +1,7 @@
 /**
  * @agenttrading/infra — health checks, failover, circuit breakers, secrets,
- * control surface (TUI). Depends only on contracts.
+ * control surface (TUI), observability, and opportunity audit. Depends only
+ * on contracts and events.
  */
 export const INFRA_VERSION = "0.1.0";
 
@@ -12,3 +13,6 @@ export type {
   StateChangeCallback,
   SourceTracking,
 } from "./data-quality-monitor.ts";
+
+export { OpportunityRecorder } from "./opportunity-recorder.ts";
+export { ObservabilityService, OBSERVABILITY_SOURCE, OPPORTUNITY_RECORDER_SOURCE } from "./observability.ts";

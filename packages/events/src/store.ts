@@ -63,6 +63,9 @@ export class EventStore {
   private readonly selectSinceStmt: ReturnType<Database["query"]>;
   private readonly maxSequenceStmt: ReturnType<Database["query"]>;
   private readonly countStmt: ReturnType<Database["query"]>;
+  private readonly selectByTypeStmt: ReturnType<Database["query"]>;
+  private readonly selectBySourceStmt: ReturnType<Database["query"]>;
+  private readonly selectByTimeRangeStmt: ReturnType<Database["query"]>;
 
   /** `path` may be a file path or ":memory:". */
   constructor(path = ":memory:") {
@@ -86,6 +89,15 @@ export class EventStore {
       `SELECT COALESCE(MAX(sequence), 0) AS maxSeq FROM events`,
     );
     this.countStmt = this.db.query(`SELECT COUNT(*) AS count FROM events`);
+    this.selectByTypeStmt = this.db.query(
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE type = ? ORDER BY sequence ASC`,
+    );
+    this.selectBySourceStmt = this.db.query(
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE source = ? ORDER BY sequence ASC`,
+    );
+    this.selectByTimeRangeStmt = this.db.query(
+      `SELECT ${SELECT_COLUMNS} FROM events WHERE timestamp_ms >= ? AND timestamp_ms < ? ORDER BY sequence ASC`,
+    );
   }
 
   private nextSequence(): number {
@@ -162,6 +174,28 @@ export class EventStore {
   count(): number {
     const row = this.countStmt.get() as { count: number };
     return row.count;
+  }
+
+  // ── Query methods (issue #22 AC3) ──────────────────────────────
+
+  /** All events of the given type, in sequence order. */
+  queryByType(type: BaseEventType): EventEnvelope[] {
+    return (this.selectByTypeStmt.all(type) as Row[]).map((row) => this.toEnvelope(row));
+  }
+
+  /** All events from the given source, in sequence order. */
+  queryBySource(source: string): EventEnvelope[] {
+    return (this.selectBySourceStmt.all(source) as Row[]).map((row) => this.toEnvelope(row));
+  }
+
+  /** All events within the given time range [fromMs, toMs), in sequence order. */
+  queryByTimeRange(fromMs: number, toMs: number): EventEnvelope[] {
+    return (this.selectByTimeRangeStmt.all(fromMs, toMs) as Row[]).map((row) => this.toEnvelope(row));
+  }
+
+  /** All AUDIT_EVENTs in sequence order. */
+  queryAuditEvents(): EventEnvelope[] {
+    return this.queryByType("AUDIT_EVENT");
   }
 
   close(): void {
