@@ -40,6 +40,12 @@ export interface FillSimulatorOptions {
   minPartialFillRatio?: number;
   /** Whether to simulate maker/taker dynamics. Default: false. */
   simulateMakerTaker?: boolean;
+  /** Execution venue model. Default: "cex". */
+  venueModel?: "cex" | "dex";
+  /** For DEX: constant-product AMM pool reserve in quote units (e.g. USDC). Default: 500000. */
+  ammReserveQuote?: number;
+  /** For DEX: pool fee tier in basis points (e.g. 30 = 0.3%). Default: 30. */
+  ammFeeBps?: number;
 }
 
 const DEFAULTS: Required<FillSimulatorOptions> = {
@@ -49,6 +55,9 @@ const DEFAULTS: Required<FillSimulatorOptions> = {
   partialFillProbability: 0.3,
   minPartialFillRatio: 0.1,
   simulateMakerTaker: false,
+  venueModel: "cex",
+  ammReserveQuote: 500_000,
+  ammFeeBps: 30,
 };
 
 export class FillSimulator {
@@ -95,6 +104,12 @@ export class FillSimulator {
     const orderValueUsd = price * quantity;
     const depthRatio = orderValueUsd / Math.max(depthUsd, 1);
 
+    // DEX path: constant-product AMM price impact.
+    if (this.opts.venueModel === "dex") {
+      return this.simulateDexFill(rng, price, quantity, depthUsd);
+    }
+
+    // CEX path: order-book depth impact.
     // Total slippage = base + depth impact + spread noise.
     const baseSlippage = this.opts.baseSlippageBps;
     const depthSlippage = depthRatio * this.opts.depthImpactFactor * 10_000;
@@ -156,6 +171,77 @@ export class FillSimulator {
       filledQuantity,
       slippageUsd,
       slippageBps,
+      reason: fillRatio < 1 ? "PARTIAL_FILL" : undefined,
+    };
+  }
+
+  /**
+   * DEX fill simulation using constant-product AMM formula.
+   * 
+   * Price impact = dy/y = dx / (x + dx) for constant-product x*y = k.
+   * With fee: effective_dx = dx * (1 - fee), then impact on reserve.
+   */
+  private simulateDexFill(
+    rng: SeededRng,
+    price: number,
+    quantity: number,
+    _depthUsd: number,
+  ): FillResult {
+    const reserveQuote = this.opts.ammReserveQuote;
+    const feeBps = this.opts.ammFeeBps;
+    const orderValueUsd = price * quantity;
+
+    // Constant-product AMM: buying `quantity` tokens from the pool.
+    // The pool has reserveQuote USDC and reserveBase = reserveQuote / price tokens.
+    const reserveBase = reserveQuote / price;
+
+    // Apply fee to the input amount.
+    const feeMultiplier = 1 - feeBps / 10_000;
+    const effectiveInput = orderValueUsd * feeMultiplier;
+
+    // Constant-product: new_reserve_base = reserve_base * reserve_quote / (reserve_quote + effective_input)
+    const newReserveBase = (reserveBase * reserveQuote) / (reserveQuote + effectiveInput);
+    const tokensOut = reserveBase - newReserveBase;
+
+    // Execution price = effectiveInput / tokensOut.
+    const execPrice = effectiveInput / Math.max(tokensOut, 1e-12);
+
+    // Price impact in bps.
+    const priceImpactBps = Math.abs(execPrice - price) / price * 10_000;
+
+    // Add base slippage + noise on top of AMM impact.
+    const baseSlippage = this.opts.baseSlippageBps;
+    const spreadNoise = rng.next() * 10 * 0.5; // small spread noise
+    const totalSlippageBps = priceImpactBps + baseSlippage + spreadNoise;
+
+    if (totalSlippageBps > this.opts.maxSlippageBps) {
+      return {
+        filled: false,
+        fillRatio: 0,
+        fillPrice: price,
+        filledQuantity: 0,
+        slippageUsd: 0,
+        slippageBps: totalSlippageBps,
+        reason: "SLIPPAGE_EXCEEDED",
+      };
+    }
+
+    // Fill ratio: partial fills are rare on DEX (you get what the AMM gives).
+    let fillRatio = 1;
+    if (rng.next() < this.opts.partialFillProbability * 0.3) {
+      fillRatio = Math.max(this.opts.minPartialFillRatio, 0.7 + rng.next() * 0.3);
+    }
+
+    const filledQuantity = Math.round(quantity * fillRatio * 1e8) / 1e8;
+    const slippageUsd = Math.abs(execPrice - price) * filledQuantity;
+
+    return {
+      filled: filledQuantity > 0,
+      fillRatio,
+      fillPrice: execPrice,
+      filledQuantity,
+      slippageUsd,
+      slippageBps: totalSlippageBps,
       reason: fillRatio < 1 ? "PARTIAL_FILL" : undefined,
     };
   }

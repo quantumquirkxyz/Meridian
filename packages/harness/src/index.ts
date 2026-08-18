@@ -1,7 +1,7 @@
 /**
  * @agenttrading/harness — reproducible evaluation: backtest, event replay,
  * fill/slippage/gas/latency simulators, stress tests, performance reports.
- * Depends only on contracts, graph, and events.
+ * Depends on contracts, graph, and events (ADR-0007).
  */
 export const HARNESS_VERSION = "0.1.0";
 
@@ -62,3 +62,10 @@ export {
   computePerformanceReport,
   type PerformanceReport,
 } from "./report.ts";
+
+// ── Harness Evidence Gate ────────────────────────────────────────
+export {
+  harnessEvidenceApproved,
+  type HarnessGateCriteria,
+  type HarnessGateResult,
+} from "./gate.ts";

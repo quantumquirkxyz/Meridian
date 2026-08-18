@@ -23,6 +23,7 @@ function makeBacktestResult(
     grossPnlUsd: 0,
     totalCostsUsd: 0,
     netPnlUsd: 0,
+    initialCapitalUsd: 10_000,
     finalCapitalUsd: 10_000,
     fillRatio: 0,
     finalRngState: 0,

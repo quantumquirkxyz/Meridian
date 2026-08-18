@@ -207,9 +207,7 @@ export function computePerformanceReport(result: BacktestResult): PerformanceRep
 // ── Helpers ────────────────────────────────────────────────────────
 
 function extractBacktestMetrics(result: BacktestResult) {
-  // Initial capital is not directly in BacktestResult; derive from finalCapitalUsd - netPnlUsd.
-  const initialCapitalUsd = result.finalCapitalUsd - result.netPnlUsd;
-  return { trades: result.trades, initialCapitalUsd };
+  return { trades: result.trades, initialCapitalUsd: result.initialCapitalUsd };
 }
 
 function computeDrawdown(

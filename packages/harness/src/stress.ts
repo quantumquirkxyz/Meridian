@@ -92,11 +92,14 @@ export interface StressTestConfig {
   capitalPerIterationUsd?: number;
 }
 
+/** Fixed timestamp for deterministic minimal snapshots. */
+const STRESS_SNAPSHOT_TIMESTAMP_MS = 1_700_000_000_000;
+
 function createMinimalSnapshot(): MarketGraphSnapshot {
   return {
     version: 1,
     snapshotId: "snap:stress:minimal",
-    createdAtMs: Date.now(),
+    createdAtMs: STRESS_SNAPSHOT_TIMESTAMP_MS,
     nodes: [
       { id: "asset:BTC", type: "ASSET" },
       { id: "asset:ETH", type: "ASSET" },
@@ -175,6 +178,8 @@ function runSingleIteration(
     baseSlippageBps: scenario === "EXTREME_SLIPPAGE" ? 100 : 5,
     maxSlippageBps: scenario === "EXTREME_SLIPPAGE" ? 2000 : 500,
     depthImpactFactor: scenario === "EXTREME_SLIPPAGE" ? 0.5 : 0.1,
+    // STALE_DATA: price moves between snapshot and execution, causing slippage.
+    ...(scenario === "STALE_DATA" ? { baseSlippageBps: 50, depthImpactFactor: 0.3 } : {}),
   });
 
   const gasSim = new GasSimulator({
@@ -209,10 +214,12 @@ function runSingleIteration(
   });
 
   // Simulate a fill attempt.
+  // STALE_DATA: use a stale price (5% below current) to model price drift.
+  const stalePricePenalty = scenario === "STALE_DATA" ? 0.95 : 1.0;
   const fill = fillSim.simulateFill(rng, {
     side: "BUY",
-    price: 42_000,
-    quantity: capitalUsd / 42_000,
+    price: 42_000 * stalePricePenalty,
+    quantity: capitalUsd / (42_000 * stalePricePenalty),
     depthUsd: 100_000,
   });
 
@@ -264,6 +271,11 @@ function runSingleIteration(
   if (scenario === "DISCONNECTION" && latency.exceededDeadline) {
     survived = false;
     notes.push("System did not survive disconnection stress");
+  } else if (
+    scenario === "STALE_DATA" && !fill.filled
+  ) {
+    survived = false;
+    notes.push("Stale data caused fill rejection or excessive slippage");
   } else if (
     scenario === "CASCADE_FAILURES" &&
     failures.length >= 3

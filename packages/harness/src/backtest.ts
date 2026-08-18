@@ -15,7 +15,6 @@ import type {
   OrderIntent,
 } from "@agenttrading/contracts";
 import { foldGraphState } from "@agenttrading/events";
-import { MarketGraph } from "@agenttrading/graph";
 import {
   findAndScoreRoutes,
   detectCycleCandidates,
@@ -79,6 +78,9 @@ export interface BacktestConfig {
   maxTrades?: number;
 }
 
+/** Default failure cost penalty in USD when a failure occurs. */
+const DEFAULT_FAILURE_COST_USD = 5;
+
 /** Result of a complete backtest run. */
 export interface BacktestResult {
   /** The seed used (for reproducibility verification). */
@@ -99,6 +101,8 @@ export interface BacktestResult {
   totalCostsUsd: number;
   /** Net PnL after all costs. */
   netPnlUsd: number;
+  /** Initial capital in USD. */
+  initialCapitalUsd: number;
   /** Final capital. */
   finalCapitalUsd: number;
   /** Fill ratio (filled / total). */
@@ -108,17 +112,12 @@ export interface BacktestResult {
 }
 
 export class BacktestRunner {
-  private readonly rng: SeededRng;
-  private readonly fillSim: FillSimulator;
   private readonly gasSim: GasSimulator;
   private readonly fundingSim: FundingSimulator;
   private readonly latencySim: LatencySimulator;
   private readonly failureSim: FailureSimulator;
 
   constructor(config?: Partial<BacktestConfig>) {
-    const seed = config?.seed ?? 42;
-    this.rng = createSeededRng(seed);
-    this.fillSim = new FillSimulator(config?.fillOptions);
     this.gasSim = new GasSimulator(config?.gasOptions);
     this.fundingSim = new FundingSimulator(config?.fundingOptions);
     this.latencySim = new LatencySimulator(config?.latencyOptions);
@@ -184,7 +183,8 @@ export class BacktestRunner {
       if (capital < requiredCapital * 0.1) break; // too little capital left
 
       // Simulate fill.
-      const fill = this.fillSim.simulateFill(rng, {
+      const fillSim = new FillSimulator(config.fillOptions);
+      const fill = fillSim.simulateFill(rng, {
         side: "BUY",
         price: candidate.grossSpreadUsd > 0 ? candidate.grossSpreadUsd / (candidate.route.length - 1) : 1,
         quantity: Math.min(requiredCapital, capital) / (candidate.grossSpreadUsd / Math.max(candidate.route.length - 1, 1) || 1),
@@ -223,7 +223,7 @@ export class BacktestRunner {
         fill.slippageUsd +
         gas.gasCostUsd +
         latency.latencyCostUsd +
-        (failure.failed ? 5 : 0); // failure cost estimate
+        (failure.failed ? DEFAULT_FAILURE_COST_USD : 0);
 
       const netPnlUsd = fill.filled
         ? candidate.expectedNetProfitUsd * fill.fillRatio - totalCosts
@@ -271,6 +271,7 @@ export class BacktestRunner {
       grossPnlUsd,
       totalCostsUsd,
       netPnlUsd: grossPnlUsd - totalCostsUsd,
+      initialCapitalUsd,
       finalCapitalUsd: capital,
       fillRatio: trades.length > 0 ? filledTrades / trades.length : 0,
       finalRngState: rng.getState(),
