@@ -5,36 +5,13 @@ import {
   type StateName,
   type SystemMode,
 } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
 import { StateGraph } from "../src/stategraph/state-graph.ts";
 import {
-  buildDefaultGraph,
-  defaultPermissionRegistry,
   DEFENSIVE_STATES,
   DEFENSIVE_STATE_MODE,
   MODULE_ACTORS,
 } from "../src/stategraph/topology.ts";
-import { walkToBuildIntent, walkToRiskValidate } from "./helpers.ts";
-
-const FIXED_TS = 1_700_000_000_000;
-
-function newGraph(options?: {
-  initialState?: StateName;
-  initialMode?: SystemMode;
-}): { graph: StateGraph; audit: AuditLog } {
-  const { nodes, transitions } = buildDefaultGraph();
-  const audit = new AuditLog();
-  const graph = new StateGraph({
-    nodes,
-    transitions,
-    permissions: defaultPermissionRegistry(),
-    audit,
-    now: () => FIXED_TS,
-    initialState: options?.initialState,
-    initialMode: options?.initialMode,
-  });
-  return { graph, audit };
-}
+import { FIXED_TS, newGraph, walkToBuildIntent, walkToRiskValidate } from "./helpers.ts"
 
 describe("StateGraph guards and transitions (issue #13 AC1)", () => {
   test("walks the canonical flow from IDLE to AUDIT_DECISION", () => {

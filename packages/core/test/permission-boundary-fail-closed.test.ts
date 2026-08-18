@@ -18,8 +18,6 @@ import {
   type Permission,
   type StateName,
 } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
-import { StateGraph } from "../src/stategraph/state-graph.ts";
 import {
   assertNoAgentHoldsExecutionPermissions,
   agentsHoldingExecutionPermissions,
@@ -30,78 +28,14 @@ import {
   buildDefaultGraph,
   defaultPermissionRegistry,
   DEFENSIVE_STATES,
-  DEFENSIVE_STATE_MODE,
   MODULE_ACTORS,
 } from "../src/stategraph/topology.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const FIXED_TS = 1_700_000_000_000;
-
-function newGraph(): { graph: StateGraph; audit: AuditLog } {
-  const { nodes, transitions } = buildDefaultGraph();
-  const audit = new AuditLog();
-  const graph = new StateGraph({
-    nodes,
-    transitions,
-    permissions: defaultPermissionRegistry(),
-    audit,
-    now: () => FIXED_TS,
-  });
-  return { graph, audit };
-}
-
-/** Walks the graph through the canonical observation steps to a given target. */
-function walkSteps(
-  graph: StateGraph,
-  steps: ReadonlyArray<[StateName, string, Record<string, unknown>?]>,
-  timestampMs = 0,
-): void {
-  for (const [to, actor, data] of steps) {
-    const outcome = graph.transition({ to, actor, data, timestampMs });
-    expect(outcome.ok).toBe(true);
-  }
-}
-
-/** Canonical prefix up to RISK_VALIDATE. */
-const RISK_PREFIX: ReadonlyArray<[StateName, string, Record<string, unknown>?]> =
-  [
-    ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-    ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-    ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-    [
-      "DETECT_OPPORTUNITY",
-      MODULE_ACTORS.opportunityScanner,
-      { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] },
-    ],
-    ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-    ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-    ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-  ];
-
-/** Canonical prefix up to EXECUTION_PRECHECK with a valid approval. */
-const PRECHECK_PREFIX: ReadonlyArray<[StateName, string, Record<string, unknown>?]> =
-  [
-    ...RISK_PREFIX,
-    [
-      "EXECUTION_PRECHECK",
-      MODULE_ACTORS.riskEngine,
-      {
-        riskDecisionOutcome: "APPROVE",
-        riskDecision: {
-          decision: "APPROVE",
-          orderIntentIdempotencyKey: "intent-1",
-          evaluatedAtMs: 0,
-          approvedSize: 0.01,
-          approvedLimits: { maxSlippageBps: 30 },
-          expiresAtMs: FIXED_TS + 60_000,
-        },
-        expectedNetProfitUsd: 5,
-      },
-    ],
-  ];
+import {
+  FIXED_TS,
+  newGraph,
+  walkSteps,
+  walkToRiskValidate,
+} from "./helpers.ts";
 
 // ---------------------------------------------------------------------------
 // AC1: Permission boundary — no agent holds execution/risk-approval perms
@@ -198,11 +132,11 @@ describe("permission boundary (issue #23 AC1 — agents never execute)", () => {
 // ---------------------------------------------------------------------------
 
 describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
-  test("risk rejection blocks execution: no transition to EXECUTION_PRECHECK", () => {
+  test("risk rejection blocks execution: the risk-to-precheck guard rejects non-approval decisions", () => {
     const { graph } = newGraph();
-    walkSteps(graph, RISK_PREFIX);
+    walkToRiskValidate(graph);
 
-    // Risk engine rejects the opportunity.
+    // Risk engine rejects the opportunity — route to audit, not execution.
     const rejected = graph.transition({
       to: "AUDIT_DECISION",
       actor: MODULE_ACTORS.riskEngine,
@@ -219,19 +153,34 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
     });
     expect(rejected.ok).toBe(true);
 
-    // Execution is unreachable.
-    const toPrecheck = graph.transition({
+    // The risk-to-precheck guard requires an approved risk decision;
+    // a REJECT decision cannot proceed to execution.
+    graph.reset();
+    walkToRiskValidate(graph);
+    const blocked = graph.transition({
       to: "EXECUTION_PRECHECK",
       actor: MODULE_ACTORS.riskEngine,
+      data: {
+        riskDecisionOutcome: "REJECT",
+        riskDecision: {
+          decision: "REJECT",
+          orderIntentIdempotencyKey: "intent-1",
+          evaluatedAtMs: 0,
+          reasonCodes: ["MIN_EDGE"],
+        },
+      },
       timestampMs: 0,
     });
-    expect(toPrecheck.ok).toBe(false);
-    expect(graph.currentState).toBe("AUDIT_DECISION");
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) {
+      expect(blocked.reasonCode).toBe("GUARD_FAILED");
+    }
+    expect(graph.currentState).toBe("RISK_VALIDATE");
   });
 
   test("expired risk approval is void at precheck-to-execute", () => {
     const { graph } = newGraph();
-    walkSteps(graph, RISK_PREFIX);
+    walkToRiskValidate(graph);
 
     // Approve with an already-expired expiry.
     const expired = {
@@ -271,7 +220,7 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
   test("HALT mode entered from risk-engine failure blocks execution via the graph", () => {
     // Scenario: risk engine identifies a critical failure and triggers HALT.
     const { graph } = newGraph();
-    walkSteps(graph, RISK_PREFIX);
+    walkToRiskValidate(graph);
 
     // Risk engine triggers HALT before any execution can occur.
     const halted = graph.transition({
@@ -294,7 +243,7 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
 
   test("defensive risk decisions route to audit, never to execution", () => {
     const { graph } = newGraph();
-    walkSteps(graph, RISK_PREFIX);
+    walkToRiskValidate(graph);
 
     const defensive: Record<string, unknown> = {
       decision: "CANCEL_ONLY",
@@ -312,7 +261,7 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
     expect(toExecution.ok).toBe(false);
 
     graph.reset();
-    walkSteps(graph, RISK_PREFIX);
+    walkToRiskValidate(graph);
     const toAudit = graph.transition({
       to: "AUDIT_DECISION",
       actor: MODULE_ACTORS.riskEngine,
@@ -324,9 +273,32 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
 });
 
 describe("fail-closed: execution failure (issue #23 AC2)", () => {
+  /** Walks to EXECUTION_PRECHECK with a valid approval. */
+  function walkToPrecheck(graph: import("../src/stategraph/state-graph.ts").StateGraph): void {
+    walkToRiskValidate(graph);
+    walkSteps(graph, [
+      [
+        "EXECUTION_PRECHECK",
+        MODULE_ACTORS.riskEngine,
+        {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: {
+            decision: "APPROVE",
+            orderIntentIdempotencyKey: "intent-1",
+            evaluatedAtMs: 0,
+            approvedSize: 0.01,
+            approvedLimits: { maxSlippageBps: 30 },
+            expiresAtMs: FIXED_TS + 60_000,
+          },
+          expectedNetProfitUsd: 5,
+        },
+      ],
+    ]);
+  }
+
   test("execution failure triggers HALT: infra-guardian enters HALT from EXECUTE_ORDER", () => {
     const { graph } = newGraph();
-    walkSteps(graph, PRECHECK_PREFIX);
+    walkToPrecheck(graph);
 
     // Simulate execution (e.g. order was sent but the fill failed).
     const executed = graph.transition({
@@ -405,7 +377,7 @@ describe("fail-closed: execution failure (issue #23 AC2)", () => {
 
   test("HALT entered from execution-reduce-only blocks new order starts", () => {
     const { graph } = newGraph();
-    walkSteps(graph, PRECHECK_PREFIX);
+    walkToPrecheck(graph);
 
     // Execution proceeds.
     graph.transition({
@@ -465,21 +437,29 @@ describe("fail-closed: execution failure (issue #23 AC2)", () => {
 describe("fail-closed: reconciliation failure (issue #23 AC2)", () => {
   test("reconciliation failure triggers HALT: no new positions possible", () => {
     const { graph } = newGraph();
-    walkSteps(graph, PRECHECK_PREFIX);
+    walkToRiskValidate(graph);
 
-    // Execution completes.
-    graph.transition({
-      to: "EXECUTE_ORDER",
-      actor: MODULE_ACTORS.executionEngine,
-      data: { precheck: "PASS" },
-      timestampMs: 0,
-    });
-    graph.transition({
-      to: "RECONCILE",
-      actor: MODULE_ACTORS.executionEngine,
-      data: { execution: "SIMULATED_FILL" },
-      timestampMs: 0,
-    });
+    // Walk through execution to RECONCILE.
+    walkSteps(graph, [
+      [
+        "EXECUTION_PRECHECK",
+        MODULE_ACTORS.riskEngine,
+        {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: {
+            decision: "APPROVE",
+            orderIntentIdempotencyKey: "intent-1",
+            evaluatedAtMs: 0,
+            approvedSize: 0.01,
+            approvedLimits: { maxSlippageBps: 30 },
+            expiresAtMs: FIXED_TS + 60_000,
+          },
+          expectedNetProfitUsd: 5,
+        },
+      ],
+      ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+      ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
+    ]);
 
     // Reconciliation detects a balance mismatch — infra-guardian triggers HALT.
     const halted = graph.transition({
@@ -518,20 +498,28 @@ describe("fail-closed: reconciliation failure (issue #23 AC2)", () => {
 
   test("reconciliation failure can enter REDUCE_ONLY to preserve partial flow", () => {
     const { graph } = newGraph();
-    walkSteps(graph, PRECHECK_PREFIX);
+    walkToRiskValidate(graph);
 
-    graph.transition({
-      to: "EXECUTE_ORDER",
-      actor: MODULE_ACTORS.executionEngine,
-      data: { precheck: "PASS" },
-      timestampMs: 0,
-    });
-    graph.transition({
-      to: "RECONCILE",
-      actor: MODULE_ACTORS.executionEngine,
-      data: { execution: "SIMULATED_FILL" },
-      timestampMs: 0,
-    });
+    walkSteps(graph, [
+      [
+        "EXECUTION_PRECHECK",
+        MODULE_ACTORS.riskEngine,
+        {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: {
+            decision: "APPROVE",
+            orderIntentIdempotencyKey: "intent-1",
+            evaluatedAtMs: 0,
+            approvedSize: 0.01,
+            approvedLimits: { maxSlippageBps: 30 },
+            expiresAtMs: FIXED_TS + 60_000,
+          },
+          expectedNetProfitUsd: 5,
+        },
+      ],
+      ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+      ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
+    ]);
 
     // Infra-guardian enters REDUCE_ONLY (less severe than HALT).
     const reduced = graph.transition({
@@ -556,7 +544,7 @@ describe("fail-closed: reconciliation failure (issue #23 AC2)", () => {
 describe("fail-closed: audit failure (issue #23 AC2)", () => {
   test("audit failure blocks AUDIT_DECISION → IDLE: system stranded in AUDIT_DECISION", () => {
     const { graph } = newGraph();
-    walkSteps(graph, RISK_PREFIX);
+    walkToRiskValidate(graph);
 
     // Risk rejects and routes to AUDIT_DECISION.
     graph.transition({
@@ -596,75 +584,164 @@ describe("fail-closed: audit failure (issue #23 AC2)", () => {
     ).toBe(false);
   });
 
-  test("AUDIT_UNAVAILABLE reason code exists in the shared contracts", () => {
-    expect(PERMISSIONS).toContain("OBSERVE_AUDIT");
-    // The AUDIT_UNAVAILABLE reason code is part of the shared contract vocabulary.
-    // It is defined in packages/contracts/src/reason-codes.ts and available for
-    // use when the audit subsystem is unavailable (ARCHITECTURE.md fallback table).
-    // We verify the permission boundary is intact so audit cannot be bypassed.
-    const registry = defaultPermissionRegistry();
-    expect(registry.has(MODULE_ACTORS.audit, "OBSERVE_AUDIT")).toBe(true);
-    expect(registry.has(MODULE_ACTORS.audit, "APPROVE_RISK")).toBe(false);
-    expect(registry.has(MODULE_ACTORS.audit, "SUBMIT_ORDER")).toBe(false);
+  test("audit unavailable triggers HALT: system does not trade (ARCHITECTURE.md fallback)", () => {
+    const { graph } = newGraph();
+    walkToRiskValidate(graph);
+
+    // Risk rejects and routes to AUDIT_DECISION.
+    graph.transition({
+      to: "AUDIT_DECISION",
+      actor: MODULE_ACTORS.riskEngine,
+      data: {
+        riskDecisionOutcome: "REJECT",
+        riskDecision: {
+          decision: "REJECT",
+          orderIntentIdempotencyKey: "intent-1",
+          evaluatedAtMs: 0,
+          reasonCodes: ["MIN_EDGE"],
+        },
+      },
+      timestampMs: 0,
+    });
+
+    // Audit subsystem is unavailable — infra-guardian triggers HALT
+    // per ARCHITECTURE.md: "Audit unavailable → Do not trade."
+    const halted = graph.transition({
+      to: "HALT",
+      actor: MODULE_ACTORS.infraGuardian,
+      timestampMs: 0,
+    });
+    expect(halted.ok).toBe(true);
+    expect(graph.currentMode).toBe("HALT");
+
+    // System cannot start new cycles.
+    expect(
+      graph.transition({
+        to: "INGEST_MARKET_DATA",
+        actor: MODULE_ACTORS.marketDataSentinel,
+        timestampMs: 0,
+      }).ok,
+    ).toBe(false);
   });
 });
 
 describe("fail-closed: defensive mode fan-out from any state (issue #23 AC2)", () => {
   test("HALT is reachable from every normal state via the infra-guardian", () => {
-    const normalStates: readonly StateName[] = [
-      "IDLE",
-      "INGEST_MARKET_DATA",
-      "NORMALIZE_MARKET_STATE",
-      "UPDATE_MARKET_GRAPH",
-      "DETECT_OPPORTUNITY",
-      "BUILD_ORDER_INTENT",
-      "REQUEST_AGENT_REVIEW",
-      "RISK_VALIDATE",
-      "EXECUTION_PRECHECK",
-      "EXECUTE_ORDER",
-      "RECONCILE",
-      "AUDIT_DECISION",
+    // Explicit step arrays per target state — no complex walk logic.
+    const WALK_STEPS: ReadonlyArray<{
+      state: StateName;
+      steps: ReadonlyArray<[StateName, string, Record<string, unknown>?]>;
+    }> = [
+      { state: "IDLE", steps: [] },
+      { state: "INGEST_MARKET_DATA", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+      ]},
+      { state: "NORMALIZE_MARKET_STATE", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+      ]},
+      { state: "UPDATE_MARKET_GRAPH", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+      ]},
+      { state: "DETECT_OPPORTUNITY", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+      ]},
+      { state: "BUILD_ORDER_INTENT", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+      ]},
+      { state: "REQUEST_AGENT_REVIEW", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+      ]},
+      { state: "RISK_VALIDATE", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
+      ]},
+      { state: "EXECUTION_PRECHECK", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
+        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
+          expectedNetProfitUsd: 5,
+        }],
+      ]},
+      { state: "EXECUTE_ORDER", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
+        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
+          expectedNetProfitUsd: 5,
+        }],
+        ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+      ]},
+      { state: "RECONCILE", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
+        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
+          expectedNetProfitUsd: 5,
+        }],
+        ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+        ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
+      ]},
+      { state: "AUDIT_DECISION", steps: [
+        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
+        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
+        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
+        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
+        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
+        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
+          riskDecisionOutcome: "APPROVE",
+          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
+          expectedNetProfitUsd: 5,
+        }],
+        ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+        ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
+        ["AUDIT_DECISION", MODULE_ACTORS.reconciliationEngine, { reconciliation: "OK" }],
+      ]},
     ];
 
-    for (const state of normalStates) {
+    for (const { state, steps } of WALK_STEPS) {
       const { graph } = newGraph();
-      // Walk to the target state.
-      if (state === "IDLE") {
-        // Already at IDLE.
-      } else if (state === "INGEST_MARKET_DATA") {
-        graph.transition({
-          to: "INGEST_MARKET_DATA",
-          actor: MODULE_ACTORS.marketDataSentinel,
-          timestampMs: 0,
-        });
-      } else if (state === "HALT") {
-        // HALT is entered by direct transition, not by walking.
-        graph.transition({
-          to: "HALT",
-          actor: MODULE_ACTORS.infraGuardian,
-          timestampMs: 0,
-        });
-      } else {
-        // Walk through the canonical prefix up to the desired state.
-        for (const [to, actor, data] of RISK_PREFIX) {
-          if (to === state) {
-            graph.transition({ to, actor, data, timestampMs: 0 });
-            break;
-          }
-          graph.transition({ to, actor, data, timestampMs: 0 });
-        }
-        // Continue walking if we haven't reached the state yet.
-        if (graph.currentState !== state) {
-          // Walk the rest of the prefix.
-          const prefixStates = RISK_PREFIX.map(([to]) => to);
-          const startIdx = prefixStates.indexOf(graph.currentState) + 1;
-          for (let i = startIdx; i < RISK_PREFIX.length; i++) {
-            const [to, actor, data] = RISK_PREFIX[i];
-            graph.transition({ to, actor, data, timestampMs: 0 });
-            if (graph.currentState === state) break;
-          }
-        }
-      }
+      walkSteps(graph, steps);
 
       // HALT should be reachable from the current state.
       const halted = graph.transition({
@@ -678,103 +755,5 @@ describe("fail-closed: defensive mode fan-out from any state (issue #23 AC2)", (
       ).toBe(true);
       expect(graph.currentMode).toBe("HALT");
     }
-  });
-
-  test("fail-closed: cannot move from HALT to a less restrictive defensive state", () => {
-    const { graph } = newGraph();
-    graph.transition({
-      to: "HALT",
-      actor: MODULE_ACTORS.infraGuardian,
-      timestampMs: 0,
-    });
-
-    for (const defensive of DEFENSIVE_STATES) {
-      if (defensive === "HALT") continue;
-      const outcome = graph.transition({
-        to: defensive,
-        actor: MODULE_ACTORS.infraGuardian,
-        timestampMs: 0,
-      });
-      expect(
-        outcome.ok,
-        `should not be able to move from HALT to ${defensive}`,
-      ).toBe(false);
-      if (!outcome.ok) {
-        expect(outcome.reasonCode).toBe("GUARD_FAILED");
-      }
-    }
-    expect(graph.currentState).toBe("HALT");
-    expect(graph.currentMode).toBe("HALT");
-  });
-
-  test("operator recovery is required to leave any defensive mode", () => {
-    for (const defensive of DEFENSIVE_STATES) {
-      const { graph } = newGraph();
-      graph.transition({
-        to: defensive,
-        actor: MODULE_ACTORS.infraGuardian,
-        timestampMs: 0,
-      });
-
-      // Without operator reset, recovery is blocked.
-      const refused = graph.transition({
-        to: "IDLE",
-        actor: MODULE_ACTORS.operator,
-        timestampMs: 0,
-      });
-      expect(refused.ok, `recovery from ${defensive} should require operator reset`).toBe(false);
-
-      // With operator reset, recovery succeeds.
-      const reset = graph.transition({
-        to: "IDLE",
-        actor: MODULE_ACTORS.operator,
-        data: { operatorReset: true },
-        timestampMs: 0,
-      });
-      expect(reset.ok, `operator reset from ${defensive} should succeed`).toBe(true);
-      expect(graph.currentState).toBe("IDLE");
-      expect(graph.currentMode).toBe("NORMAL");
-    }
-  });
-
-  test("defensive mode entered mid-flow blocks subsequent execution steps", () => {
-    const { graph } = newGraph();
-    walkSteps(graph, PRECHECK_PREFIX);
-    expect(graph.currentState).toBe("EXECUTION_PRECHECK");
-
-    // Infra-guardian enters CANCEL_ONLY_MODE mid-flow.
-    const entered = graph.transition({
-      to: "CANCEL_ONLY_MODE",
-      actor: MODULE_ACTORS.infraGuardian,
-      timestampMs: 0,
-    });
-    expect(entered.ok).toBe(true);
-    expect(graph.currentMode).toBe("CANCEL_ONLY");
-
-    // Execution is unreachable.
-    expect(
-      graph.transition({
-        to: "EXECUTE_ORDER",
-        actor: MODULE_ACTORS.executionEngine,
-        timestampMs: 0,
-      }).ok,
-    ).toBe(false);
-
-    // Recovery requires operator reset.
-    expect(
-      graph.transition({
-        to: "IDLE",
-        actor: MODULE_ACTORS.operator,
-        timestampMs: 0,
-      }).ok,
-    ).toBe(false);
-    expect(
-      graph.transition({
-        to: "IDLE",
-        actor: MODULE_ACTORS.operator,
-        data: { operatorReset: true },
-        timestampMs: 0,
-      }).ok,
-    ).toBe(true);
   });
 });

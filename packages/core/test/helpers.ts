@@ -1,7 +1,12 @@
 import { expect } from "bun:test";
-import { type StateName } from "@agenttrading/contracts";
+import { type StateName, type SystemMode } from "@agenttrading/contracts";
+import { AuditLog } from "../src/stategraph/audit-log.ts";
 import { StateGraph } from "../src/stategraph/state-graph.ts";
-import { MODULE_ACTORS } from "../src/stategraph/topology.ts";
+import {
+  buildDefaultGraph,
+  defaultPermissionRegistry,
+  MODULE_ACTORS,
+} from "../src/stategraph/topology.ts";
 
 /** Canonical observation steps up to BUILD_ORDER_INTENT. */
 const CANDIDATE_CYCLE: ReadonlyArray<
@@ -34,10 +39,31 @@ const RISK_CYCLE: ReadonlyArray<
   ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
 ];
 
+/** Shared fixed timestamp for deterministic tests. */
+export const FIXED_TS = 1_700_000_000_000;
+
+/** Creates a fresh StateGraph with the default topology and permissions. */
+export function newGraph(options?: {
+  now?: () => number;
+  initialMode?: SystemMode;
+}): { graph: StateGraph; audit: AuditLog } {
+  const { nodes, transitions } = buildDefaultGraph();
+  const audit = new AuditLog();
+  const graph = new StateGraph({
+    nodes,
+    transitions,
+    permissions: defaultPermissionRegistry(),
+    audit,
+    now: options?.now ?? (() => FIXED_TS),
+    initialMode: options?.initialMode,
+  });
+  return { graph, audit };
+}
+
 /** Walks a StateGraph through the given steps, expecting each to be allowed. */
 export function walkSteps(
   graph: StateGraph,
-  steps: ReadonlyArray<[StateName, string, Record<string, unknown>]>,
+  steps: ReadonlyArray<[StateName, string, Record<string, unknown>?]>,
   timestampMs = 0,
 ): void {
   for (const [to, actor, data] of steps) {

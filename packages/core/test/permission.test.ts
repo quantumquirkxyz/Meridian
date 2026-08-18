@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { PERMISSIONS_NEVER_GRANTED_TO_AGENTS } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
-import { StateGraph } from "../src/stategraph/state-graph.ts";
 import {
   assertNoAgentHoldsExecutionPermissions,
   agentsHoldingExecutionPermissions,
@@ -9,11 +7,10 @@ import {
 } from "../src/stategraph/permission-registry.ts";
 import {
   AGENT_IDS,
-  buildDefaultGraph,
   defaultPermissionRegistry,
   MODULE_ACTORS,
 } from "../src/stategraph/topology.ts";
-import { walkToRiskValidate } from "./helpers.ts";
+import { newGraph, walkToRiskValidate } from "./helpers.ts"
 
 describe("permission model (ADR-0003, user story 28)", () => {
   test("no agent holds any execution-authority permission", () => {
@@ -65,19 +62,8 @@ describe("permission model (ADR-0003, user story 28)", () => {
 });
 
 describe("per-transition permission checks (issue #13)", () => {
-  function newGraph(): StateGraph {
-    const { nodes, transitions } = buildDefaultGraph();
-    return new StateGraph({
-      nodes,
-      transitions,
-      permissions: defaultPermissionRegistry(),
-      audit: new AuditLog(),
-      now: () => 0,
-    });
-  }
-
   test("a transition requires its actor to hold the edge permissions", () => {
-    const graph = newGraph();
+    const { graph } = newGraph({ now: () => 0 });
     // agent-audit observes audit only; it cannot start ingestion.
     const denied = graph.transition({
       to: "INGEST_MARKET_DATA",
@@ -99,7 +85,7 @@ describe("per-transition permission checks (issue #13)", () => {
   });
 
   test("an agent cannot drive the risk gate (no APPROVE_RISK)", () => {
-    const graph = newGraph();
+    const { graph } = newGraph({ now: () => 0 });
     walkToRiskValidate(graph);
 
     const denied = graph.transition({
