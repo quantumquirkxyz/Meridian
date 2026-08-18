@@ -1,4 +1,8 @@
 import {
+  isDataQualityReport,
+  type DataQualityReport,
+  type DataQualityState,
+  isStateAtLeast,
   SYSTEM_MODES,
   type GuardResult,
   type StateContext,
@@ -193,6 +197,92 @@ export function defensiveEntry(
         ok: false,
         reason: `${targetMode} would increase activity from ${context.mode}`,
       };
+    },
+  };
+}
+
+/**
+ * Guard that blocks signal generation when a data source the current
+ * opportunity depends on is degraded or worse. Reads `dataQualityReports`
+ * from the transition context (an array of DataQualityReport) and checks
+ * whether any report for a dependent source is at least as restrictive as the
+ * given threshold (default DEGRADED). The dependent source ids are read from
+ * `context.data` at the keys in `sourceKeys` (default: ["source"]).
+ *
+ * Acceptance criteria (issue #18 AC2):
+ * - Degraded sources block dependent signal generation when threshold is
+ *   DEGRADED or stricter.
+ * - STALE sources block dependent signal generation when threshold is STALE.
+ *
+ * Fails closed: missing reports for a dependent source block signal
+ * generation rather than silently proceeding.
+ */
+export function dataQualityBlocksSignal(
+  name: string,
+  options: {
+    /** Keys in context.data holding the dependent source id(s) (default: ["source"]). */
+    sourceKeys?: string[];
+    /** Minimum state that blocks signal generation (default: "DEGRADED"). */
+    threshold?: DataQualityState;
+  } = {},
+): TransitionGuard {
+  const sourceKeys = options.sourceKeys ?? ["source"];
+  const threshold = options.threshold ?? "DEGRADED";
+
+  return {
+    name,
+    evaluate(context: StateContext): GuardResult {
+      const rawReports = context.data?.dataQualityReports ?? [];
+      if (!Array.isArray(rawReports)) {
+        return {
+          ok: false,
+          reason: "dataQualityReports is not an array; blocking signal generation",
+        };
+      }
+      const reports = rawReports.filter(isDataQualityReport);
+
+      if (reports.length === 0) {
+        return {
+          ok: false,
+          reason: "no data quality reports; blocking signal generation",
+        };
+      }
+
+      const dependentSourceIds = new Set(
+        sourceKeys.flatMap((key) => {
+          const value = context.data?.[key];
+          if (Array.isArray(value)) {
+            return value.filter((v): v is string => typeof v === "string");
+          }
+          return typeof value === "string" ? [value] : [];
+        }),
+      );
+
+      // Fail closed: every dependent source must have a report.
+      const reportsBySource = new Map(
+        reports.map((r) => [r.source, r] as const),
+      );
+      for (const sourceId of dependentSourceIds) {
+        if (!reportsBySource.has(sourceId)) {
+          return {
+            ok: false,
+            reason:
+              `missing report for dependent source ${sourceId}; blocking signal generation`,
+          };
+        }
+      }
+
+      for (const sourceId of dependentSourceIds) {
+        const report = reportsBySource.get(sourceId)!;
+        if (isStateAtLeast(report.state, threshold)) {
+          return {
+            ok: false,
+            reason: `source ${report.source} quality ${report.state} blocks signal generation (threshold: ${threshold})`,
+          };
+        }
+      }
+
+      return { ok: true, reason: "all dependent data sources quality sufficient" };
     },
   };
 }
