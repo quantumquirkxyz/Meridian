@@ -2,7 +2,6 @@ import {
   type DataQualityReport,
   type DataQualityState,
   isStateAtLeast,
-  markEdgesByQuality,
   SYSTEM_MODES,
   type GuardResult,
   type StateContext,
@@ -202,20 +201,25 @@ export function defensiveEntry(
 }
 
 /**
- * Guard that blocks signal generation when the data sources feeding the
- * current opportunity are degraded or worse. Reads `dataQualityReports` from
- * the transition context (an array of DataQualityReport) and checks whether
- * any source is at least as restrictive as the given threshold (default DEGRADED).
+ * Guard that blocks signal generation when a data source the current
+ * opportunity depends on is degraded or worse. Reads `dataQualityReports`
+ * from the transition context (an array of DataQualityReport) and checks
+ * whether any report for a dependent source is at least as restrictive as the
+ * given threshold (default DEGRADED). The dependent source ids are read from
+ * `context.data` at the keys in `sourceKeys` (default: ["source"]).
  *
  * Acceptance criteria (issue #18 AC2):
  * - Degraded sources block dependent signal generation when threshold is
  *   DEGRADED or stricter.
  * - STALE sources block dependent signal generation when threshold is STALE.
+ *
+ * Fails closed: missing reports for a dependent source block signal
+ * generation rather than silently proceeding.
  */
 export function dataQualityBlocksSignal(
   name: string,
   options: {
-    /** Keys in context.data to check for source reports (default: ["source"]). */
+    /** Keys in context.data holding the dependent source id(s) (default: ["source"]). */
     sourceKeys?: string[];
     /** Minimum state that blocks signal generation (default: "DEGRADED"). */
     threshold?: DataQualityState;
@@ -229,11 +233,35 @@ export function dataQualityBlocksSignal(
     evaluate(context: StateContext): GuardResult {
       const reports = (context.data?.dataQualityReports ??
         []) as DataQualityReport[];
+
       if (reports.length === 0) {
-        return { ok: true, reason: "no data quality reports; proceeding" };
+        return {
+          ok: false,
+          reason: "no data quality reports; blocking signal generation",
+        };
       }
 
-      for (const report of reports) {
+      const dependentSourceIds = new Set(
+        sourceKeys.flatMap((key) => {
+          const value = context.data?.[key];
+          if (Array.isArray(value)) return value as string[];
+          return typeof value === "string" ? [value] : [];
+        }),
+      );
+
+      const dependentReports = reports.filter((report) =>
+        dependentSourceIds.has(report.source),
+      );
+
+      if (dependentReports.length === 0) {
+        return {
+          ok: false,
+          reason:
+            "no data quality reports for the dependent sources; blocking signal generation",
+        };
+      }
+
+      for (const report of dependentReports) {
         if (isStateAtLeast(report.state, threshold)) {
           return {
             ok: false,
@@ -242,25 +270,7 @@ export function dataQualityBlocksSignal(
         }
       }
 
-      return { ok: true, reason: "all data sources quality sufficient" };
+      return { ok: true, reason: "all dependent data sources quality sufficient" };
     },
   };
-}
-
-/**
- * Guard that marks graph edges from degraded sources as non-tradable. This
- * is not a transition guard but a pure function that returns the edges with
- * updated `tradable` flags based on data quality reports.
- *
- * Acceptance criteria (issue #18 AC3):
- * - Graph edges from degraded sources become non-tradable.
- */
-export function markEdgesFromDegradedSources<
-  E extends { source: string; tradable: boolean },
->(
-  edges: readonly E[],
-  reports: readonly DataQualityReport[],
-  threshold: DataQualityState = "DEGRADED",
-): E[] {
-  return markEdgesByQuality(edges, reports, threshold);
 }

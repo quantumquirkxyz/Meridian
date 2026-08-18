@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { dataQualityBlocksSignal } from "../src/stategraph/guards.ts";
 import {
-  dataQualityBlocksSignal,
-  markEdgesFromDegradedSources,
-} from "../src/stategraph/guards.ts";
-import type { DataQualityReport, StateContext } from "@agenttrading/contracts";
+  markEdgesByQuality,
+  type DataQualityReport,
+  type StateContext,
+} from "@agenttrading/contracts";
 
 function makeCtx(
   data?: Record<string, unknown>,
@@ -57,13 +58,14 @@ function disconnectedReport(source: string): DataQualityReport {
 }
 
 describe("dataQualityBlocksSignal", () => {
-  test("passes when no reports present", () => {
+  test("blocks when no reports present", () => {
     const guard = dataQualityBlocksSignal("testGuard");
     const result = guard.evaluate(makeCtx());
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("no data quality reports");
   });
 
-  test("passes when all sources are HEALTHY", () => {
+  test("passes when all dependent sources are HEALTHY", () => {
     const guard = dataQualityBlocksSignal("testGuard");
     const ctx = makeCtx({
       source: "bybit-ws",
@@ -116,7 +118,19 @@ describe("dataQualityBlocksSignal", () => {
     expect(result.reason).toContain("DEGRADED");
   });
 
-  test("checks all reports even if source key mismatch", () => {
+  test("does not block on an unrelated degraded source", () => {
+    const guard = dataQualityBlocksSignal("testGuard");
+    const ctx = makeCtx({
+      source: "bybit-ws",
+      dataQualityReports: [
+        healthyReport("bybit-ws"),
+        degradedReport("pancakeswap-rpc"),
+      ],
+    });
+    expect(guard.evaluate(ctx).ok).toBe(true);
+  });
+
+  test("blocks when no report exists for the dependent source", () => {
     const guard = dataQualityBlocksSignal("testGuard");
     const ctx = makeCtx({
       source: "other-source",
@@ -124,10 +138,27 @@ describe("dataQualityBlocksSignal", () => {
     });
     const result = guard.evaluate(ctx);
     expect(result.ok).toBe(false);
+    expect(result.reason).toContain("no data quality reports for the dependent sources");
+  });
+
+  test("supports sourceKeys with an array of dependent sources", () => {
+    const guard = dataQualityBlocksSignal("testGuard", {
+      sourceKeys: ["sources"],
+    });
+    const ctx = makeCtx({
+      sources: ["bybit-ws", "pancakeswap-rpc"],
+      dataQualityReports: [
+        degradedReport("bybit-ws"),
+        healthyReport("pancakeswap-rpc"),
+      ],
+    });
+    const result = guard.evaluate(ctx);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("bybit-ws");
   });
 });
 
-describe("markEdgesFromDegradedSources", () => {
+describe("markEdgesByQuality", () => {
   test("marks STALE source edge as non-tradable", () => {
     const edges = [
       { id: "e1", source: "bybit-ws", tradable: true },
@@ -135,7 +166,7 @@ describe("markEdgesFromDegradedSources", () => {
     ];
     const reports = [staleReport("bybit-ws")];
 
-    const result = markEdgesFromDegradedSources(edges, reports);
+    const result = markEdgesByQuality(edges, reports);
     expect(result[0].tradable).toBe(false);
     expect(result[1].tradable).toBe(true);
   });
@@ -144,7 +175,7 @@ describe("markEdgesFromDegradedSources", () => {
     const edges = [{ id: "e1", source: "bybit-ws", tradable: true }];
     const reports = [disconnectedReport("bybit-ws")];
 
-    const result = markEdgesFromDegradedSources(edges, reports);
+    const result = markEdgesByQuality(edges, reports);
     expect(result[0].tradable).toBe(false);
   });
 
@@ -152,7 +183,7 @@ describe("markEdgesFromDegradedSources", () => {
     const edges = [{ id: "e1", source: "bybit-ws", tradable: true }];
     const reports = [healthyReport("bybit-ws")];
 
-    const result = markEdgesFromDegradedSources(edges, reports);
+    const result = markEdgesByQuality(edges, reports);
     expect(result[0].tradable).toBe(true);
   });
 
@@ -160,7 +191,7 @@ describe("markEdgesFromDegradedSources", () => {
     const edges = [{ id: "e1", source: "bybit-ws", tradable: true }];
     const reports = [degradedReport("bybit-ws")];
 
-    const result = markEdgesFromDegradedSources(edges, reports, "DEGRADED");
+    const result = markEdgesByQuality(edges, reports, "DEGRADED");
     expect(result[0].tradable).toBe(false);
   });
 
@@ -168,7 +199,7 @@ describe("markEdgesFromDegradedSources", () => {
     const edges = [{ id: "e1", source: "bybit-ws", tradable: true }];
     const reports = [staleReport("bybit-ws")];
 
-    markEdgesFromDegradedSources(edges, reports);
+    markEdgesByQuality(edges, reports);
     expect(edges[0].tradable).toBe(true);
   });
 
@@ -176,7 +207,7 @@ describe("markEdgesFromDegradedSources", () => {
     const edges = [{ id: "e1", source: "unknown-source", tradable: true }];
     const reports = [staleReport("bybit-ws")];
 
-    const result = markEdgesFromDegradedSources(edges, reports);
+    const result = markEdgesByQuality(edges, reports);
     expect(result[0].tradable).toBe(true);
   });
 });

@@ -138,11 +138,11 @@ describe("computeDataQualityScore", () => {
     const degraded = computeDataQualityScore({
       ...healthyMetrics(),
       exchangeStatus: "degraded",
-    } as DataQualityMetrics);
+    });
     const maintenance = computeDataQualityScore({
       ...healthyMetrics(),
       exchangeStatus: "maintenance",
-    } as DataQualityMetrics);
+    });
     expect(degraded).toBeGreaterThan(maintenance);
   });
 
@@ -155,7 +155,7 @@ describe("computeDataQualityScore", () => {
       wsRestConsistent: false,
       rpcHealthy: false,
       exchangeStatus: "offline",
-    } as DataQualityMetrics);
+    });
     expect(worst).toBeGreaterThanOrEqual(0);
     expect(worst).toBeLessThanOrEqual(1);
   });
@@ -229,6 +229,16 @@ describe("deriveDataQualityState", () => {
     const score = computeDataQualityScore(m);
     expect(deriveDataQualityState(score, m)).toBe("DEGRADED");
   });
+
+  test("degraded exchange status alone -> DEGRADED", () => {
+    const m: DataQualityMetrics = {
+      ...healthyMetrics(),
+      exchangeStatus: "degraded",
+    };
+    const score = computeDataQualityScore(m);
+    expect(score).toBeGreaterThan(0.9);
+    expect(deriveDataQualityState(score, m)).toBe("DEGRADED");
+  });
 });
 
 describe("evaluateDataQuality", () => {
@@ -254,5 +264,22 @@ describe("evaluateDataQuality", () => {
     const report = evaluateDataQuality(m, 1_700_000_000_000);
     expect(report.state).toBe("STALE");
     expect(report.reason).toContain("staleness");
+  });
+
+  test("DEGRADED report reason names the failing component", () => {
+    const m = { ...healthyMetrics(), latencyMs: 4_000 };
+    const report = evaluateDataQuality(m, 1_700_000_000_000);
+    expect(report.state).toBe("DEGRADED");
+    expect(report.reason).toContain("latency");
+  });
+
+  test("DEGRADED report reason names exchange status", () => {
+    const m: DataQualityMetrics = {
+      ...healthyMetrics(),
+      exchangeStatus: "degraded",
+    };
+    const report = evaluateDataQuality(m, 1_700_000_000_000);
+    expect(report.state).toBe("DEGRADED");
+    expect(report.reason).toContain("exchange status");
   });
 });

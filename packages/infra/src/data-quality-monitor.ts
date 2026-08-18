@@ -129,8 +129,8 @@ export class DataQualityMonitor {
   }
 
   /**
-   * Returns true when the given source is tradable (HEALTHY or DEGRADED).
-   * STALE and DISCONNECTED sources are non-tradable.
+   * Returns true when the given source is tradable. Only HEALTHY sources are
+   * tradable; DEGRADED, STALE, and DISCONNECTED sources are non-tradable.
    */
   isSourceTradable(source: string): boolean {
     const report = this.sources.get(source)?.report;

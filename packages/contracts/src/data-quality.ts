@@ -238,7 +238,8 @@ export function computeDataQualityScore(
  * - DISCONNECTED: exchange status is neither "online" nor "degraded", or RPC
  *   is unhealthy AND staleness exceeds the max threshold.
  * - STALE: staleness exceeds the max threshold, or score < 0.3.
- * - DEGRADED: score < 0.7, or any individual component is below 0.5.
+ * - DEGRADED: score < 0.7, any individual component is below 0.5, or the
+ *   exchange reports a "degraded" status.
  * - HEALTHY: all other cases (score >= 0.7 and no disqualifying conditions).
  */
 export function deriveDataQualityState(
@@ -269,7 +270,8 @@ export function deriveDataQualityState(
     gaps < 0.5 ||
     !metrics.wsRestConsistent;
 
-  const isDegraded = score < 0.7 || hasWeakComponent;
+  const isDegraded =
+    score < 0.7 || hasWeakComponent || metrics.exchangeStatus === "degraded";
 
   if (isDegraded) return "DEGRADED";
 
@@ -328,9 +330,17 @@ export function evaluateDataQuality(
         ? `staleness ${metrics.stalenessMs}ms exceeds max ${thresholds.stalenessMaxMs}ms`
         : `score ${score.toFixed(3)} below 0.3 threshold`;
   } else if (state === "DEGRADED") {
+    const { latency, staleness, gaps } = computeQualityComponents(
+      metrics,
+      thresholds,
+    );
     const parts: string[] = [];
     if (score < 0.7) parts.push(`score ${score.toFixed(3)}`);
+    if (latency < 0.5) parts.push("latency");
+    if (staleness < 0.5) parts.push("staleness");
+    if (gaps < 0.5) parts.push("gaps");
     if (!metrics.wsRestConsistent) parts.push("WS/REST inconsistent");
+    if (metrics.exchangeStatus === "degraded") parts.push("exchange status degraded");
     reason = parts.length > 0 ? parts.join("; ") : undefined;
   }
 
@@ -353,7 +363,7 @@ export const STATE_RULES: Record<
   { tradable: boolean; canGenerateSignals: boolean }
 > = {
   HEALTHY: { tradable: true, canGenerateSignals: true },
-  DEGRADED: { tradable: true, canGenerateSignals: false },
+  DEGRADED: { tradable: false, canGenerateSignals: false },
   STALE: { tradable: false, canGenerateSignals: false },
   DISCONNECTED: { tradable: false, canGenerateSignals: false },
 };

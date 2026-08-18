@@ -187,13 +187,13 @@ describe("DataQualityMonitor", () => {
     expect(alerts).toHaveLength(1);
   });
 
-  test("isSourceTradable returns true for HEALTHY and DEGRADED", () => {
+  test("isSourceTradable returns true only for HEALTHY", () => {
     const monitor = new DataQualityMonitor();
     monitor.evaluate(healthyMetrics(), 1_000);
     expect(monitor.isSourceTradable("bybit-ws-linear")).toBe(true);
 
     monitor.evaluate(degradedMetrics(), 2_000);
-    expect(monitor.isSourceTradable("bybit-ws-linear")).toBe(true);
+    expect(monitor.isSourceTradable("bybit-ws-linear")).toBe(false);
   });
 
   test("isSourceTradable returns false for STALE and DISCONNECTED", () => {
