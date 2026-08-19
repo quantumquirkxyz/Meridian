@@ -50,7 +50,7 @@ export function runLoop(options: {
   const shouldStop = definition.stoppingCriterion.evaluate(context);
   if (shouldStop) {
     const reasonCodes: AuditReasonCode[] = [
-      "TRANSITION_BLOCKED",
+      "LOOP_STOPPED",
       definition.stoppingCriterion.reasonCode,
     ];
     const eventInput: AuditRecordInput = {

@@ -709,3 +709,94 @@ describe("Cycle IDs are unique", () => {
     expect(c1.cycleId).not.toBe(c2.cycleId);
   });
 });
+
+// ── Resume halted loop (S3 review fix) ──────────────────────────────────
+
+describe("LoopEngine.resumeLoop (S3)", () => {
+  test("resumes a halted loop so it runs again in the next cycle", () => {
+    const audit = newAudit();
+    const engine = new LoopEngine({
+      loops: defaultLoopDefinitions(),
+      audit,
+      now: () => FIXED_TS,
+    });
+
+    // First cycle: data halts.
+    engine.runCycle({
+      timestampMs: FIXED_TS,
+      systemInputs: { disconnectedSources: 2, totalSources: 2 },
+    });
+    expect(engine.loopState("data").stopped).toBe(true);
+
+    // Resume the data loop.
+    engine.resumeLoop("data", { timestampMs: FIXED_TS + 1_000 });
+    expect(engine.loopState("data").stopped).toBe(false);
+    expect(engine.loopState("data").stoppedReason).toBeUndefined();
+
+    // Second cycle: data runs again.
+    const cycle2 = engine.runCycle({
+      timestampMs: FIXED_TS + 2_000,
+      loopWork: {
+        data: () => ({ normalizedMarketData: { mid: 100 } }),
+      },
+    });
+    expect(cycle2.completed).toBe(true);
+    expect(cycle2.loopOutputs[0].loopName).toBe("data");
+  });
+
+  test("resumeLoop records an audit event", () => {
+    const audit = newAudit();
+    const engine = new LoopEngine({
+      loops: defaultLoopDefinitions(),
+      audit,
+      now: () => FIXED_TS,
+    });
+
+    engine.runCycle({
+      timestampMs: FIXED_TS,
+      systemInputs: { disconnectedSources: 1, totalSources: 1 },
+    });
+
+    const eventsBefore = audit.count();
+    engine.resumeLoop("data", { timestampMs: FIXED_TS + 500 });
+    const eventsAfter = audit.count();
+
+    expect(eventsAfter).toBe(eventsBefore + 1);
+    const resumeEvent = audit.last();
+    expect(resumeEvent?.actor).toBe("loop-data");
+    expect(resumeEvent?.reasonCodes).toContain("TRANSITION_ALLOWED");
+    expect((resumeEvent?.data as Record<string, unknown>)?.action).toBe(
+      "resumed",
+    );
+  });
+
+  test("resumeLoop is a no-op for a loop that is already running", () => {
+    const audit = newAudit();
+    const engine = new LoopEngine({
+      loops: defaultLoopDefinitions(),
+      audit,
+      now: () => FIXED_TS,
+    });
+
+    const eventsBefore = audit.count();
+    engine.resumeLoop("data", { timestampMs: FIXED_TS });
+    const eventsAfter = audit.count();
+
+    // No audit event should be recorded for a no-op resume.
+    expect(eventsAfter).toBe(eventsBefore);
+    expect(engine.loopState("data").stopped).toBe(false);
+  });
+
+  test("resumeLoop throws for an unknown loop name", () => {
+    const audit = newAudit();
+    const engine = new LoopEngine({
+      loops: defaultLoopDefinitions(),
+      audit,
+      now: () => FIXED_TS,
+    });
+
+    expect(() => engine.resumeLoop("nonexistent" as LoopName)).toThrow(
+      "unknown loop: nonexistent",
+    );
+  });
+});

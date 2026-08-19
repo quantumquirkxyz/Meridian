@@ -53,7 +53,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "data-quality",
         reason: "All data sources are disconnected or stale",
-        reasonCode: "RECONCILIATION_OK",
+        reasonCode: "DATA_SOURCE_HALTED",
         evaluate: (ctx) => {
           const disconnected = ctx.disconnectedSources as number | undefined;
           const total = ctx.totalSources as number | undefined;
@@ -76,7 +76,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "graph-stale",
         reason: "Graph has not been updated within the staleness threshold",
-        reasonCode: "RECONCILIATION_OK",
+        reasonCode: "GRAPH_STALE",
         evaluate: (ctx) => {
           const stale = ctx.graphStale as boolean | undefined;
           return stale === true;
@@ -112,7 +112,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "max-iterations",
         reason: "Agent review exceeded the maximum debate rounds",
-        reasonCode: "TRANSITION_BLOCKED",
+        reasonCode: "LOOP_STOPPED",
         evaluate: (ctx) => {
           const rounds = ctx.debateRounds as number | undefined;
           const maxRounds = ctx.maxDebateRounds as number | undefined;
@@ -135,7 +135,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "risk-exceeded",
         reason: "Daily loss limit or exposure limit breached",
-        reasonCode: "TRANSITION_BLOCKED",
+        reasonCode: "LOOP_STOPPED",
         evaluate: (ctx) => {
           const breached = ctx.riskLimitBreached as boolean | undefined;
           return breached === true;
@@ -153,7 +153,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "execution-failed",
         reason: "Too many consecutive execution failures",
-        reasonCode: "TRANSITION_BLOCKED",
+        reasonCode: "LOOP_STOPPED",
         evaluate: (ctx) => {
           const failures = ctx.consecutiveFailures as number | undefined;
           const maxFailures = ctx.maxConsecutiveFailures as number | undefined;
@@ -176,7 +176,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "reconciliation-mismatch",
         reason: "Internal state diverges from external state beyond tolerance",
-        reasonCode: "RECONCILIATION_OK",
+        reasonCode: "RECONCILIATION_MISMATCH",
         evaluate: (ctx) => {
           const mismatch = ctx.reconciliationMismatch as boolean | undefined;
           return mismatch === true;
@@ -202,7 +202,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
       stoppingCriterion: {
         type: "custom",
         reason: "Audit log storage capacity exhausted",
-        reasonCode: "TRANSITION_BLOCKED",
+        reasonCode: "LOOP_STOPPED",
         evaluate: (ctx) => {
           const capacity = ctx.auditCapacityExhausted as boolean | undefined;
           return capacity === true;
@@ -214,17 +214,10 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
 
 /**
  * The ordered canonical loop names composing the closed cycle.
+ * Derived from defaultLoopDefinitions() to avoid duplication (S4 review fix).
  */
-export const CANONICAL_LOOP_ORDER: readonly LoopName[] = [
-  "data",
-  "graph",
-  "alpha",
-  "debate",
-  "risk",
-  "execution",
-  "reconciliation",
-  "audit",
-];
+export const CANONICAL_LOOP_ORDER: readonly LoopName[] =
+  defaultLoopDefinitions().map((l) => l.name);
 
 /** Initial state for a loop that has not yet run. */
 function initialLoopState(name: LoopName): LoopState {
@@ -278,6 +271,43 @@ export class LoopEngine {
     return new Map(
       [...this.states.entries()].map(([name, state]) => [name, { ...state }]),
     );
+  }
+
+  /**
+   * Resume a halted loop (S3 review fix). Mirrors the StateGraph's
+   * operator-reset pattern: only the operator (or an equivalent authority)
+   * should be able to resume a loop that hit its stopping criterion.
+   *
+   * Records an audit event so the resume is traceable.
+   */
+  resumeLoop(name: LoopName, options?: { timestampMs?: number }): void {
+    const state = this.states.get(name);
+    if (state === undefined) {
+      throw new Error(`unknown loop: ${name}`);
+    }
+    if (!state.stopped) {
+      return; // already running — no-op
+    }
+    const timestampMs = options?.timestampMs ?? this.now();
+    this.states.set(name, {
+      ...state,
+      stopped: false,
+      stoppedAtMs: undefined,
+      stoppedReason: undefined,
+    });
+    this.audit.record({
+      eventId: `loop-${name}-resumed-${timestampMs}`,
+      timestampMs,
+      action: "STATE_TRANSITION",
+      actor: `loop-${name}`,
+      state: "IDLE",
+      reasonCodes: ["TRANSITION_ALLOWED"],
+      data: {
+        loopName: name,
+        action: "resumed",
+        previousStoppedReason: state.stoppedReason,
+      },
+    });
   }
 
   /**
@@ -381,7 +411,7 @@ export class LoopEngine {
       state: "IDLE",
       reasonCodes: completed
         ? ["TRANSITION_ALLOWED", "CYCLE_COMPLETE"]
-        : ["TRANSITION_BLOCKED", "LOOP_STOPPED"],
+        : ["LOOP_STOPPED"],
       data: {
         cycleId,
         completed,

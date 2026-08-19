@@ -54,6 +54,9 @@ export const AUDIT_REASON_CODES = [
   "GRAPH_EDGE_UPSERTED",
   "DATA_QUALITY_EVALUATED",
   "LOOP_STOPPED",
+  "DATA_SOURCE_HALTED",
+  "GRAPH_STALE",
+  "RECONCILIATION_MISMATCH",
 ] as const;
 
 export type AuditReasonCode = (typeof AUDIT_REASON_CODES)[number];
