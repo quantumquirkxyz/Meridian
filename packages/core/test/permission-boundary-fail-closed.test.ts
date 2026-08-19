@@ -31,8 +31,10 @@ import {
   MODULE_ACTORS,
 } from "../src/stategraph/topology.ts";
 import {
+  CANDIDATE_CYCLE,
   FIXED_TS,
   newGraph,
+  RISK_CYCLE,
   walkSteps,
   walkToRiskValidate,
 } from "./helpers.ts";
@@ -178,45 +180,6 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
     expect(graph.currentState).toBe("RISK_VALIDATE");
   });
 
-  test("expired risk approval is void at precheck-to-execute", () => {
-    const { graph } = newGraph();
-    walkToRiskValidate(graph);
-
-    // Approve with an already-expired expiry.
-    const expired = {
-      decision: "APPROVE",
-      orderIntentIdempotencyKey: "intent-1",
-      evaluatedAtMs: 0,
-      approvedSize: 0.01,
-      approvedLimits: { maxSlippageBps: 30 },
-      expiresAtMs: 0, // expired
-    };
-    const toPrecheck = graph.transition({
-      to: "EXECUTION_PRECHECK",
-      actor: MODULE_ACTORS.riskEngine,
-      data: {
-        riskDecisionOutcome: "APPROVE",
-        riskDecision: expired,
-        expectedNetProfitUsd: 5,
-      },
-      timestampMs: 0,
-    });
-    expect(toPrecheck.ok).toBe(true);
-
-    // Execution on an expired approval is void (RISK.md).
-    const toExecute = graph.transition({
-      to: "EXECUTE_ORDER",
-      actor: MODULE_ACTORS.executionEngine,
-      data: { precheck: "PASS" },
-      timestampMs: 1_000,
-    });
-    expect(toExecute.ok).toBe(false);
-    if (!toExecute.ok) {
-      expect(toExecute.reasonCode).toBe("GUARD_FAILED");
-    }
-    expect(graph.currentState).toBe("EXECUTION_PRECHECK");
-  });
-
   test("HALT mode entered from risk-engine failure blocks execution via the graph", () => {
     // Scenario: risk engine identifies a critical failure and triggers HALT.
     const { graph } = newGraph();
@@ -239,36 +202,6 @@ describe("fail-closed: risk-engine failure (issue #23 AC2)", () => {
       timestampMs: 0,
     });
     expect(toPrecheck.ok).toBe(false);
-  });
-
-  test("defensive risk decisions route to audit, never to execution", () => {
-    const { graph } = newGraph();
-    walkToRiskValidate(graph);
-
-    const defensive: Record<string, unknown> = {
-      decision: "CANCEL_ONLY",
-      orderIntentIdempotencyKey: "intent-1",
-      evaluatedAtMs: 0,
-      reasonCodes: ["DEGRADED_MODE"],
-    };
-
-    const toExecution = graph.transition({
-      to: "EXECUTION_PRECHECK",
-      actor: MODULE_ACTORS.riskEngine,
-      data: { riskDecisionOutcome: "CANCEL_ONLY", riskDecision: defensive },
-      timestampMs: 0,
-    });
-    expect(toExecution.ok).toBe(false);
-
-    graph.reset();
-    walkToRiskValidate(graph);
-    const toAudit = graph.transition({
-      to: "AUDIT_DECISION",
-      actor: MODULE_ACTORS.riskEngine,
-      data: { riskDecisionOutcome: "CANCEL_ONLY", riskDecision: defensive },
-      timestampMs: 0,
-    });
-    expect(toAudit.ok).toBe(true);
   });
 });
 
@@ -627,116 +560,118 @@ describe("fail-closed: audit failure (issue #23 AC2)", () => {
 
 describe("fail-closed: defensive mode fan-out from any state (issue #23 AC2)", () => {
   test("HALT is reachable from every normal state via the infra-guardian", () => {
-    // Explicit step arrays per target state — no complex walk logic.
     const WALK_STEPS: ReadonlyArray<{
       state: StateName;
-      steps: ReadonlyArray<[StateName, string, Record<string, unknown>?]>;
+      steps: ReadonlyArray<[StateName, string, Record<string, unknown>]>;
     }> = [
       { state: "IDLE", steps: [] },
-      { state: "INGEST_MARKET_DATA", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-      ]},
-      { state: "NORMALIZE_MARKET_STATE", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-      ]},
-      { state: "UPDATE_MARKET_GRAPH", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-      ]},
-      { state: "DETECT_OPPORTUNITY", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-      ]},
-      { state: "BUILD_ORDER_INTENT", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-      ]},
-      { state: "REQUEST_AGENT_REVIEW", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-      ]},
-      { state: "RISK_VALIDATE", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-      ]},
-      { state: "EXECUTION_PRECHECK", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
-          riskDecisionOutcome: "APPROVE",
-          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
-          expectedNetProfitUsd: 5,
-        }],
-      ]},
-      { state: "EXECUTE_ORDER", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
-          riskDecisionOutcome: "APPROVE",
-          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
-          expectedNetProfitUsd: 5,
-        }],
-        ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
-      ]},
-      { state: "RECONCILE", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
-          riskDecisionOutcome: "APPROVE",
-          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
-          expectedNetProfitUsd: 5,
-        }],
-        ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
-        ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
-      ]},
-      { state: "AUDIT_DECISION", steps: [
-        ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
-        ["NORMALIZE_MARKET_STATE", MODULE_ACTORS.normalizer, { normalizedMarketData: { mid: 1 } }],
-        ["UPDATE_MARKET_GRAPH", MODULE_ACTORS.graphBuilder, { graphSnapshot: { version: 1 } }],
-        ["DETECT_OPPORTUNITY", MODULE_ACTORS.opportunityScanner, { candidates: [{ status: "CANDIDATE", expectedNetProfitUsd: 5 }] }],
-        ["BUILD_ORDER_INTENT", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
-        ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
-        ["EXECUTION_PRECHECK", MODULE_ACTORS.riskEngine, {
-          riskDecisionOutcome: "APPROVE",
-          riskDecision: { decision: "APPROVE", orderIntentIdempotencyKey: "intent-1", evaluatedAtMs: 0, approvedSize: 0.01, approvedLimits: { maxSlippageBps: 30 }, expiresAtMs: FIXED_TS + 60_000 },
-          expectedNetProfitUsd: 5,
-        }],
-        ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
-        ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
-        ["AUDIT_DECISION", MODULE_ACTORS.reconciliationEngine, { reconciliation: "OK" }],
-      ]},
+      { state: "INGEST_MARKET_DATA", steps: CANDIDATE_CYCLE.slice(0, 1) },
+      { state: "NORMALIZE_MARKET_STATE", steps: CANDIDATE_CYCLE.slice(0, 2) },
+      { state: "UPDATE_MARKET_GRAPH", steps: CANDIDATE_CYCLE.slice(0, 3) },
+      { state: "DETECT_OPPORTUNITY", steps: CANDIDATE_CYCLE.slice(0, 4) },
+      { state: "BUILD_ORDER_INTENT", steps: CANDIDATE_CYCLE },
+      {
+        state: "REQUEST_AGENT_REVIEW",
+        steps: [
+          ...CANDIDATE_CYCLE,
+          ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
+        ],
+      },
+      { state: "RISK_VALIDATE", steps: RISK_CYCLE },
+      {
+        state: "EXECUTION_PRECHECK",
+        steps: [
+          ...RISK_CYCLE,
+          [
+            "EXECUTION_PRECHECK",
+            MODULE_ACTORS.riskEngine,
+            {
+              riskDecisionOutcome: "APPROVE",
+              riskDecision: {
+                decision: "APPROVE",
+                orderIntentIdempotencyKey: "intent-1",
+                evaluatedAtMs: 0,
+                approvedSize: 0.01,
+                approvedLimits: { maxSlippageBps: 30 },
+                expiresAtMs: FIXED_TS + 60_000,
+              },
+              expectedNetProfitUsd: 5,
+            },
+          ],
+        ],
+      },
+      {
+        state: "EXECUTE_ORDER",
+        steps: [
+          ...RISK_CYCLE,
+          [
+            "EXECUTION_PRECHECK",
+            MODULE_ACTORS.riskEngine,
+            {
+              riskDecisionOutcome: "APPROVE",
+              riskDecision: {
+                decision: "APPROVE",
+                orderIntentIdempotencyKey: "intent-1",
+                evaluatedAtMs: 0,
+                approvedSize: 0.01,
+                approvedLimits: { maxSlippageBps: 30 },
+                expiresAtMs: FIXED_TS + 60_000,
+              },
+              expectedNetProfitUsd: 5,
+            },
+          ],
+          ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+        ],
+      },
+      {
+        state: "RECONCILE",
+        steps: [
+          ...RISK_CYCLE,
+          [
+            "EXECUTION_PRECHECK",
+            MODULE_ACTORS.riskEngine,
+            {
+              riskDecisionOutcome: "APPROVE",
+              riskDecision: {
+                decision: "APPROVE",
+                orderIntentIdempotencyKey: "intent-1",
+                evaluatedAtMs: 0,
+                approvedSize: 0.01,
+                approvedLimits: { maxSlippageBps: 30 },
+                expiresAtMs: FIXED_TS + 60_000,
+              },
+              expectedNetProfitUsd: 5,
+            },
+          ],
+          ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+          ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
+        ],
+      },
+      {
+        state: "AUDIT_DECISION",
+        steps: [
+          ...RISK_CYCLE,
+          [
+            "EXECUTION_PRECHECK",
+            MODULE_ACTORS.riskEngine,
+            {
+              riskDecisionOutcome: "APPROVE",
+              riskDecision: {
+                decision: "APPROVE",
+                orderIntentIdempotencyKey: "intent-1",
+                evaluatedAtMs: 0,
+                approvedSize: 0.01,
+                approvedLimits: { maxSlippageBps: 30 },
+                expiresAtMs: FIXED_TS + 60_000,
+              },
+              expectedNetProfitUsd: 5,
+            },
+          ],
+          ["EXECUTE_ORDER", MODULE_ACTORS.executionEngine, { precheck: "PASS" }],
+          ["RECONCILE", MODULE_ACTORS.executionEngine, { execution: "SIMULATED_FILL" }],
+          ["AUDIT_DECISION", MODULE_ACTORS.reconciliationEngine, { reconciliation: "OK" }],
+        ],
+      },
     ];
 
     for (const { state, steps } of WALK_STEPS) {

@@ -9,7 +9,7 @@ import {
 } from "../src/stategraph/topology.ts";
 
 /** Canonical observation steps up to BUILD_ORDER_INTENT. */
-const CANDIDATE_CYCLE: ReadonlyArray<
+export const CANDIDATE_CYCLE: ReadonlyArray<
   [StateName, string, Record<string, unknown>]
 > = [
   ["INGEST_MARKET_DATA", MODULE_ACTORS.marketDataSentinel, { source: "bybit" }],
@@ -27,14 +27,11 @@ const CANDIDATE_CYCLE: ReadonlyArray<
   ],
 ];
 
-/** Shared candidate prefix for the canonical test walks. */
-const CANDIDATE_PREFIX = CANDIDATE_CYCLE;
-
 /** Canonical cycle up to RISK_VALIDATE, the risk-gate entry point. */
-const RISK_CYCLE: ReadonlyArray<
+export const RISK_CYCLE: ReadonlyArray<
   [StateName, string, Record<string, unknown>]
 > = [
-  ...CANDIDATE_PREFIX,
+  ...CANDIDATE_CYCLE,
   ["REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, { orderIntent: {} }],
   ["RISK_VALIDATE", MODULE_ACTORS.agentReview, { agentReview: "PASS" }],
 ];
@@ -63,7 +60,7 @@ export function newGraph(options?: {
 /** Walks a StateGraph through the given steps, expecting each to be allowed. */
 export function walkSteps(
   graph: StateGraph,
-  steps: ReadonlyArray<[StateName, string, Record<string, unknown>?]>,
+  steps: ReadonlyArray<[StateName, string, Record<string, unknown>]>,
   timestampMs = 0,
 ): void {
   for (const [to, actor, data] of steps) {
