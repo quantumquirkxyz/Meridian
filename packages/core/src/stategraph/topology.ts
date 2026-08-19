@@ -221,6 +221,7 @@ export function defaultPermissionRegistry(): PermissionRegistry {
     "TRIGGER_CASH_ONLY",
     "TRIGGER_HALT",
   ]);
+  registry.register("orchestrator", ["OBSERVE_AUDIT", "OBSERVE_STATE", "TRIGGER_HALT"]);
 
   for (const [agentId, permissions] of Object.entries(AGENT_PERMISSIONS)) {
     registry.register(agentId, permissions);
@@ -471,7 +472,8 @@ function recoveryGuard(from: DefensiveState): Transition {
   };
 }
 
-const NORMAL_STATES: readonly StateName[] = [
+/** Phase Zero canonical states. */
+const PHASE_ZERO_STATES: readonly StateName[] = [
   "IDLE",
   "INGEST_MARKET_DATA",
   "NORMALIZE_MARKET_STATE",
@@ -486,10 +488,158 @@ const NORMAL_STATES: readonly StateName[] = [
   "AUDIT_DECISION",
 ];
 
+/** Orchestrator states (issue #25). */
+const ORCHESTRATOR_STATES: readonly StateName[] = [
+  "DEBATING",
+  "RISK_CHECKING",
+  "APPROVED",
+  "REJECTED",
+  "PAPER_EXECUTING",
+  "RECONCILING",
+  "AUDITING",
+];
+
+/** All normal (non-defensive) states. */
+const NORMAL_STATES: readonly StateName[] = [
+  ...PHASE_ZERO_STATES,
+  ...ORCHESTRATOR_STATES,
+];
+
 /**
- * Builds the default graph: canonical flow, reject forks, defensive fan-out
- * from every state, and operator recovery edges. Defensive fan-out keeps
- * `from` as the concrete source so the graph is fully introspectable.
+ * Orchestrator flow transitions (issue #25):
+ *
+ *   BUILD_ORDER_INTENT -> DEBATING -> RISK_CHECKING
+ *     -> APPROVED -> PAPER_EXECUTING -> RECONCILING -> AUDITING -> IDLE
+ *     -> REJECTED -> AUDITING -> IDLE
+ *
+ * plus defensive fan-out from every orchestrator state.
+ */
+function orchestratorTransitions(): Transition[] {
+  return [
+    {
+      id: "build-to-debating",
+      from: "BUILD_ORDER_INTENT",
+      to: "DEBATING",
+      guard: allOf("buildToDebating", [
+        modeAllows("debatingMode", SIGNAL_MODES),
+        requiresData("orderIntentForDebate", "orderIntent"),
+      ]),
+      requiredPermissions: ["PROPOSE_EXECUTION_PLAN"],
+      audit: true,
+    },
+    {
+      id: "debating-to-risk-checking",
+      from: "DEBATING",
+      to: "RISK_CHECKING",
+      guard: allOf("debatingToRiskChecking", [
+        modeAllows("riskCheckingMode", SIGNAL_MODES),
+        requiresData("debateComplete", "debateResult"),
+      ]),
+      requiredPermissions: ["PROPOSE_RISK_REVIEW"],
+      audit: true,
+    },
+    {
+      id: "risk-checking-to-approved",
+      from: "RISK_CHECKING",
+      to: "APPROVED",
+      guard: allOf("riskCheckingToApproved", [
+        allowWhen(
+          "riskApproved",
+          (ctx) =>
+            hasRiskDecision(ctx) &&
+            isExecutableRiskOutcome(ctx.data?.riskDecisionOutcome),
+          "no approved risk decision",
+        ),
+        modeAllows("approvedMode", EXECUTION_MODES),
+      ]),
+      requiredPermissions: ["APPROVE_RISK"],
+      audit: true,
+    },
+    {
+      id: "risk-checking-to-rejected",
+      from: "RISK_CHECKING",
+      to: "REJECTED",
+      guard: allowWhen(
+        "riskRejected",
+        (ctx) =>
+          hasRiskDecision(ctx) &&
+          !isExecutableRiskOutcome(ctx.data?.riskDecisionOutcome),
+        "risk decision is not an approval",
+      ),
+      requiredPermissions: ["APPROVE_RISK"],
+      audit: true,
+    },
+    {
+      id: "approved-to-paper-executing",
+      from: "APPROVED",
+      to: "PAPER_EXECUTING",
+      guard: allOf("approvedToPaperExecuting", [
+        requiresData("approvedRiskDecision", "riskDecision"),
+        modeAllows("paperExecMode", EXECUTION_MODES),
+        allowWhen(
+          "approvalNotExpired",
+          (ctx) => {
+            const decision = ctx.data?.riskDecision;
+            if (!isRiskDecision(decision) || !("expiresAtMs" in decision)) {
+              return false;
+            }
+            return ctx.updatedAtMs < decision.expiresAtMs;
+          },
+          "approval expired",
+        ),
+      ]),
+      requiredPermissions: ["SUBMIT_ORDER"],
+      audit: true,
+    },
+    {
+      id: "paper-executing-to-reconciling",
+      from: "PAPER_EXECUTING",
+      to: "RECONCILING",
+      guard: requiresData("paperExecToReconciling", "execution"),
+      requiredPermissions: ["SUBMIT_ORDER"],
+      audit: true,
+    },
+    {
+      id: "reconciling-to-auditing",
+      from: "RECONCILING",
+      to: "AUDITING",
+      guard: allowWhen(
+        "reconcilingToAuditing",
+        (ctx) => ctx.data?.reconciliation !== undefined,
+        "no reconciliation result",
+      ),
+      requiredPermissions: ["OBSERVE_STATE"],
+      audit: true,
+    },
+    {
+      id: "rejected-to-auditing",
+      from: "REJECTED",
+      to: "AUDITING",
+      guard: requiresData("rejectedToAuditing", "riskDecision"),
+      requiredPermissions: ["APPROVE_RISK"],
+      audit: true,
+    },
+    {
+      id: "auditing-to-idle",
+      from: "AUDITING",
+      to: "IDLE",
+      guard: requiresData("auditingToIdle", "cycleComplete"),
+      requiredPermissions: ["OBSERVE_AUDIT"],
+      audit: true,
+    },
+  ];
+}
+
+/**
+ * Timeout fallback transitions intentionally omitted from the graph topology.
+ * Duplicate from->to keys would overwrite normal flow edges in the StateGraph
+ * Map. Timeouts are handled by the Orchestrator class via the defensive
+ * fan-out (HALT from any state is always available).
+ */
+
+/**
+ * Builds the default graph: canonical flow, reject forks, orchestrator flow,
+ * defensive fan-out from every state, and operator recovery edges.
  */
 export function buildDefaultGraph(): DefaultGraph {
   const nodes: StateNode[] = [...NORMAL_STATES, ...DEFENSIVE_STATES].map(
@@ -501,6 +651,7 @@ export function buildDefaultGraph(): DefaultGraph {
 
   const transitions: Transition[] = [
     ...flowTransitions(),
+    ...orchestratorTransitions(),
     ...NORMAL_STATES.flatMap((source) =>
       DEFENSIVE_STATES.map((defensive) => ({
         ...defensiveGuard(source, defensive),

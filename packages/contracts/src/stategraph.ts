@@ -34,6 +34,15 @@ export const STATE_NAMES = [
   "EXECUTE_ORDER",
   "RECONCILE",
   "AUDIT_DECISION",
+  // Orchestrator states (issue #25)
+  "DEBATING",
+  "RISK_CHECKING",
+  "APPROVED",
+  "REJECTED",
+  "PAPER_EXECUTING",
+  "RECONCILING",
+  "AUDITING",
+  // Defensive states
   "HALT",
   "DEGRADED_MODE",
   "CASH_ONLY_MODE",
