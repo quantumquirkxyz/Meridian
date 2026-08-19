@@ -24,6 +24,8 @@ Deliverables:
 
 ## Alpha — See the market as a graph and measure it (Alpha board)
 
+**Status: COMPLETE** (ADR-0009, Issue #9)
+
 Agents: Market Data Sentinel, Graph Builder, Liquidity & Microstructure, Strategy Research (shadow), Audit (basic), Infrastructure Guardian (basic). No agents with OrderIntent capability.
 
 Subprojects:
@@ -33,7 +35,7 @@ Subprojects:
 - **Alpha.4 Data Quality Scoring**: HEALTHY / DEGRADED / STALE / DISCONNECTED.
 - **Alpha.5 Harness Engineering**: backtest, replay, order book replay, DEX/slippage/gas/funding/latency/partial-fill/API-failure simulators, stress tests, reports.
 
-**Exit criterion:** observes at least one normalized CEX and DEX, functional event bus, versioned graph, candidate routes by net profit, quality scoring, reproducible harness, base observability, no real execution, every hypothesis recorded.
+**Exit criterion (MET):** observes at least one normalized CEX and DEX, functional event bus, versioned graph, candidate routes by net profit, quality scoring, reproducible harness, base observability, no real execution, every hypothesis recorded.
 
 ## Beta — Perceive, decide, and act in a safe mode (Beta board)
 

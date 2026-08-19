@@ -21,3 +21,4 @@ export * from "./audit.ts";
 export * from "./modes.ts";
 export * from "./stategraph.ts";
 export * from "./events.ts";
+export * from "./loop.ts";
