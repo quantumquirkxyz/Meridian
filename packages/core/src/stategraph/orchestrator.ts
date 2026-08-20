@@ -14,7 +14,6 @@ import { StateGraph, type TransitionInput, type TransitionOutcome } from "./stat
  * built on top of the Phase Zero StateGraph. Adds:
  *
  * - Timeout management per state (automatic transition on stall)
- * - Retry policies per transition (with backoff)
  * - Fallback handlers for failed transitions
  * - Kill switch integration (HALT from any state)
  * - Degraded mode coordination
@@ -33,18 +32,6 @@ export interface StateTimeoutConfig {
   state: StateName;
   /** Maximum time (ms) allowed in this state before automatic transition. */
   timeoutMs: number;
-  /** The fallback state to transition to on timeout. */
-  fallbackState: StateName;
-  /** Actor performing the fallback transition. */
-  fallbackActor: string;
-}
-
-/** Configuration for retry behavior on failed transitions. */
-export interface RetryPolicy {
-  /** Maximum number of retry attempts. */
-  maxRetries: number;
-  /** Base delay between retries (ms). Doubled on each retry (exponential backoff). */
-  baseDelayMs: number;
 }
 
 /** Configuration for a fallback handler when a transition fails. */
@@ -70,20 +57,10 @@ export interface OrchestratorOptions {
   audit: AuditLog;
   /** State timeout configurations. */
   stateTimeouts?: readonly StateTimeoutConfig[];
-  /** Retry policy for failed transitions. */
-  retryPolicy?: RetryPolicy;
   /** Fallback configurations for specific transitions. */
   fallbacks?: readonly FallbackConfig[];
   /** Injectable clock; defaults to Date.now. */
   now?: () => number;
-}
-
-/** State of the orchestrator's retry tracking for a specific transition. */
-export interface RetryState {
-  /** Number of retry attempts so far. */
-  attempts: number;
-  /** Timestamp of the last retry attempt. */
-  lastAttemptAtMs: number;
 }
 
 /**
@@ -98,10 +75,8 @@ export class Orchestrator {
   private readonly audit: AuditLog;
   private readonly now: () => number;
   private readonly stateTimeouts: ReadonlyMap<StateName, StateTimeoutConfig>;
-  private readonly retryPolicy: RetryPolicy;
   private readonly fallbackMap: ReadonlyMap<string, FallbackConfig>;
-  private readonly retryStates: Map<string, RetryState> = new Map();
-  private readonly stateEnteredAt: Map<StateName, number> = new Map();
+  private readonly stateEnteredAt = new Map<StateName, number>();
   private killSwitchActive = false;
   private transitionCounter = 0;
 
@@ -110,11 +85,6 @@ export class Orchestrator {
     this.permissions = options.permissions;
     this.audit = options.audit;
     this.now = options.now ?? (() => Date.now());
-    this.retryPolicy = options.retryPolicy ?? {
-      maxRetries: 3,
-      baseDelayMs: 1_000,
-    };
-
     // Build lookup maps.
     this.stateTimeouts = new Map(
       (options.stateTimeouts ?? []).map((config) => [config.state, config]),
@@ -196,7 +166,7 @@ export class Orchestrator {
 
     // 1. Kill switch: no transitions allowed when halted (AC3).
     if (this.killSwitchActive) {
-      const event = this.emit({
+      const event = this.recordAudit({
         input,
         timestampMs,
         reasonCodes: ["TRANSITION_BLOCKED", "KILL_SWITCH_ACTIVE"],
@@ -217,7 +187,7 @@ export class Orchestrator {
     //    from signal detection to execution without DEBATING, RISK_CHECKING,
     //    and APPROVED.
     if (isForbiddenRoute(this.graph.currentState, input.to)) {
-      const event = this.emit({
+      const event = this.recordAudit({
         input,
         timestampMs,
         reasonCodes: ["TRANSITION_BLOCKED", "FORBIDDEN_ROUTE"],
@@ -243,7 +213,7 @@ export class Orchestrator {
         const missing = edge.requiredPermissions.filter(
           (p: Permission) => !this.permissions.has(input.actor, p),
         );
-        const event = this.emit({
+        const event = this.recordAudit({
           input,
           timestampMs,
           reasonCodes: ["TRANSITION_BLOCKED", "PERMISSION_DENIED"],
@@ -268,14 +238,17 @@ export class Orchestrator {
     // 5. Track state entry time for timeout management.
     if (outcome.ok) {
       this.stateEnteredAt.set(outcome.state, timestampMs);
-      this.clearRetryState(this.graph.currentState, input.to);
     } else {
-      // 6. Handle failed transitions: retry and fallback.
-      this.handleFailedTransition(input, outcome, timestampMs);
+      // 6. Handle failed transitions: execute configured fallback if any.
+      const key = transitionKey(this.graph.currentState, input.to);
+      const fallback = this.fallbackMap.get(key);
+      if (fallback !== undefined) {
+        this.executeFallback(fallback, input, timestampMs);
+      }
     }
 
     // 7. Record the orchestrator-level audit event.
-    this.emit({
+    this.recordAudit({
       input,
       timestampMs,
       reasonCodes: outcome.ok
@@ -303,7 +276,7 @@ export class Orchestrator {
   activateKillSwitch(actor: string, reason: string): AuditEvent {
     if (this.killSwitchActive) {
       // Already halted — emit a no-op audit and return.
-      return this.emit({
+      return this.recordAudit({
         input: { to: "HALT", actor, timestampMs: this.now() },
         timestampMs: this.now(),
         reasonCodes: ["TRANSITION_BLOCKED", "KILL_SWITCH_ACTIVE"],
@@ -325,7 +298,7 @@ export class Orchestrator {
       data: { killSwitch: true, killSwitchReason: reason },
     });
 
-    const event = this.emit({
+    const event = this.recordAudit({
       input: { to: "HALT", actor, timestampMs },
       timestampMs,
       reasonCodes: [
@@ -366,7 +339,7 @@ export class Orchestrator {
       data: { degradedMode: true, degradedReason: reason },
     });
 
-    this.emit({
+    this.recordAudit({
       input: { to: state, actor, timestampMs },
       timestampMs,
       reasonCodes: outcome.ok
@@ -414,7 +387,7 @@ export class Orchestrator {
     this.killSwitchActive = true;
     const outcome = this.graph.transition({
       to: "HALT",
-      actor: timeoutConfig.fallbackActor,
+      actor: "orchestrator",
       timestampMs,
       data: {
         timeoutTriggered: true,
@@ -428,10 +401,10 @@ export class Orchestrator {
       this.stateEnteredAt.set(outcome.state, timestampMs);
     }
 
-    return this.emit({
+    return this.recordAudit({
       input: {
         to: "HALT",
-        actor: timeoutConfig.fallbackActor,
+        actor: "orchestrator",
         timestampMs,
       },
       timestampMs,
@@ -449,27 +422,6 @@ export class Orchestrator {
         outcome: outcome.ok ? "timeout-halt-succeeded" : "timeout-halt-failed",
       },
     });
-  }
-
-  /**
-   * Handles a failed transition: manages retry logic and fallback.
-   */
-  private handleFailedTransition(
-    input: TransitionInput,
-    outcome: TransitionOutcome,
-    timestampMs: number,
-  ): void {
-    const key = transitionKey(this.graph.currentState, input.to);
-
-    // Check for configured fallback.
-    const fallback = this.fallbackMap.get(key);
-    if (fallback !== undefined) {
-      this.executeFallback(fallback, input, timestampMs);
-      return;
-    }
-
-    // Apply retry logic.
-    this.applyRetry(key, input, timestampMs);
   }
 
   /**
@@ -496,7 +448,7 @@ export class Orchestrator {
       this.stateEnteredAt.set(fallbackOutcome.state, timestampMs);
     }
 
-    this.emit({
+    this.recordAudit({
       input: {
         to: fallback.fallbackState,
         actor: fallback.fallbackActor,
@@ -516,65 +468,8 @@ export class Orchestrator {
     });
   }
 
-  /**
-   * Applies retry logic for a failed transition. Retries with exponential
-   * backoff up to the maximum retry count.
-   */
-  private applyRetry(
-    key: string,
-    input: TransitionInput,
-    timestampMs: number,
-  ): void {
-    const retryState = this.retryStates.get(key) ?? {
-      attempts: 0,
-      lastAttemptAtMs: 0,
-    };
-
-    if (retryState.attempts >= this.retryPolicy.maxRetries) {
-      // Max retries exceeded — emit audit and give up.
-      this.emit({
-        input,
-        timestampMs,
-        reasonCodes: ["TRANSITION_BLOCKED", "MAX_RETRIES_EXCEEDED"],
-        data: {
-          from: this.graph.currentState,
-          to: input.to,
-          retryAttempts: retryState.attempts,
-          maxRetries: this.retryPolicy.maxRetries,
-        },
-      });
-      return;
-    }
-
-    // Record retry attempt.
-    this.retryStates.set(key, {
-      attempts: retryState.attempts + 1,
-      lastAttemptAtMs: timestampMs,
-    });
-
-    this.emit({
-      input,
-      timestampMs,
-      reasonCodes: ["TRANSITION_BLOCKED", "RETRY_QUEUED"],
-      data: {
-        from: this.graph.currentState,
-        to: input.to,
-        retryAttempt: retryState.attempts + 1,
-        maxRetries: this.retryPolicy.maxRetries,
-        nextRetryDelayMs:
-          this.retryPolicy.baseDelayMs *
-          Math.pow(2, retryState.attempts),
-      },
-    });
-  }
-
-  /** Clears retry state for a transition (called on success). */
-  private clearRetryState(from: StateName, to: StateName): void {
-    this.retryStates.delete(transitionKey(from, to));
-  }
-
   /** Emits an audit event for orchestrator-level actions. */
-  private emit(options: {
+  private recordAudit(options: {
     input: TransitionInput;
     timestampMs: number;
     reasonCodes: readonly string[];
@@ -642,32 +537,22 @@ export function defaultStateTimeouts(): readonly StateTimeoutConfig[] {
     {
       state: "DEBATING",
       timeoutMs: 30_000,
-      fallbackState: "AUDITING",
-      fallbackActor: "orchestrator",
     },
     {
       state: "RISK_CHECKING",
       timeoutMs: 15_000,
-      fallbackState: "AUDITING",
-      fallbackActor: "orchestrator",
     },
     {
       state: "APPROVED",
       timeoutMs: 10_000,
-      fallbackState: "AUDITING",
-      fallbackActor: "orchestrator",
     },
     {
       state: "PAPER_EXECUTING",
       timeoutMs: 30_000,
-      fallbackState: "AUDITING",
-      fallbackActor: "orchestrator",
     },
     {
       state: "RECONCILING",
       timeoutMs: 15_000,
-      fallbackState: "AUDITING",
-      fallbackActor: "orchestrator",
     },
   ];
 }

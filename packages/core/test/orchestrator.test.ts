@@ -42,7 +42,6 @@ function newOrchestrator(
     permissions,
     audit,
     stateTimeouts: defaultStateTimeouts(),
-    retryPolicy: { maxRetries: 3, baseDelayMs: 1_000 },
     fallbacks: defaultFallbacks(),
     now: () => FIXED_TS,
     ...overrides,
