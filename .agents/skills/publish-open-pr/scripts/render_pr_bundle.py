@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+DEFAULT_MILESTONE = None
 TRIAGE_LABELS = {
     "needs-triage",
     "needs-info",
@@ -432,6 +433,7 @@ def main() -> int:
     parser.add_argument("--output", help="Write the rendered body to this path instead of stdout.")
     parser.add_argument("--title-output", help="Write the rendered title to this path instead of stdout.")
     parser.add_argument("--metadata-output", help="Write PR metadata JSON to this path.")
+    parser.add_argument("--default-milestone", default=DEFAULT_MILESTONE)
     args = parser.parse_args()
 
     branch = run_git(["branch", "--show-current"]) or ""
@@ -451,9 +453,9 @@ def main() -> int:
     current_login = load_current_login()
     reviewers, warnings = resolve_reviewers(repo_name, current_login)
 
-    milestone = str(issue_meta.get("milestone")) if issue_meta and issue_meta.get("milestone") else None
-    if issue_ref and milestone is None:
-        warnings.append("No linked issue milestone could be resolved; PR creation should omit --milestone instead of defaulting.")
+    milestone = (
+        str(issue_meta.get("milestone")) if issue_meta and issue_meta.get("milestone") else args.default_milestone
+    )
     labels = derive_pr_labels(issue_meta)
     metadata = {
         "title": rendered_title,

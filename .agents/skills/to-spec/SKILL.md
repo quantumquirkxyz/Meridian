@@ -17,6 +17,7 @@ outputs:
 dependencies:
   - context-pack
   - capability-router
+  - work-item-router
   - grill-with-docs
   - domain-modeling
 sideEffects:
@@ -25,9 +26,10 @@ stopCondition: The spec is published and the implementation decisions are explic
 risk: medium
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a spec (you may know this document as a PRD). Do NOT interview the user â€” just synthesize what you already know. Write the published issue body in English.
+This skill takes the current conversation context and codebase understanding and produces a spec (you may know this document as a PRD). Do NOT interview the user â€” just synthesize what you already know. Write the published issue body in English, and use the repo's Quant vocabulary consistently.
 
 The issue tracker and triage label vocabulary should have been provided to you â€” run `/setup-matt-pocock-skills` if not.
+The canonical work-item metadata shape is documented in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md); follow it for labels, milestone, project, fields, and todo/acceptance structure.
 
 ## Contract
 
@@ -35,6 +37,7 @@ The issue tracker and triage label vocabulary should have been provided to you â
 - Output: one published spec issue plus the implementation and testing decisions that make the work buildable.
 - Scope: synthesize what is already known; do not reopen discovery interviews.
 - Rule: prefer one seam, and make any seam choice explicit before publishing.
+- Rule: frame the work in terms of Quant concepts where relevant: context, harness, loop, graph, data plane, execution plane, observability, and safety boundaries.
 - Rule: if the spec cannot be made concrete enough to hand off, stop and say what is still missing.
 
 ## Process
@@ -45,7 +48,7 @@ The issue tracker and triage label vocabulary should have been provided to you â
 
 Check with the user that these seams match their expectations.
 
-3. Write the spec using the template below, then publish it to the project issue tracker. Apply the repo defaults from `docs/agents/issue-tracker.md`: for this repo that means milestone `MVP Alpha`, project `MVP Alpha - ARIES`, and labels `spec` plus `ready-for-agent` - no need for additional triage. The entire published issue, including headings, user stories, and notes, must be in English.
+3. Write the spec using the template below, then publish it to the project issue tracker. Apply the repo defaults from `docs/agents/issue-tracker.md`: for this repo that means labels `spec` plus `ready-for-agent` - no need for additional triage. The entire published issue, including headings, user stories, and notes, must be in English. Also apply the work-item format defaults: set the milestone when one is known, add the issue to the matching project board when relevant, and keep the todo/acceptance content aligned with the metadata.
 
 ## Completion criteria
 
@@ -56,6 +59,13 @@ Check with the user that these seams match their expectations.
 - the spec is published with the tracker defaults applied
 
 <spec-template>
+
+## Metadata
+
+- Labels: `spec`, `ready-for-agent`
+- Milestone: <phase milestone or none>
+- Project: <project board or none>
+- Fields: Work Type = Epic; Repo Scope = <scope>; Phase = Ready for build; Priority = <priority>; Risk = <risk>
 
 ## Problem Statement
 

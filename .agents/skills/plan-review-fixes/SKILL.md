@@ -24,6 +24,7 @@ risk: medium
 ## Overview
 
 Turn a review report into a small, traceable repair plan. This skill does not edit code; it preserves review signal, organizes the work, and writes a PR comment that implement-review-fixes can execute later.
+When a PR already has linked-issue metadata, keep the plan aligned with the canonical work-item format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md): preserve the linked issue's labels and milestone as the source of truth, and do not invent new tracker metadata in the comment.
 
 ## Workflow
 

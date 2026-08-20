@@ -1,6 +1,6 @@
 ---
 name: publish-open-pr
-description: Use when the user wants to publish a finished subissue as an open GitHub pull request from an already-prepared issue branch.
+description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/spec-audit` or `/ticket-audit`, as an open GitHub pull request from an already-prepared issue branch.
 version: 1
 capabilities:
   - publish-pr
@@ -22,9 +22,10 @@ risk: medium
 
 # Publish Open PR
 
-Publish one completed subissue from a local checkout to GitHub as an open pull request.
-Keep the diff tight and leave a reviewer with a short body that explains what changed and why.
+Publish one completed Quant subissue, including a corrective subissue, from a local checkout to GitHub as an open pull request.
+Keep the diff tight and leave a reviewer with a short body that explains what changed and why in Quant terms.
 Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-prepared branch.
+The linked issue's metadata is the source of truth for labels and milestone. Follow [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when carrying metadata into the PR.
 
 ## Workflow
 
@@ -51,8 +52,8 @@ Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-
       - assignee: the current GitHub user
       - reviewers: the other human collaborator, and any additional reviewers explicitly resolved by the bundle
       - labels: the linked issue's non-triage labels
-      - milestone: only the linked issue milestone when the ticket already provides one; do not invent a repo default
-    - Use `gh pr create --title "<title>" --body-file "<body-file>" --assignee "@me"` without `--draft`, add `--milestone "<milestone>"` only when the metadata bundle resolved one, then add repeated `--label` and `--reviewer` flags from the metadata bundle.
+      - milestone: the linked issue milestone, if one is set
+    - Use `gh pr create --title "<title>" --body-file "<body-file>" --assignee "@me" --milestone "<milestone>"` without `--draft`, then add repeated `--label` and `--reviewer` flags from the metadata bundle.
    - Use a title that matches the subissue and the actual diff.
 6. Hand off to the next workflow.
    - After the PR opens, the next workflow is `review-pr`, then `ship-subissue` for merge/close.
@@ -62,11 +63,11 @@ Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-
 - Never create a draft PR.
 - Never open a PR before the branch is pushed.
 - Never guess at issue traceability when the reference is not already clear.
-- Never fall back to a repo-wide default milestone such as `MVP Alpha`; if the linked issue does not specify one, omit `--milestone`.
 - Never guess at reviewer handles. If the workflow cannot resolve a required reviewer from repository context, stop and report the missing configuration.
 - Never use a vague title like `Update` or `Misc fixes` unless the diff is genuinely broad and unavoidable.
 - Never create or amend commits here; that belongs to `implement`.
 - Never merge the PR or close the issue here; that belongs to `ship-subissue`.
+- Never override the linked issue's labels or milestone unless the user explicitly asked for a metadata change.
 
 ## Failure Modes
 

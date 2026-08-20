@@ -1,6 +1,6 @@
 ---
 name: ship-subissue
-description: Use when a finished subissue already has a clean PR and you need to merge it, mark it as completed, and close the linked issue if GitHub does not do so automatically.
+description: Use when a finished subissue, including a corrective subissue from `/spec-audit` or `/ticket-audit`, already has a clean PR and you need to merge it, mark it as completed, and close the linked issue if GitHub does not do so automatically.
 version: 1
 capabilities:
   - merge-clean-pr
@@ -23,7 +23,8 @@ risk: medium
 
 # Ship Subissue
 
-Merge one approved subissue PR, mark the subissue as completed, and close out the linked issue when needed.
+Merge one approved Quant subissue PR, including a corrective subissue PR, mark the subissue as completed, and close out the linked issue when needed.
+Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when deciding what metadata to preserve: linked-issue labels and milestone are the source of truth, and the completion note should not introduce conflicting tracker metadata.
 
 ## Workflow
 

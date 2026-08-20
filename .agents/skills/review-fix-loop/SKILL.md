@@ -27,6 +27,7 @@ risk: medium
 ## Overview
 
 Coordinate review, planning, and implementation without diluting any one skill's responsibility. The review remains the measurement instrument; this skill decides whether to plan fixes, implement them, repeat, or hand off to ship-subissue.
+Use the canonical work-item metadata format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) as the source of truth for labels, milestone, and project metadata when preserving the loop state in comments or handoffs.
 
 ## Contract
 
@@ -77,6 +78,7 @@ Track these facts in the working response or PR comments:
 - Whether the last plan was posted.
 - Whether the last implementation completed.
 - Validation commands and results.
+- Any metadata that must stay aligned with the linked issue: labels, milestone, and project fields.
 
 ## Exit Conditions
 

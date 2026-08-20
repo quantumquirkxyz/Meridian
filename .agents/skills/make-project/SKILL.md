@@ -15,7 +15,8 @@ inputs:
 outputs:
   - board url
   - project node id
-dependencies: []
+dependencies:
+  - work-item-router
 sideEffects:
   - create-project
   - write-project-config
@@ -37,13 +38,26 @@ The exact queries and mutations live in [`references/graphql.md`](references/gra
 - Rule: never create a board that already exists under the same title.
 - Rule: item field values are set only after the item is added — you cannot add and update an item in one call.
 
+## Quant context
+
+This repo is **Quant** — a supervised autonomous quantitative system for crypto and Web3, driven by a canonical mathematical model, context engineering, harnesses, loops, and graph orchestration. When creating boards for this project, use domain-appropriate fields:
+
+- **Protocol** — the DeFi protocol involved (Aave, Uniswap, etc.)
+- **Chain** — the settlement network (Ethereum, Polygon, Arbitrum, etc.)
+- **Capital Flow Type** — Deposit, Borrow, Repay, Withdraw, Swap, Transfer
+- **Risk Level** — systemic, credit, counterparty, protocol
+- **Lens Type** — ML model, graph query/analytics, risk signal
+- **Status** — matching the triage labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix
+
+Use the project's domain glossary from `CONTEXT.md` when naming fields and items. Avoid synonyms the glossary explicitly rejects (e.g. use "Capital flow" not "transaction", "Wallet" not "user").
+
 ## Steps
 
 ### 1. Confirm the target
 
 Ask for or confirm:
 
-- **Owner** — which org or user the board belongs to.
+- **Owner** — which org or user the board belongs to (default: `quantumquirkxyz`).
 - **Title** — exact string.
 - **Scope** — which repositories to link, which custom fields and views to create, which items to add, and any field values to set.
 
@@ -96,6 +110,10 @@ Completion: every agreed item is on the board.
 For every agreed (item, field, value) triple, run `update-item-field`. Do this only after step 8 — you cannot add and update an item in the same call.
 
 Completion: every agreed triple is set.
+
+### 9b. Align metadata with issue labels and milestones
+
+When the source item is an issue or PR that already carries labels or a milestone, make sure the board item fields and the issue metadata do not contradict each other. The board item should express the same Work Type, Repo Scope, Phase, Priority, Risk, Sprint, and Release Train story that the issue labels and milestone already imply.
 
 ### 10. Verify and report
 

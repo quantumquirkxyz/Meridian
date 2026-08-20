@@ -43,7 +43,7 @@ A **flow** is a path through the skills. Most paths run along one **main flow**,
 
 The route most work travels. You have an idea and want it built.
 
-1. **`/grill-with-docs`** — sharpen the idea by interview. Start here when you **have a codebase**: it's stateful, retaining what it learns in `CONTEXT.md` and ADRs. (No codebase? Use `/grill-me` — see Standalone. Both run the same `/grilling` primitive; `grill-with-docs` is the one that leaves a paper trail.)
+1. **`/grill-with-docs`** — sharpen the idea by interview. Start here when you **have a codebase** and want the result reflected in `CONTEXT.md`, ADRs, and adjacent durable docs. (No codebase? Use `/grill-me` — see Standalone. Both run the same `/grilling` primitive; `grill-with-docs` is the one that leaves a paper trail.)
 2. **Branch — can you settle every question in conversation?** If a question needs a runnable answer (state, business logic, a UI you have to see), detour through a prototype, bridged by **`/handoff`** in both directions (see Crossing sessions):
    - **`/handoff`** out, then open a fresh session against that file,
    - **`/prototype`** to answer the question with throwaway code,
@@ -91,7 +91,7 @@ Not feature work — upkeep.
 
 Two model-invoked references that run *beneath* the other skills — each the single source of truth for its vocabulary. Reach for them directly when the **words**, not the process, are the problem; or let the skills above pull them in.
 
-- **`/domain-modeling`** — sharpen the project's *domain* language: challenge a fuzzy term, resolve an overloaded word ("account" doing three jobs), record a hard-to-reverse decision as an ADR. It's the active discipline `/grill-with-docs` drives to keep `CONTEXT.md` a clean glossary.
+- **`/domain-modeling`** — sharpen the project's *domain* language: challenge a fuzzy term, resolve an overloaded word, and record a hard-to-reverse decision as an ADR. It's the active discipline `/grill-with-docs` drives to keep `CONTEXT.md` a clean glossary for Quant.
 - **`/codebase-design`** — the deep-module vocabulary (module, interface, depth, seam, adapter, leverage, locality) for designing a module's *shape*: a lot of behaviour behind a small interface at a clean seam. `/tdd` and `/improve-codebase-architecture` both speak it.
 
 ## Crossing sessions
@@ -109,6 +109,8 @@ Off the main flow entirely.
 - **`/plan-review-fixes`** — turn dirty `/code-review` findings into a durable GitHub PR comment headed `Review Fix Plan`. Use it alone when you want a human-readable correction plan before anyone edits code.
 - **`/implement-review-fixes`** — read the latest `Review Fix Plan` PR comment, apply the scoped corrections through `/implement`, validate locally, and leave an implementation note. Use it alone when the plan already exists.
 - **`/review-fix-loop`** — orchestrate the review repair cycle: `/code-review`, plan, implement, then review again until clean or blocked. Use it when a PR should be driven to a clean review before `/ship-subissue`.
+- **`/spec-audit`** — audit whether a parent spec with subissues is truly complete. Use it when the user asks if a spec was fully satisfied, whether its tickets/PRs cover every requirement, or whether corrective subissues should be created. It delegates decomposition coverage to `/ticket-audit` and may create corrective subissues only when explicitly allowed.
+- **`/ticket-audit`** — audit whether a ticket or subissue set covers a parent spec. Use it directly when the user only wants the coverage matrix for tickets, without deciding overall spec completion or creating new issues.
 - **`/teach`** — learn a concept over multiple sessions, using the current directory as a stateful workspace.
 - **`/writing-great-skills`** — reference for writing and editing skills well.
 

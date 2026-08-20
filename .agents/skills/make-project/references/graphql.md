@@ -11,7 +11,7 @@ Node ID of the owner the board lives under.
 
 ```graphql
 query {
-  organization(login: "OWNER_LOGIN") { id }
+  organization(login: "quantumquirkxyz") { id }
 }
 ```
 
@@ -23,7 +23,7 @@ Boards owned by an org (or `user` for a personal account).
 
 ```graphql
 query {
-  organization(login: "OWNER_LOGIN") {
+  organization(login: "quantumquirkxyz") {
     projectsV2(first: 50) {
       nodes { id title url }
     }

@@ -26,6 +26,7 @@ risk: medium
 ## Overview
 
 Execute an existing review correction plan. This skill treats the PR comment as the source of truth, applies only scoped corrections, and leaves the PR ready for another review-pr pass.
+When the fix plan references tracker metadata, use [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) so labels, milestone, and project context remain consistent with the linked issue.
 
 ## Workflow
 
@@ -86,3 +87,4 @@ Status: implemented
 - Never broaden scope beyond review findings unless the user explicitly asks.
 - Never merge or close the PR.
 - If implementation changes the intended behavior beyond the original spec, stop and send the PR back through review-pr.
+- Never introduce tracker metadata that conflicts with the linked issue's labels or milestone.
