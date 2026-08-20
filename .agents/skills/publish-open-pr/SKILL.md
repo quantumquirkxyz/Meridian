@@ -1,6 +1,6 @@
 ---
 name: publish-open-pr
-description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/spec-audit` or `/ticket-audit`, as an open GitHub pull request from an already-prepared issue branch.
+description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/spec-audit` or `/ticket-audit`, as an open GitHub pull request from an already-prepared issue branch, with a draft fallback when GitHub rejects the non-draft path.
 version: 1
 capabilities:
   - publish-pr
@@ -16,7 +16,7 @@ dependencies:
 sideEffects:
   - push-branch
   - create-pr
-stopCondition: The prepared branch is pushed and a non-draft PR is open.
+stopCondition: The prepared branch is pushed and a PR is open, preferring non-draft and falling back to draft when needed.
 risk: medium
 ---
 
@@ -54,13 +54,13 @@ The linked issue's metadata is the source of truth for labels and milestone. Fol
       - labels: the linked issue's non-triage labels
       - milestone: the linked issue milestone, if one is set
     - Use `gh pr create --title "<title>" --body-file "<body-file>" --assignee "@me" --milestone "<milestone>"` without `--draft`, then add repeated `--label` and `--reviewer` flags from the metadata bundle.
+    - If GitHub rejects the non-draft PR path with a diff-resolution error for this prepared branch, retry the same PR as `--draft` rather than stopping.
    - Use a title that matches the subissue and the actual diff.
 6. Hand off to the next workflow.
    - After the PR opens, the next workflow is `review-pr`, then `ship-subissue` for merge/close.
 
 ## Guardrails
 
-- Never create a draft PR.
 - Never open a PR before the branch is pushed.
 - Never guess at issue traceability when the reference is not already clear.
 - Never guess at reviewer handles. If the workflow cannot resolve a required reviewer from repository context, stop and report the missing configuration.

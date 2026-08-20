@@ -430,6 +430,11 @@ def main() -> int:
     parser.add_argument("--issue", help="Explicit issue reference such as #72. Overrides auto-detection.")
     parser.add_argument("--validation", help="Additional validation text to include in the body.")
     parser.add_argument("--notes", help="Optional notes or follow-up text.")
+    parser.add_argument(
+        "--allow-draft-fallback",
+        action="store_true",
+        help="Mark the bundle so the publisher may retry as a draft PR when GitHub rejects the open PR path.",
+    )
     parser.add_argument("--output", help="Write the rendered body to this path instead of stdout.")
     parser.add_argument("--title-output", help="Write the rendered title to this path instead of stdout.")
     parser.add_argument("--metadata-output", help="Write PR metadata JSON to this path.")
@@ -465,6 +470,7 @@ def main() -> int:
         "reviewers": reviewers,
         "labels": labels,
         "warnings": warnings,
+        "allowDraftFallback": bool(args.allow_draft_fallback),
     }
 
     if args.title_output:

@@ -34,3 +34,8 @@ Use these responses when the workflow cannot continue cleanly.
 
 - Check whether the branch already has an open PR before creating another one.
 - Reuse the existing PR if it already matches the branch and scope.
+
+## Diff Resolution Error
+
+- If GitHub rejects the non-draft PR path for a prepared branch with a diff-resolution error, retry once as a draft PR.
+- If the draft attempt also fails, stop and report the GitHub error text verbatim.
