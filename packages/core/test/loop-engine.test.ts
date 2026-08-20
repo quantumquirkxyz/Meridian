@@ -18,6 +18,7 @@ import {
   LoopEngine,
 } from "../src/loop/loop-engine.ts";
 import { runLoop } from "../src/loop/loop-runner.ts";
+import { ReconciliationEngine } from "../src/reconciliation/reconciliation-engine.ts";
 
 const FIXED_TS = 1_700_000_000_000;
 
@@ -252,11 +253,26 @@ describe("LoopEngine composes all 8 loops into a closed cycle (AC4)", () => {
       loops: defaultLoopDefinitions(),
       audit,
       now: () => FIXED_TS,
+      reconciliationEngine: new ReconciliationEngine(),
     });
 
     const cycle = engine.runCycle({
       timestampMs: FIXED_TS,
-      systemInputs: { rawMarketData: { test: true } },
+      systemInputs: {
+        rawMarketData: { test: true },
+        reconciliationInternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+        reconciliationExternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+      },
       loopWork: {
         data: () => ({ normalizedMarketData: { mid: 100 }, dataQualityReport: { score: 0.9 } }),
         graph: () => ({ graphSnapshot: { version: 1 } }),
@@ -264,7 +280,6 @@ describe("LoopEngine composes all 8 loops into a closed cycle (AC4)", () => {
         debate: () => ({ reviewedCandidates: [{ id: "opp-1", reviewed: true }] }),
         risk: () => ({ riskDecisions: [{ decision: "APPROVE" }] }),
         execution: () => ({ executionResults: [{ filled: true }] }),
-        reconciliation: () => ({ reconciliationStatus: { ok: true } }),
         audit: () => ({ auditSummary: { totalEvents: 8 } }),
       },
     });
@@ -288,10 +303,25 @@ describe("LoopEngine composes all 8 loops into a closed cycle (AC4)", () => {
       loops: defaultLoopDefinitions(),
       audit,
       now: () => FIXED_TS,
+      reconciliationEngine: new ReconciliationEngine(),
     });
 
     engine.runCycle({
       timestampMs: FIXED_TS,
+      systemInputs: {
+        reconciliationInternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+        reconciliationExternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+      },
       loopWork: {
         data: () => ({ normalizedMarketData: { mid: 100 } }),
         graph: () => ({ graphSnapshot: { version: 1 } }),
@@ -299,7 +329,6 @@ describe("LoopEngine composes all 8 loops into a closed cycle (AC4)", () => {
         debate: () => ({ reviewedCandidates: [] }),
         risk: () => ({ riskDecisions: [] }),
         execution: () => ({ executionResults: [] }),
-        reconciliation: () => ({ reconciliationStatus: { ok: true } }),
         audit: () => ({ auditSummary: {} }),
       },
     });
@@ -338,10 +367,25 @@ describe("LoopEngine composes all 8 loops into a closed cycle (AC4)", () => {
       loops: defaultLoopDefinitions(),
       audit,
       now: () => FIXED_TS,
+      reconciliationEngine: new ReconciliationEngine(),
     });
 
     engine.runCycle({
       timestampMs: FIXED_TS,
+      systemInputs: {
+        reconciliationInternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+        reconciliationExternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+      },
       loopWork: {
         data: () => ({ normalizedMarketData: { mid: 100 } }),
         graph: () => ({ graphSnapshot: { version: 1 } }),
@@ -357,10 +401,6 @@ describe("LoopEngine composes all 8 loops into a closed cycle (AC4)", () => {
         execution: (ctx) => {
           receivedContexts.push({ loop: "execution", context: { ...ctx } });
           return { executionResults: [{ filled: true }] };
-        },
-        reconciliation: (ctx) => {
-          receivedContexts.push({ loop: "reconciliation", context: { ...ctx } });
-          return { reconciliationStatus: { ok: true } };
         },
         audit: (ctx) => {
           receivedContexts.push({ loop: "audit", context: { ...ctx } });
@@ -529,11 +569,25 @@ describe("Loop halts safely when stopping criterion is met (AC2)", () => {
       loops: defaultLoopDefinitions(),
       audit,
       now: () => FIXED_TS,
+      reconciliationEngine: new ReconciliationEngine(),
     });
 
     const cycle = engine.runCycle({
       timestampMs: FIXED_TS,
-      systemInputs: { reconciliationMismatch: true },
+      systemInputs: {
+        reconciliationInternal: {
+          orders: [{ orderId: "o-1", status: "OPEN", quantity: 1, filledQuantity: 0 }],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+        reconciliationExternal: {
+          orders: [],
+          fills: [],
+          positions: [],
+          balances: [],
+        },
+      },
       loopWork: {
         data: () => ({ normalizedMarketData: { mid: 100 } }),
         graph: () => ({ graphSnapshot: { version: 1 } }),

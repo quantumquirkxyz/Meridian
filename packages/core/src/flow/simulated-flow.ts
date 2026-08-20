@@ -17,6 +17,10 @@ import {
   MODULE_ACTORS,
 } from "../stategraph/topology.ts";
 import { RiskEngine } from "../risk/risk-gate.ts";
+import {
+  ReconciliationEngine,
+  type ReconciliationSnapshot,
+} from "../reconciliation/reconciliation-engine.ts";
 
 /**
  * Simulated opportunity flow (issue #13 AC4, the Phase Zero exit criterion):
@@ -61,6 +65,7 @@ export interface SimulatedFlowResult {
 export interface SimulatedFlowOptions {
   graph: StateGraph;
   riskGate: RiskEngine;
+  reconciliationEngine?: ReconciliationEngine;
   scenario: SimulatedFlowScenario;
   timestampMs: number;
 }
@@ -95,7 +100,13 @@ function isExecutableRiskDecision(
 export function runSimulatedOpportunityFlow(
   options: SimulatedFlowOptions,
 ): SimulatedFlowResult {
-  const { graph, riskGate, scenario, timestampMs } = options;
+  const {
+    graph,
+    riskGate,
+    reconciliationEngine,
+    scenario,
+    timestampMs,
+  } = options;
   const audit = graph.auditLog;
   const path: StateName[] = ["IDLE"];
   const transitions: TransitionOutcome[] = [];
@@ -315,6 +326,84 @@ export function runSimulatedOpportunityFlow(
         approvedLimits: riskDecision.approvedLimits,
       },
     );
+    const asset = orderIntent.symbol.split("/")[1] ?? "USDT";
+    const quantity = riskDecision.approvedSize ?? orderIntent.quantity;
+    const reconciliationInput = {
+      internal: {
+        orders: [
+          {
+            orderId: orderIntent.idempotencyKey,
+            status: "CLOSED",
+            quantity,
+            filledQuantity: quantity,
+          },
+        ],
+        fills: [
+          {
+            fillId: `fill-${scenario.id}`,
+            orderId: orderIntent.idempotencyKey,
+            quantity,
+            price: orderIntent.price,
+          },
+        ],
+        positions: [
+          {
+            symbol: orderIntent.symbol,
+            quantity,
+            averagePrice: orderIntent.price,
+          },
+        ],
+        balances: [{ asset, available: 1_000, locked: 0 }],
+      },
+      external: {
+        orders: [
+          {
+            orderId: orderIntent.idempotencyKey,
+            status: "CLOSED",
+            quantity,
+            filledQuantity: quantity,
+          },
+        ],
+        fills: [
+          {
+            fillId: `fill-${scenario.id}`,
+            orderId: orderIntent.idempotencyKey,
+            quantity,
+            price: orderIntent.price,
+          },
+        ],
+        positions: [
+          {
+            symbol: orderIntent.symbol,
+            quantity,
+            averagePrice: orderIntent.price,
+          },
+        ],
+        balances: [{ asset, available: 1_000, locked: 0 }],
+      },
+      reconciledAtMs: timestampMs,
+    } satisfies {
+      internal: ReconciliationSnapshot;
+      external: ReconciliationSnapshot;
+      reconciledAtMs: number;
+    };
+    const reconciliationReport =
+      reconciliationEngine?.reconcile(reconciliationInput) ?? {
+        reconciledAtMs: timestampMs,
+        unresolved: false,
+        severity: "NONE" as const,
+        defensiveMode: "NORMAL" as const,
+        reasonCodes: ["RECONCILIATION_OK"] as const,
+        orphanOrders: [],
+        missingFills: [],
+        balanceMismatches: [],
+        positionMismatches: [],
+        blocksNewPositions: false,
+      };
+    const reconciliationReasonCodes: AuditReasonCode[] =
+      reconciliationReport.unresolved
+        ? ["RECONCILIATION_MISMATCH"]
+        : ["RECONCILIATION_OK"];
     step(
       "RECONCILE",
       MODULE_ACTORS.executionEngine,
@@ -322,14 +411,19 @@ export function runSimulatedOpportunityFlow(
         execution: "SIMULATED_FILL",
         orderIntent,
         executedSize: riskDecision.approvedSize,
+        reconciliationStatus: reconciliationReport,
       },
-      ["EXECUTION_SIMULATED"],
+      ["EXECUTION_SIMULATED", ...reconciliationReasonCodes],
     );
     step(
       "AUDIT_DECISION",
       MODULE_ACTORS.reconciliationEngine,
-      { reconciliation: "OK", orderIntent },
-      ["RECONCILIATION_OK"],
+      {
+        reconciliation: reconciliationReport.unresolved ? "FAILED" : "OK",
+        reconciliationStatus: reconciliationReport,
+        orderIntent,
+      },
+      reconciliationReport.reasonCodes,
     );
     step("IDLE", MODULE_ACTORS.audit, { cycleComplete: true }, [
       "CYCLE_COMPLETE",

@@ -8,6 +8,10 @@ import type {
 } from "@agenttrading/contracts";
 import type { AuditLog } from "../stategraph/audit-log.ts";
 import { runLoop, type LoopWork } from "./loop-runner.ts";
+import {
+  ReconciliationEngine,
+  type ReconciliationSnapshot,
+} from "../reconciliation/reconciliation-engine.ts";
 
 /**
  * LoopEngine: the deterministic orchestrator for Beta.1 Loop Engineering
@@ -28,6 +32,8 @@ export interface LoopEngineOptions {
   audit: AuditLog;
   /** Injectable clock; defaults to Date.now. */
   now?: () => number;
+  /** Optional reconciliation engine used by the canonical reconciliation loop. */
+  reconciliationEngine?: ReconciliationEngine;
 }
 
 /**
@@ -178,8 +184,11 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
         reason: "Internal state diverges from external state beyond tolerance",
         reasonCode: "RECONCILIATION_MISMATCH",
         evaluate: (ctx) => {
+          const report = ctx.reconciliationStatus as
+            | { unresolved?: boolean }
+            | undefined;
           const mismatch = ctx.reconciliationMismatch as boolean | undefined;
-          return mismatch === true;
+          return report?.unresolved === true || mismatch === true;
         },
       },
     },
@@ -249,6 +258,7 @@ export class LoopEngine {
   private readonly loopMap: ReadonlyMap<LoopName, LoopDefinition>;
   private readonly audit: AuditLog;
   private readonly now: () => number;
+  private readonly reconciliationEngine?: ReconciliationEngine;
   private readonly states: Map<LoopName, LoopState>;
   private cycleCounter = 0;
 
@@ -256,6 +266,7 @@ export class LoopEngine {
     this.loopMap = buildLoopMap(options.loops);
     this.audit = options.audit;
     this.now = options.now ?? (() => Date.now());
+    this.reconciliationEngine = options.reconciliationEngine;
     this.states = new Map(
       options.loops.map((loop) => [loop.name, initialLoopState(loop.name)]),
     );
@@ -358,10 +369,43 @@ export class LoopEngine {
       }
 
       // Run the loop.
+      const defaultReconciliationWork: LoopWork | undefined =
+        loopName === "reconciliation" && this.reconciliationEngine !== undefined
+          ? () => {
+              const report = runningContext.reconciliationStatus as
+                | { unresolved?: boolean }
+                | undefined;
+              return report === undefined
+                ? undefined
+                : { reconciliationStatus: report };
+            }
+          : undefined;
+      if (loopName === "reconciliation" && this.reconciliationEngine !== undefined) {
+        const internal = runningContext.reconciliationInternal;
+        const external = runningContext.reconciliationExternal;
+        if (
+          typeof internal === "object" &&
+          internal !== null &&
+          typeof external === "object" &&
+          external !== null
+        ) {
+          const report = this.reconciliationEngine.reconcile({
+            internal: internal as ReconciliationSnapshot,
+            external: external as ReconciliationSnapshot,
+            reconciledAtMs: timestampMs,
+            intervalMs: runningContext.reconciliationIntervalMs as number | undefined,
+            lastReconciledAtMs:
+              runningContext.reconciliationLastReconciledAtMs as number | undefined,
+          });
+          runningContext.reconciliationStatus = report;
+          runningContext.reconciliationMismatch = report.unresolved;
+        }
+      }
       const result = runLoop({
         definition,
         state,
-        work: loopWork[loopName] ?? (() => undefined),
+        work:
+          loopWork[loopName] ?? defaultReconciliationWork ?? (() => undefined),
         audit: this.audit,
         timestampMs,
         context: runningContext,
