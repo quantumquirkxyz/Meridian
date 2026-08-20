@@ -40,6 +40,11 @@ export {
 
 // ── Memory ─────────────────────────────────────────────────────────────
 export { AgentMemory, type MemorySnapshot } from "./memory.ts";
+export {
+  AuditConsultativeAdapter,
+  MemoryConsultativeAdapter,
+  PolicyConsultativeAdapter,
+} from "./behavioral-runtimes.ts";
 
 // ── Logger ─────────────────────────────────────────────────────────────
 export {
