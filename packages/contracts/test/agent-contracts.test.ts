@@ -511,6 +511,7 @@ describe("ConsultativeAgentOutput", () => {
         assumptions: ["Venue list is current"],
         internalLimits: ["max position size 2% NAV"],
         blockedVenues: ["venue-x"],
+        userConfiguredTerms: ["no leverage above 2x"],
         reviewRequired: true,
         approvalPower: false,
         notes: ["no execution authority"],

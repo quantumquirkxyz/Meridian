@@ -140,6 +140,7 @@ export interface PolicyAgentOutput extends AgentAnalysisBase {
   agentId: "agent-policy";
   internalLimits: string[];
   blockedVenues: string[];
+  userConfiguredTerms: string[];
   reviewRequired: boolean;
   approvalPower: false;
   notes: string[];
@@ -173,6 +174,7 @@ const isPlannerSupervisorOutput: Validator<PlannerSupervisorOutput> = isObjectOf
   recommendedMode: isSystemMode,
 });
 
+// `invalidationReasons` is intentionally normalized from array shape here.
 const isArbitrageAlphaOutput = isObjectOf({
   ...isAgentAnalysisBase,
   agentId: isEnumOf(["agent-arbitrage-alpha"] as const),
@@ -289,6 +291,7 @@ const isPolicyAgentOutput = isObjectOf({
   agentId: isEnumOf(["agent-policy"] as const),
   internalLimits: isArrayOf(isString),
   blockedVenues: isArrayOf(isString),
+  userConfiguredTerms: isArrayOf(isString),
   reviewRequired: isBoolean,
   approvalPower: isBooleanLiteralFalse,
   notes: isArrayOf(isString),

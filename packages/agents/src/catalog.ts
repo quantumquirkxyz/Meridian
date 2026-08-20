@@ -180,7 +180,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
       config: makeConsultativeConfig("agent-memory", {
         description:
           "Recalls prior incidents, failure patterns, and related precedents.",
-        layer: "analytical",
+        layer: "control",
         runtime: "mastra",
         outputSchemaName: "memory-output",
         permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
@@ -231,7 +231,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
         description:
           "Reviews internal limits and blocked venues without approval power.",
         layer: "control",
-        runtime: "mastra",
+        runtime: "vercel-ai-sdk",
         outputSchemaName: "policy-output",
         permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
         mandatory: true,
@@ -241,6 +241,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
           hardcodedValue: {
             internalLimits: ["fallback policy unavailable"],
             blockedVenues: [],
+            userConfiguredTerms: ["policy review unavailable"],
             reviewRequired: true,
             approvalPower: false,
             notes: ["policy review unavailable"],

@@ -232,14 +232,16 @@ describe("consultative agent catalog", () => {
 
   test("memory, audit, and policy agents are Mastra-backed advisory-only agents", () => {
     const expected = [
-      ["agent-memory", "analytical"],
+      ["agent-memory", "control"],
       ["agent-audit", "control"],
       ["agent-policy", "control"],
     ] as const;
 
     for (const [agentId, layer] of expected) {
       const config = getConsultativeAgentConfig(agentId);
-      expect(config.runtime).toBe("mastra");
+      expect(
+        agentId === "agent-policy" ? "vercel-ai-sdk" : "mastra",
+      ).toBe(config.runtime);
       expect(config.layer).toBe(layer);
       expect(config.permissions).toEqual(["OBSERVE_STATE", "OBSERVE_AUDIT"]);
       expect(config.fallback.hasFallback).toBe(true);
