@@ -30,6 +30,13 @@ export {
 
 // ── Registry ───────────────────────────────────────────────────────────
 export { AgentRegistry, type AgentRegistration } from "./registry.ts";
+export {
+  CONSULTATIVE_AGENT_CATALOG,
+  CONSULTATIVE_AGENT_CONFIGS,
+  CONSULTATIVE_AGENT_IDS,
+  getConsultativeAgentConfig,
+  type ConsultativeAgentDefinition,
+} from "./catalog.ts";
 
 // ── Memory ─────────────────────────────────────────────────────────────
 export { AgentMemory, type MemorySnapshot } from "./memory.ts";

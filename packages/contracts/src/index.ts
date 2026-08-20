@@ -23,3 +23,4 @@ export * from "./stategraph.ts";
 export * from "./events.ts";
 export * from "./loop.ts";
 export * from "./agent.ts";
+export * from "./consultative-agents.ts";

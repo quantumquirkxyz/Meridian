@@ -123,10 +123,14 @@ export const MODULE_ACTORS = {
 
 /** Analytical agents registered for the permission-boundary tests (no execution perms). */
 export const AGENT_IDS = [
+  "agent-planner-supervisor",
   "agent-arbitrage-alpha",
+  "agent-market-regime",
+  "agent-bull",
+  "agent-bear",
+  "agent-skeptic",
   "agent-risk-analyst",
-  "agent-planner",
-  "agent-audit",
+  "agent-execution-advisor",
 ] as const;
 
 /**
@@ -138,10 +142,18 @@ const AGENT_PERMISSIONS: Record<
   (typeof AGENT_IDS)[number],
   readonly Permission[]
 > = {
+  "agent-planner-supervisor": [
+    "OBSERVE_STATE",
+    "PROPOSE_SIGNAL",
+    "PROPOSE_EXECUTION_PLAN",
+  ],
   "agent-arbitrage-alpha": ["OBSERVE_MARKET_DATA", "PROPOSE_SIGNAL"],
+  "agent-market-regime": ["OBSERVE_MARKET_DATA", "OBSERVE_STATE", "PROPOSE_SIGNAL"],
+  "agent-bull": ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
+  "agent-bear": ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
+  "agent-skeptic": ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
   "agent-risk-analyst": ["OBSERVE_STATE", "PROPOSE_RISK_REVIEW"],
-  "agent-planner": ["OBSERVE_STATE", "PROPOSE_SIGNAL", "PROPOSE_EXECUTION_PLAN"],
-  "agent-audit": ["OBSERVE_AUDIT", "OBSERVE_STATE"],
+  "agent-execution-advisor": ["OBSERVE_STATE", "PROPOSE_EXECUTION_PLAN"],
 };
 
 const TRIGGER_BY_DEFENSIVE_STATE: Record<DefensiveState, Permission> = {

@@ -12,6 +12,10 @@ import {
   AgentLogger,
   BudgetEnforcer,
   AgentRuntime,
+  CONSULTATIVE_AGENT_CATALOG,
+  CONSULTATIVE_AGENT_CONFIGS,
+  CONSULTATIVE_AGENT_IDS,
+  getConsultativeAgentConfig,
   createDefaultAgentConfig,
   RUNTIME_TYPES,
 } from "../src/index.ts";
@@ -187,6 +191,40 @@ describe("AgentRegistry", () => {
     registry.register(makeConfig("a"), new MockAgentAdapter([makeStructuredOutput("a")]));
     expect(registry.isEmpty).toBe(false);
     expect(registry.size).toBe(1);
+  });
+});
+
+describe("consultative agent catalog", () => {
+  test("catalog exposes all issue #28 consultative agents", () => {
+    expect(CONSULTATIVE_AGENT_IDS).toEqual([
+      "agent-planner-supervisor",
+      "agent-arbitrage-alpha",
+      "agent-market-regime",
+      "agent-bull",
+      "agent-bear",
+      "agent-skeptic",
+      "agent-risk-analyst",
+      "agent-execution-advisor",
+    ]);
+    expect(CONSULTATIVE_AGENT_CATALOG).toHaveLength(8);
+  });
+
+  test("consultative configs are typed, runtime-declared, and permission-safe", () => {
+    const forbidden = new Set([
+      "APPROVE_RISK",
+      "SUBMIT_ORDER",
+      "SIGN_TRANSACTION",
+      "MOVE_FUNDS",
+      "MODIFY_RISK_LIMITS",
+    ]);
+
+    for (const agentId of CONSULTATIVE_AGENT_IDS) {
+      const config = getConsultativeAgentConfig(agentId);
+      expect(CONSULTATIVE_AGENT_CONFIGS.get(agentId)).toEqual(config);
+      expect(RUNTIME_TYPES).toContain(config.runtime);
+      expect(config.permissions.some((perm) => forbidden.has(perm))).toBe(false);
+      expect(config.outputSchemaName).toMatch(/output$/);
+    }
   });
 });
 
