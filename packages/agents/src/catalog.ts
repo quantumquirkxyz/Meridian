@@ -189,6 +189,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
           hasFallback: true,
           strategy: "hardcoded",
           hardcodedValue: {
+            agentId: "agent-memory",
             recalledCases: [],
             recommendedFollowUps: [
               "memory lookup unavailable; proceed with explicit uncertainty",
@@ -214,6 +215,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
           hasFallback: true,
           strategy: "hardcoded",
           hardcodedValue: {
+            agentId: "agent-audit",
             qualityScore: 0,
             decisionSummary: "Audit unavailable",
             consistencyFindings: ["audit evaluation unavailable"],
@@ -239,6 +241,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
           hasFallback: true,
           strategy: "hardcoded",
           hardcodedValue: {
+            agentId: "agent-policy",
             internalLimits: ["fallback policy unavailable"],
             blockedVenues: [],
             userConfiguredTerms: ["policy review unavailable"],

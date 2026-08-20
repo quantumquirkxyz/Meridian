@@ -230,7 +230,7 @@ describe("consultative agent catalog", () => {
     }
   });
 
-  test("memory, audit, and policy agents are Mastra-backed advisory-only agents", () => {
+  test("memory, audit, and policy agents are advisory-only with runtime per ADR-0004", () => {
     const expected = [
       ["agent-memory", "control"],
       ["agent-audit", "control"],
