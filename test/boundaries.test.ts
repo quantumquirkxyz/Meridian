@@ -8,12 +8,9 @@ import { join } from "node:path";
  *   - contracts is dependency-free (no LLM or framework runtime);
  *   - core depends only on contracts (never LLMs or connectors);
  *   - connectors, graph, harness, events depend only on contracts
- *     (ARCHITECTURE.md:88; `events` follows the same rule).
- *
- * `packages/agents` is deferred to Beta (ROADMAP.md; ADR-0001 lists it in the
- * monorepo but issue #12 scopes the scaffold to six packages). When it lands,
- * add it here with the `agents`-never-imports-`core` boundary from
- * ARCHITECTURE.md:88.
+ *     (ARCHITECTURE.md:88; `events` follows the same rule);
+ *   - agents depends only on contracts and never imports core
+ *     (ARCHITECTURE.md:88; agents never imports core).
  *
  * `infra` is not restricted to contracts-only by ARCHITECTURE.md:88 (only
  * graph, harness, and connectors are); it may legitimately depend on core
@@ -27,6 +24,7 @@ const PACKAGE_DIRS = [
   "graph",
   "harness",
   "infra",
+  "agents",
 ] as const;
 
 const FORBIDDEN_MODULE_PATHS = [
@@ -113,17 +111,54 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     }
   });
 
-  test("connectors, graph, harness, events depend only on contracts", () => {
-    for (const dir of ["connectors", "graph", "harness", "events"]) {
+  test("connectors, graph, events depend only on contracts", () => {
+    for (const dir of ["connectors", "graph", "events"]) {
       const { dependencies = {} } = packageJson(dir);
       expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
     }
+  });
+
+  test("harness depends on contracts, events, and graph (ADR-0007)", () => {
+    const { dependencies = {} } = packageJson("harness");
+    expect(Object.keys(dependencies).sort()).toEqual([
+      "@agenttrading/contracts",
+      "@agenttrading/events",
+      "@agenttrading/graph",
+    ]);
   });
 
   test("infra never depends on LLM/framework runtimes", () => {
     const { dependencies = {} } = packageJson("infra");
     for (const dep of Object.keys(dependencies)) {
       expect(isForbiddenModule(dep)).toBe(false);
+    }
+  });
+
+  test("agents depends only on contracts and never on core", () => {
+    const { dependencies = {} } = packageJson("agents");
+    expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
+    for (const dep of Object.keys(dependencies)) {
+      expect(isForbiddenModule(dep)).toBe(false);
+    }
+  });
+
+  test("agents source never imports core or LLM modules", () => {
+    const importSpecifiers =
+      /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+    for (const file of sourceFiles("agents")) {
+      const content = readFileSync(file, "utf8");
+      for (const match of content.matchAll(importSpecifiers)) {
+        const spec = match[1];
+        // agents never imports core (ARCHITECTURE.md boundary)
+        expect(spec).not.toContain("@agenttrading/core");
+        expect(spec).not.toMatch(/\.\.\/core/);
+        // agents never imports LLM frameworks directly (deferred to runtime adapters)
+        // The runtimes/*.ts files MAY import LLM frameworks at runtime,
+        // but the core adapter/registry/runtime modules must not.
+        if (!file.includes("runtimes/")) {
+          expect(isForbiddenModule(spec)).toBe(false);
+        }
+      }
     }
   });
 
