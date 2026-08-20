@@ -82,6 +82,7 @@ export interface PaperOrderSnapshot {
   orderType: PaperOrderType;
   state: PaperOrderState;
   submittedAtMs: number;
+  approvedQuantity: number;
   acceptedAtMs?: number;
   filledAtMs?: number;
   cancelledAtMs?: number;
@@ -155,12 +156,13 @@ function deriveFillPrice(
 }
 
 function deriveFillQuantity(
+  approvedQuantity: number,
   intent: OrderIntent,
   market: PaperMarketSnapshot,
   remainingQuantity: number,
 ): number {
   const maxLiquidQuantity = market.liquidityUsd / intent.price;
-  return Math.max(0, Math.min(remainingQuantity, maxLiquidQuantity));
+  return Math.max(0, Math.min(remainingQuantity, approvedQuantity, maxLiquidQuantity));
 }
 
 export class PaperExecutionEngine {
@@ -181,9 +183,10 @@ export class PaperExecutionEngine {
         orderType: input.orderType ?? "LIMIT",
         state: "REJECTED",
         submittedAtMs: input.submittedAtMs,
+        approvedQuantity: 0,
         rejectedAtMs: input.submittedAtMs,
         filledQuantity: 0,
-        remainingQuantity: input.intent.quantity,
+        remainingQuantity: 0,
         totalFeesUsd: 0,
         totalFundingCostUsd: 0,
         riskDecision: input.riskDecision,
@@ -205,9 +208,16 @@ export class PaperExecutionEngine {
         orderType: input.orderType ?? "LIMIT",
         state: "EXPIRED",
         submittedAtMs: input.submittedAtMs,
+        approvedQuantity:
+          input.riskDecision.decision === "REDUCE_SIZE"
+            ? input.riskDecision.approvedSize
+            : input.intent.quantity,
         expiredAtMs: input.submittedAtMs,
         filledQuantity: 0,
-        remainingQuantity: input.intent.quantity,
+        remainingQuantity:
+          input.riskDecision.decision === "REDUCE_SIZE"
+            ? input.riskDecision.approvedSize
+            : input.intent.quantity,
         totalFeesUsd: 0,
         totalFundingCostUsd: 0,
         riskDecision: input.riskDecision,
@@ -224,8 +234,15 @@ export class PaperExecutionEngine {
       orderType: input.orderType ?? "LIMIT",
       state: "SUBMITTED",
       submittedAtMs: input.submittedAtMs,
+      approvedQuantity:
+        input.riskDecision.decision === "REDUCE_SIZE"
+          ? input.riskDecision.approvedSize
+          : input.intent.quantity,
       filledQuantity: 0,
-      remainingQuantity: input.intent.quantity,
+      remainingQuantity:
+        input.riskDecision.decision === "REDUCE_SIZE"
+          ? input.riskDecision.approvedSize
+          : input.intent.quantity,
       totalFeesUsd: 0,
       totalFundingCostUsd: 0,
       riskDecision: input.riskDecision,
@@ -293,7 +310,12 @@ export class PaperExecutionEngine {
         nowMs >= pending.fillAfterMs
       ) {
         const remaining = snapshot.remainingQuantity;
-        const fillQty = deriveFillQuantity(snapshot.intent, pending.market, remaining);
+        const fillQty = deriveFillQuantity(
+          snapshot.approvedQuantity,
+          snapshot.intent,
+          pending.market,
+          remaining,
+        );
         if (fillQty <= 0) {
           appendEvent(snapshot, "REJECTED", pending.fillAfterMs, "insufficient liquidity");
           this.pending.delete(orderId);
