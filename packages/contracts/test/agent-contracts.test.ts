@@ -409,7 +409,7 @@ function validConsultativeOutput(
     confidence: 0.78,
     summary: "Route remains profitable after fees.",
     assumptions: ["Stable venue latency", "No inventory shock"],
-    invalidationReasons: [],
+    invalidationReasons: ["MIN_EDGE"],
     candidateSignal: "ARB:BTC-USDT",
     expectedNetProfitUsd: 42,
     costBreakdownUsd: {

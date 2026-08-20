@@ -52,6 +52,7 @@ export interface ArbitrageAlphaOutput extends AgentAnalysisBase {
   agentId: "agent-arbitrage-alpha";
   candidateSignal: string;
   expectedNetProfitUsd: number;
+  invalidationReasons: [RiskReasonCode, ...RiskReasonCode[]];
   costBreakdownUsd: {
     feesUsd: number;
     slippageUsd: number;
@@ -141,6 +142,7 @@ const isArbitrageAlphaOutput: Validator<ArbitrageAlphaOutput> = isObjectOf({
   agentId: isEnumOf(["agent-arbitrage-alpha"] as const),
   candidateSignal: isString,
   expectedNetProfitUsd: isNumber,
+  invalidationReasons: isArrayOf(isRiskReasonCode),
   costBreakdownUsd: isObjectOf({
     feesUsd: isNumber,
     slippageUsd: isNumber,

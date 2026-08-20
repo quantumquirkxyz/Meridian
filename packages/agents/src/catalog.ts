@@ -36,11 +36,20 @@ function makeConsultativeConfig(
   agentId: ConsultativeAgentId,
   overrides: Partial<AgentConfig>,
 ): AgentConfig {
+  const policy = overrides.policy ?? basePolicy;
   return createDefaultAgentConfig({
     agentId,
     name: agentId,
     ...overrides,
-    policy: overrides.policy ?? basePolicy,
+    policy: {
+      tokenBudget: {
+        ...policy.tokenBudget,
+      },
+      timeoutMs: policy.timeoutMs,
+      retry: {
+        ...policy.retry,
+      },
+    },
   });
 }
 
