@@ -1,16 +1,19 @@
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+} from "node:fs";
+import { dirname, resolve } from "node:path";
 import type {
   AgentInput,
   AgentOutput,
   AgentMessage,
 } from "@agenttrading/contracts";
-import {
-  parseConsultativeAgentOutput,
-} from "@agenttrading/contracts";
+import { parseConsultativeAgentOutput } from "@agenttrading/contracts";
 import type { ConsultativeAgentOutput } from "@agenttrading/contracts";
 import { BaseAgentAdapter } from "./adapter.ts";
 import type { AgentConfig } from "./config.ts";
-import { AgentMemory } from "./memory.ts";
-import type { AgentLogger } from "./logger.ts";
 
 type MemoryCase = {
   caseId: string;
@@ -25,24 +28,42 @@ type MemoryPerformance = {
   lesson: string;
 };
 
-type AuditSignal = {
-  candidateId?: string;
-  expectedNetProfitUsd?: number;
+type DurableMemoryRecord = {
+  cases: MemoryCase[];
+  performance: MemoryPerformance[];
+};
+
+type EvalInput = {
+  decisionSummary?: string;
   qualityDimensions?: Record<string, number>;
   failurePatterns?: string[];
+  candidateId?: string;
 };
 
-type PolicySignal = {
-  internalLimits?: string[];
-  blockedVenues?: string[];
-  userConfiguredTerms?: string[];
-  venue?: string;
-  terms?: string[];
-  requestType?: string;
+type EvalResult = {
+  qualityScore: number;
+  decisionSummary: string;
+  consistencyFindings: string[];
+  failurePatterns: string[];
 };
+
+type DurableEvaluationRecord = {
+  agentId: string;
+  timestampMs: number;
+  candidateId?: string;
+  result: EvalResult;
+};
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 function normalizeStrings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function clampQuality(score: number): number {
@@ -53,32 +74,49 @@ function roundQuality(score: number): number {
   return Math.round(score * 100) / 100;
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+function ensureParentDir(filePath: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
 }
 
-function summarizeMessages(messages: readonly AgentMessage[] | undefined): string[] {
-  if (!messages) return [];
-  return messages.map((message) => `${message.role}: ${message.content}`);
+function readJson<T>(filePath: string, fallback: T): T {
+  if (!existsSync(filePath)) {
+    return fallback;
+  }
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
+  } catch {
+    return fallback;
+  }
 }
 
-function registerConsultativeOutputSchema(
-  adapter: BaseAgentAdapter,
-  agentId: string,
-): void {
-  adapter.registerSchema(agentId, (candidate) => {
-    try {
-      parseConsultativeAgentOutput(candidate);
-      return { valid: true };
-    } catch (error) {
-      return {
-        valid: false,
-        errors: [error instanceof Error ? error.message : String(error)],
-      };
-    }
-  });
+function writeJson(filePath: string, data: unknown): void {
+  ensureParentDir(filePath);
+  writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+}
+
+class DurableMemoryStore {
+  constructor(private readonly filePath: string) {}
+
+  load(agentId: string): DurableMemoryRecord {
+    const all = readJson<Record<string, DurableMemoryRecord>>(this.filePath, {});
+    return all[agentId] ?? { cases: [], performance: [] };
+  }
+
+  save(agentId: string, record: DurableMemoryRecord): void {
+    const all = readJson<Record<string, DurableMemoryRecord>>(this.filePath, {});
+    all[agentId] = record;
+    writeJson(this.filePath, all);
+  }
+}
+
+class DurableEvaluationStore {
+  constructor(private readonly filePath: string) {}
+
+  append(record: DurableEvaluationRecord): void {
+    const entries = readJson<DurableEvaluationRecord[]>(this.filePath, []);
+    entries.push(record);
+    writeJson(this.filePath, entries);
+  }
 }
 
 export class MemoryConsultativeAdapter extends BaseAgentAdapter {
@@ -86,11 +124,14 @@ export class MemoryConsultativeAdapter extends BaseAgentAdapter {
   readonly runtimeName = "mastra";
 
   constructor(
-    private readonly memory: AgentMemory,
     private readonly configs: ReadonlyMap<string, AgentConfig>,
+    memoryFilePath = resolve(".agent-state/consultative-memory.json"),
   ) {
     super();
+    this.memoryStore = new DurableMemoryStore(memoryFilePath);
   }
+
+  private readonly memoryStore: DurableMemoryStore;
 
   async run(input: AgentInput): Promise<AgentOutput> {
     const config = this.configs.get(input.agentId);
@@ -99,23 +140,23 @@ export class MemoryConsultativeAdapter extends BaseAgentAdapter {
     }
 
     const payload = asObject(input.payload);
-    const caseState = this.memory.getState<MemoryCase[]>(input.agentId, "cases") ?? [];
-    const performanceState = this.memory.getState<MemoryPerformance[]>(input.agentId, "performance") ?? [];
-    const historyWarnings = summarizeMessages(input.conversationHistory);
+    const snapshot = this.memoryStore.load(input.agentId);
+    const historyWarnings = (input.conversationHistory ?? []).map(
+      (message) => `${message.role}: ${message.content}`,
+    );
 
-    const recalledCases = [...caseState]
+    const recalledCases = [...snapshot.cases]
       .sort((a, b) => b.relevance - a.relevance)
       .map((entry) => ({
         ...entry,
         warning: entry.warning ?? (entry.relevance < 0.5 ? "low relevance; verify before reuse" : undefined),
       }));
 
-    const recalledPerformance = [...performanceState];
-
+    const recalledPerformance = [...snapshot.performance];
     const recommendedFollowUps = [
       ...normalizeStrings(payload.followUps),
       ...(historyWarnings.length > 0 ? ["review prior conversation context before acting"] : []),
-      ...(recalledCases.length === 0 ? ["persist cases into memory before the next recall"] : []),
+      ...(recalledCases.length === 0 ? ["persist cases into durable memory before the next recall"] : []),
     ];
 
     const output: ConsultativeAgentOutput = {
@@ -129,10 +170,10 @@ export class MemoryConsultativeAdapter extends BaseAgentAdapter {
       ),
       summary:
         recalledCases.length > 0
-          ? `Recalled ${recalledCases.length} precedent(s) from durable memory state`
-          : "No prior cases were available in durable memory state",
+          ? `Recalled ${recalledCases.length} precedent(s) from durable memory storage`
+          : "No prior cases were available in durable memory storage",
       assumptions: [
-        "memory store is the source of truth for prior cases",
+        "durable memory storage is the source of truth for prior cases",
         ...(historyWarnings.length > 0 ? ["conversation history may omit older state"] : []),
       ],
       recalledCases,
@@ -140,16 +181,9 @@ export class MemoryConsultativeAdapter extends BaseAgentAdapter {
       recommendedFollowUps,
     };
 
-    registerConsultativeOutputSchema(this, input.agentId);
-
-    this.memory.addMessage(input.agentId, {
-      role: "assistant",
-      content: output.summary,
-      timestampMs: input.timestampMs,
-    });
-    this.memory.setState(input.agentId, "lastRecall", {
-      timestampMs: input.timestampMs,
-      recalledCaseIds: recalledCases.map((entry) => entry.caseId),
+    this.memoryStore.save(input.agentId, {
+      cases: recalledCases,
+      performance: recalledPerformance,
     });
 
     return {
@@ -166,9 +200,15 @@ export class AuditConsultativeAdapter extends BaseAgentAdapter {
   readonly adapterId = "audit-consultative";
   readonly runtimeName = "mastra";
 
-  constructor(private readonly configs: ReadonlyMap<string, AgentConfig>) {
+  constructor(
+    private readonly configs: ReadonlyMap<string, AgentConfig>,
+    evalFilePath = resolve(".agent-state/consultative-evals.json"),
+  ) {
     super();
+    this.evalStore = new DurableEvaluationStore(evalFilePath);
   }
+
+  private readonly evalStore: DurableEvaluationStore;
 
   async run(input: AgentInput): Promise<AgentOutput> {
     const config = this.configs.get(input.agentId);
@@ -177,38 +217,52 @@ export class AuditConsultativeAdapter extends BaseAgentAdapter {
     }
 
     const payload = asObject(input.payload);
-    const signal = asObject(payload.signal) as AuditSignal;
-    const dimensions = signal.qualityDimensions ?? {};
-    const values = Object.values(dimensions).filter((value): value is number => typeof value === "number");
+    const evalInput = {
+      decisionSummary:
+        typeof payload.decisionSummary === "string"
+          ? payload.decisionSummary
+          : undefined,
+      candidateId: asObject(payload.signal).candidateId as string | undefined,
+      qualityDimensions: asObject(payload.signal).qualityDimensions as Record<string, number> | undefined,
+      failurePatterns: normalizeStrings(payload.failurePatterns ?? asObject(payload.signal).failurePatterns),
+    } satisfies EvalInput;
+
+    const values = Object.values(evalInput.qualityDimensions ?? {}).filter((value): value is number => typeof value === "number");
     const dimensionScore = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0.5;
-    const failurePatterns = normalizeStrings(payload.failurePatterns ?? signal.failurePatterns);
+    const failurePenalty = evalInput.failurePatterns.length > 0 ? 0.1 : 0;
+    const qualityScore = clampQuality(roundQuality(0.4 + dimensionScore * 0.4 + 0.15 - failurePenalty));
+    const decisionSummary =
+      evalInput.decisionSummary ?? `Decision reviewed for ${evalInput.candidateId ?? "unknown candidate"}`;
     const consistencyFindings = [
-      ...(payload.decisionSummary ? [] : ["decisionSummary missing from evaluated payload"]),
+      ...(evalInput.decisionSummary ? [] : ["decisionSummary missing from evaluated payload"]),
       ...(values.length === 0 ? ["no quantitative quality dimensions were supplied"] : []),
-      ...(failurePatterns.length > 0 ? [`failure patterns observed: ${failurePatterns.join(", ")}`] : []),
+      ...(evalInput.failurePatterns.length > 0 ? [`failure patterns observed: ${evalInput.failurePatterns.join(", ")}`] : []),
     ];
 
-    const qualityScore = clampQuality(
-      roundQuality(
-        0.4 + dimensionScore * 0.4 + (failurePatterns.length === 0 ? 0.15 : -0.1),
-      ),
-    );
+    const result: EvalResult = {
+      qualityScore,
+      decisionSummary,
+      consistencyFindings,
+      failurePatterns: evalInput.failurePatterns,
+    };
+
+    this.evalStore.append({
+      agentId: input.agentId,
+      timestampMs: input.timestampMs,
+      candidateId: evalInput.candidateId,
+      result,
+    });
 
     const output: ConsultativeAgentOutput = {
       agentId: "agent-audit" as const,
       confidence: qualityScore,
       summary: `Audit scored the decision at ${Math.round(qualityScore * 100)}% quality`,
-      assumptions: ["audit evaluation is derived from structured evidence"],
+      assumptions: ["audit evaluation is derived from persisted eval results"],
       qualityScore,
-      decisionSummary:
-        typeof payload.decisionSummary === "string"
-          ? payload.decisionSummary
-          : `Decision reviewed for ${signal.candidateId ?? "unknown candidate"}`,
+      decisionSummary,
       consistencyFindings,
-      failurePatterns,
+      failurePatterns: evalInput.failurePatterns,
     };
-
-    registerConsultativeOutputSchema(this, input.agentId);
 
     return {
       kind: "structured",
@@ -235,7 +289,7 @@ export class PolicyConsultativeAdapter extends BaseAgentAdapter {
     }
 
     const payload = asObject(input.payload);
-    const policy = asObject(payload.policy) as PolicySignal;
+    const policy = asObject(payload.policy);
     const blockedVenues = normalizeStrings(policy.blockedVenues);
     const internalLimits = normalizeStrings(policy.internalLimits);
     const userConfiguredTerms = normalizeStrings(policy.userConfiguredTerms);
@@ -245,9 +299,10 @@ export class PolicyConsultativeAdapter extends BaseAgentAdapter {
     const blockedByVenue = venue ? blockedVenues.includes(venue) : false;
     const termsConflict = terms.some((term) => userConfiguredTerms.includes(term));
     const reviewRequired = Boolean(
-      (typeof payload.reviewRequired === "boolean"
-        ? payload.reviewRequired
-        : false) || blockedByVenue || termsConflict || internalLimits.length > 0,
+      (typeof payload.reviewRequired === "boolean" ? payload.reviewRequired : false) ||
+        blockedByVenue ||
+        termsConflict ||
+        internalLimits.length > 0,
     );
 
     const output: ConsultativeAgentOutput = {
@@ -269,12 +324,12 @@ export class PolicyConsultativeAdapter extends BaseAgentAdapter {
       ],
     };
 
-    registerConsultativeOutputSchema(this, input.agentId);
+    const validation = parseConsultativeAgentOutput(output);
 
     return {
       kind: "structured",
       agentId: input.agentId,
-      payload: output as unknown as Record<string, unknown>,
+      payload: validation as unknown as Record<string, unknown>,
       schemaName: config.outputSchemaName,
       timestampMs: input.timestampMs,
     };

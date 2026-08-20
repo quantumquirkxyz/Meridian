@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   isAgentInput,
   isAgentOutput,
@@ -252,26 +255,41 @@ describe("consultative agent catalog", () => {
 
 describe("consultative behavioral runtimes", () => {
   test("memory runtime recalls durable state and warns on weak precedents", async () => {
-    const memory = new AgentMemory();
-    memory.setState("agent-memory", "cases", [
-      {
-        caseId: "case-1",
-        pattern: "slippage spike",
-        relevance: 0.92,
-        warning: "execution window narrowed",
-      },
-      {
-        caseId: "case-2",
-        pattern: "latency regression",
-        relevance: 0.31,
-      },
-    ]);
-    memory.setState("agent-memory", "performance", [
-      { outcome: "positive", resultUsd: 14.2, lesson: "keep venue diversity" },
-    ]);
-    const runtime = new MemoryConsultativeAdapter(memory, CONSULTATIVE_AGENT_CONFIGS);
+    const stateDir = mkdtempSync(join(tmpdir(), "agents-memory-"));
+    const memoryFile = join(stateDir, "consultative-memory.json");
+    writeFileSync(
+      memoryFile,
+      JSON.stringify(
+        {
+          "agent-memory": {
+            cases: [
+              {
+                caseId: "case-1",
+                pattern: "slippage spike",
+                relevance: 0.92,
+                warning: "execution window narrowed",
+              },
+              {
+                caseId: "case-2",
+                pattern: "latency regression",
+                relevance: 0.31,
+              },
+            ],
+            performance: [
+              { outcome: "positive", resultUsd: 14.2, lesson: "keep venue diversity" },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const persistedRuntime = new MemoryConsultativeAdapter(
+      CONSULTATIVE_AGENT_CONFIGS,
+      memoryFile,
+    );
 
-    const result = await runtime.run({
+    const result = await persistedRuntime.run({
       agentId: "agent-memory",
       payload: { followUps: ["verify venue routing"] },
       permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
@@ -295,11 +313,13 @@ describe("consultative behavioral runtimes", () => {
     );
     expect(payload.recalledPerformance).toHaveLength(1);
     expect(payload.recommendedFollowUps).toContain("verify venue routing");
-    expect(memory.getMessages("agent-memory")).toHaveLength(1);
+    expect(readFileSync(memoryFile, "utf8").includes("case-1")).toBe(true);
   });
 
   test("audit runtime produces a readable decision summary and quality score", async () => {
-    const runtime = new AuditConsultativeAdapter(CONSULTATIVE_AGENT_CONFIGS);
+    const stateDir = mkdtempSync(join(tmpdir(), "agents-eval-"));
+    const evalFile = join(stateDir, "consultative-evals.json");
+    const runtime = new AuditConsultativeAdapter(CONSULTATIVE_AGENT_CONFIGS, evalFile);
 
     const result = await runtime.run({
       agentId: "agent-audit",
@@ -333,6 +353,7 @@ describe("consultative behavioral runtimes", () => {
     expect(payload.consistencyFindings.join(" ")).toContain(
       "failure patterns observed",
     );
+    expect(readFileSync(evalFile, "utf8").includes("arb-17")).toBe(true);
   });
 
   test("policy runtime blocks internal constraints without approval power", async () => {
