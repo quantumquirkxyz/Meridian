@@ -175,6 +175,87 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
         mandatory: true,
       }),
     },
+    {
+      id: "agent-memory",
+      config: makeConsultativeConfig("agent-memory", {
+        description:
+          "Recalls prior incidents, failure patterns, and related precedents.",
+        layer: "control",
+        runtime: "mastra",
+        outputSchemaName: "memory-output",
+        permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
+        mandatory: true,
+        fallback: {
+          hasFallback: true,
+          strategy: "hardcoded",
+          hardcodedValue: {
+            agentId: "agent-memory",
+            recalledCases: [],
+            recalledPerformance: [],
+            recommendedFollowUps: [
+              "memory lookup unavailable; proceed with explicit uncertainty",
+            ],
+            summary: "Memory recall unavailable",
+            confidence: 0,
+            assumptions: ["historical context unavailable"],
+          },
+        },
+      }),
+    },
+    {
+      id: "agent-audit",
+      config: makeConsultativeConfig("agent-audit", {
+        description:
+          "Scores output quality and emits decision summaries for review.",
+        layer: "control",
+        runtime: "mastra",
+        outputSchemaName: "audit-output",
+        permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
+        mandatory: true,
+        fallback: {
+          hasFallback: true,
+          strategy: "hardcoded",
+          hardcodedValue: {
+            agentId: "agent-audit",
+            qualityScore: 0,
+            decisionSummary: "Audit unavailable",
+            consistencyFindings: ["audit evaluation unavailable"],
+            failurePatterns: ["unavailable"],
+            summary: "Audit evaluation unavailable",
+            confidence: 0,
+            assumptions: ["audit context unavailable"],
+          },
+        },
+      }),
+    },
+    {
+      id: "agent-policy",
+      config: makeConsultativeConfig("agent-policy", {
+        description:
+          "Reviews internal limits and blocked venues without approval power.",
+        layer: "control",
+        runtime: "vercel-ai-sdk",
+        outputSchemaName: "policy-output",
+        permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
+        mandatory: true,
+        fallback: {
+          hasFallback: true,
+          strategy: "hardcoded",
+          hardcodedValue: {
+            agentId: "agent-policy",
+            internalLimits: ["fallback policy unavailable"],
+            blockedVenues: [],
+            userConfiguredTerms: ["policy review unavailable"],
+            reviewRequired: true,
+            approvalPower: false,
+            notes: ["policy review unavailable"],
+            summary: "Policy review unavailable",
+            confidence: 0,
+            assumptions: ["policy context unavailable"],
+          },
+        },
+      }),
+    },
   ] satisfies readonly ConsultativeAgentDefinition[];
 
 export const CONSULTATIVE_AGENT_CONFIGS: ReadonlyMap<

@@ -205,8 +205,11 @@ describe("consultative agent catalog", () => {
       "agent-skeptic",
       "agent-risk-analyst",
       "agent-execution-advisor",
+      "agent-memory",
+      "agent-audit",
+      "agent-policy",
     ]);
-    expect(CONSULTATIVE_AGENT_CATALOG).toHaveLength(8);
+    expect(CONSULTATIVE_AGENT_CATALOG).toHaveLength(11);
   });
 
   test("consultative configs are typed, runtime-declared, and permission-safe", () => {
@@ -224,6 +227,22 @@ describe("consultative agent catalog", () => {
       expect(RUNTIME_TYPES).toContain(config.runtime);
       expect(config.permissions.some((perm) => forbidden.has(perm))).toBe(false);
       expect(config.outputSchemaName).toMatch(/output$/);
+    }
+  });
+
+  test("memory, audit, and policy agents are advisory-only with runtime per ADR-0004", () => {
+    const expected = [
+      ["agent-memory", "control", "mastra"],
+      ["agent-audit", "control", "mastra"],
+      ["agent-policy", "control", "vercel-ai-sdk"],
+    ] as const;
+
+    for (const [agentId, layer, runtime] of expected) {
+      const config = getConsultativeAgentConfig(agentId);
+      expect(config.runtime).toBe(runtime);
+      expect(config.layer).toBe(layer);
+      expect(config.permissions).toEqual(["OBSERVE_STATE", "OBSERVE_AUDIT"]);
+      expect(config.fallback.hasFallback).toBe(true);
     }
   });
 });

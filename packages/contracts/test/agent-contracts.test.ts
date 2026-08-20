@@ -469,6 +469,62 @@ describe("ConsultativeAgentOutput", () => {
       }),
     ).toBe(false);
   });
+
+  test("memory, audit, and policy consultative outputs validate", () => {
+    expect(
+      isConsultativeAgentOutput({
+        agentId: "agent-memory",
+        confidence: 0.88,
+        summary: "Recovered a matching failure pattern.",
+        assumptions: ["Prior incident retained"],
+        invalidationReasons: ["MIN_EDGE"],
+        recalledCases: [
+          {
+            caseId: "incident-42",
+            pattern: "timeout during volatile regime",
+            relevance: 0.91,
+            warning: "latency spike mirrored the current shape",
+          },
+        ],
+        recalledPerformance: [
+          {
+            outcome: "flat",
+            resultUsd: -120,
+            lesson: "avoid late entries in volatile regimes",
+          },
+        ],
+        recommendedFollowUps: ["inspect latency envelope"],
+      }),
+    ).toBe(true);
+
+    expect(
+      isConsultativeAgentOutput({
+        agentId: "agent-audit",
+        confidence: 0.81,
+        summary: "Output quality is acceptable but brittle.",
+        assumptions: ["Decision trail available"],
+        qualityScore: 0.76,
+        decisionSummary: "The explanation is readable and consistent.",
+        consistencyFindings: ["terminology drift on edge weights"],
+        failurePatterns: ["repeated null fallback in similar cases"],
+      }),
+    ).toBe(true);
+
+    expect(
+      isConsultativeAgentOutput({
+        agentId: "agent-policy",
+        confidence: 0.95,
+        summary: "Internal policy blocks one venue and requires review.",
+        assumptions: ["Venue list is current"],
+        internalLimits: ["max position size 2% NAV"],
+        blockedVenues: ["venue-x"],
+        userConfiguredTerms: ["no leverage above 2x"],
+        reviewRequired: true,
+        approvalPower: false,
+        notes: ["no execution authority"],
+      }),
+    ).toBe(true);
+  });
 });
 
 // ── AC #1: Every agent exposes run(input) → typed output ───────────────

@@ -1,5 +1,7 @@
 import {
   isArrayOf,
+  isBoolean,
+  isBooleanLiteralFalse,
   isEnumOf,
   isNumber,
   isObjectOf,
@@ -30,6 +32,9 @@ export const CONSULTATIVE_AGENT_IDS = [
   "agent-skeptic",
   "agent-risk-analyst",
   "agent-execution-advisor",
+  "agent-memory",
+  "agent-audit",
+  "agent-policy",
 ] as const;
 
 export type ConsultativeAgentId = (typeof CONSULTATIVE_AGENT_IDS)[number];
@@ -112,6 +117,40 @@ export interface ExecutionAdvisorOutput extends AgentAnalysisBase {
   recommendedMode: Exclude<SystemMode, "HALT">;
 }
 
+export interface MemoryAgentOutput extends AgentAnalysisBase {
+  agentId: "agent-memory";
+  recalledCases: Array<{
+    caseId: string;
+    pattern: string;
+    relevance: number;
+    warning?: string;
+  }>;
+  recalledPerformance: Array<{
+    outcome: string;
+    resultUsd: number;
+    lesson: string;
+  }>;
+  recommendedFollowUps: string[];
+}
+
+export interface AuditAgentOutput extends AgentAnalysisBase {
+  agentId: "agent-audit";
+  qualityScore: number;
+  decisionSummary: string;
+  consistencyFindings: string[];
+  failurePatterns: string[];
+}
+
+export interface PolicyAgentOutput extends AgentAnalysisBase {
+  agentId: "agent-policy";
+  internalLimits: string[];
+  blockedVenues: string[];
+  userConfiguredTerms: string[];
+  reviewRequired: boolean;
+  approvalPower: false;
+  notes: string[];
+}
+
 export type ConsultativeAgentOutput =
   | PlannerSupervisorOutput
   | ArbitrageAlphaOutput
@@ -120,7 +159,10 @@ export type ConsultativeAgentOutput =
   | BearOutput
   | SkepticOutput
   | RiskAnalystOutput
-  | ExecutionAdvisorOutput;
+  | ExecutionAdvisorOutput
+  | MemoryAgentOutput
+  | AuditAgentOutput
+  | PolicyAgentOutput;
 
 const isAgentAnalysisBase = {
   agentId: isEnumOf(CONSULTATIVE_AGENT_IDS),
@@ -137,7 +179,8 @@ const isPlannerSupervisorOutput: Validator<PlannerSupervisorOutput> = isObjectOf
   recommendedMode: isSystemMode,
 });
 
-const isArbitrageAlphaOutput: Validator<ArbitrageAlphaOutput> = isObjectOf({
+// `invalidationReasons` is intentionally normalized from array shape here.
+const isArbitrageAlphaOutput = isObjectOf({
   ...isAgentAnalysisBase,
   agentId: isEnumOf(["agent-arbitrage-alpha"] as const),
   candidateSignal: isString,
@@ -153,7 +196,7 @@ const isArbitrageAlphaOutput: Validator<ArbitrageAlphaOutput> = isObjectOf({
     failureRiskUsd: isNumber,
     safetyBufferUsd: isNumber,
   }),
-});
+}) as Validator<ArbitrageAlphaOutput>;
 
 const isMarketRegimeOutput: Validator<MarketRegimeOutput> = isObjectOf({
   ...isAgentAnalysisBase,
@@ -225,6 +268,47 @@ const isExecutionAdvisorOutput: Validator<ExecutionAdvisorOutput> = isObjectOf({
   ] as const),
 });
 
+const isMemoryAgentOutput: Validator<MemoryAgentOutput> = isObjectOf({
+  ...isAgentAnalysisBase,
+  agentId: isEnumOf(["agent-memory"] as const),
+  recalledCases: isArrayOf(
+    isObjectOf({
+      caseId: isString,
+      pattern: isString,
+      relevance: isNumber,
+      warning: isOptional(isString),
+    }),
+  ),
+  recalledPerformance: isArrayOf(
+    isObjectOf({
+      outcome: isString,
+      resultUsd: isNumber,
+      lesson: isString,
+    }),
+  ),
+  recommendedFollowUps: isArrayOf(isString),
+});
+
+const isAuditAgentOutput: Validator<AuditAgentOutput> = isObjectOf({
+  ...isAgentAnalysisBase,
+  agentId: isEnumOf(["agent-audit"] as const),
+  qualityScore: isNumber,
+  decisionSummary: isString,
+  consistencyFindings: isArrayOf(isString),
+  failurePatterns: isArrayOf(isString),
+});
+
+const isPolicyAgentOutput: Validator<PolicyAgentOutput> = isObjectOf({
+  ...isAgentAnalysisBase,
+  agentId: isEnumOf(["agent-policy"] as const),
+  internalLimits: isArrayOf(isString),
+  blockedVenues: isArrayOf(isString),
+  userConfiguredTerms: isArrayOf(isString),
+  reviewRequired: isBoolean,
+  approvalPower: isBooleanLiteralFalse,
+  notes: isArrayOf(isString),
+});
+
 export const isConsultativeAgentOutput: Validator<ConsultativeAgentOutput> =
   isOneOf<ConsultativeAgentOutput>([
     isPlannerSupervisorOutput,
@@ -235,6 +319,9 @@ export const isConsultativeAgentOutput: Validator<ConsultativeAgentOutput> =
     isSkepticOutput,
     isRiskAnalystOutput,
     isExecutionAdvisorOutput,
+    isMemoryAgentOutput,
+    isAuditAgentOutput,
+    isPolicyAgentOutput,
   ]);
 
 export function parseConsultativeAgentOutput(
