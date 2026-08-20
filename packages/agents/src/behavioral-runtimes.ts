@@ -119,6 +119,39 @@ class DurableEvaluationStore {
   }
 }
 
+class ConsultativeEvalsRunner {
+  run(input: EvalInput): EvalResult {
+    const values = Object.values(input.qualityDimensions ?? {}).filter(
+      (value): value is number => typeof value === "number",
+    );
+    const dimensionScore =
+      values.length > 0
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : 0.5;
+    const failurePenalty = input.failurePatterns?.length ? 0.1 : 0;
+    const qualityScore = clampQuality(
+      roundQuality(0.4 + dimensionScore * 0.4 + 0.15 - failurePenalty),
+    );
+    const decisionSummary =
+      input.decisionSummary ??
+      `Decision reviewed for ${input.candidateId ?? "unknown candidate"}`;
+    const consistencyFindings = [
+      ...(input.decisionSummary ? [] : ["decisionSummary missing from evaluated payload"]),
+      ...(values.length === 0 ? ["no quantitative quality dimensions were supplied"] : []),
+      ...(input.failurePatterns?.length
+        ? [`failure patterns observed: ${input.failurePatterns.join(", ")}`]
+        : []),
+    ];
+
+    return {
+      qualityScore,
+      decisionSummary,
+      consistencyFindings,
+      failurePatterns: input.failurePatterns ?? [],
+    };
+  }
+}
+
 export class MemoryConsultativeAdapter extends BaseAgentAdapter {
   readonly adapterId = "memory-consultative";
   readonly runtimeName = "mastra";
@@ -206,9 +239,11 @@ export class AuditConsultativeAdapter extends BaseAgentAdapter {
   ) {
     super();
     this.evalStore = new DurableEvaluationStore(evalFilePath);
+    this.evalsRunner = new ConsultativeEvalsRunner();
   }
 
   private readonly evalStore: DurableEvaluationStore;
+  private readonly evalsRunner: ConsultativeEvalsRunner;
 
   async run(input: AgentInput): Promise<AgentOutput> {
     const config = this.configs.get(input.agentId);
@@ -226,25 +261,7 @@ export class AuditConsultativeAdapter extends BaseAgentAdapter {
       qualityDimensions: asObject(payload.signal).qualityDimensions as Record<string, number> | undefined,
       failurePatterns: normalizeStrings(payload.failurePatterns ?? asObject(payload.signal).failurePatterns),
     } satisfies EvalInput;
-
-    const values = Object.values(evalInput.qualityDimensions ?? {}).filter((value): value is number => typeof value === "number");
-    const dimensionScore = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0.5;
-    const failurePenalty = evalInput.failurePatterns.length > 0 ? 0.1 : 0;
-    const qualityScore = clampQuality(roundQuality(0.4 + dimensionScore * 0.4 + 0.15 - failurePenalty));
-    const decisionSummary =
-      evalInput.decisionSummary ?? `Decision reviewed for ${evalInput.candidateId ?? "unknown candidate"}`;
-    const consistencyFindings = [
-      ...(evalInput.decisionSummary ? [] : ["decisionSummary missing from evaluated payload"]),
-      ...(values.length === 0 ? ["no quantitative quality dimensions were supplied"] : []),
-      ...(evalInput.failurePatterns.length > 0 ? [`failure patterns observed: ${evalInput.failurePatterns.join(", ")}`] : []),
-    ];
-
-    const result: EvalResult = {
-      qualityScore,
-      decisionSummary,
-      consistencyFindings,
-      failurePatterns: evalInput.failurePatterns,
-    };
+    const result = this.evalsRunner.run(evalInput);
 
     this.evalStore.append({
       agentId: input.agentId,
@@ -255,12 +272,12 @@ export class AuditConsultativeAdapter extends BaseAgentAdapter {
 
     const output: ConsultativeAgentOutput = {
       agentId: "agent-audit" as const,
-      confidence: qualityScore,
-      summary: `Audit scored the decision at ${Math.round(qualityScore * 100)}% quality`,
+      confidence: result.qualityScore,
+      summary: `Audit scored the decision at ${Math.round(result.qualityScore * 100)}% quality`,
       assumptions: ["audit evaluation is derived from persisted eval results"],
-      qualityScore,
-      decisionSummary,
-      consistencyFindings,
+      qualityScore: result.qualityScore,
+      decisionSummary: result.decisionSummary,
+      consistencyFindings: result.consistencyFindings,
       failurePatterns: evalInput.failurePatterns,
     };
 
