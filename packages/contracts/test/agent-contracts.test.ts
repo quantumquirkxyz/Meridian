@@ -486,6 +486,13 @@ describe("ConsultativeAgentOutput", () => {
             warning: "latency spike mirrored the current shape",
           },
         ],
+        recalledPerformance: [
+          {
+            outcome: "flat",
+            resultUsd: -120,
+            lesson: "avoid late entries in volatile regimes",
+          },
+        ],
         recommendedFollowUps: ["inspect latency envelope"],
       }),
     ).toBe(true);

@@ -239,7 +239,7 @@ describe("consultative agent catalog", () => {
 
     for (const [agentId, layer, runtime] of expected) {
       const config = getConsultativeAgentConfig(agentId);
-      expect(runtime).toBe(config.runtime);
+      expect(config.runtime).toBe(runtime);
       expect(config.layer).toBe(layer);
       expect(config.permissions).toEqual(["OBSERVE_STATE", "OBSERVE_AUDIT"]);
       expect(config.fallback.hasFallback).toBe(true);

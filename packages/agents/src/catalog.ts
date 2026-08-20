@@ -191,6 +191,7 @@ export const CONSULTATIVE_AGENT_CATALOG: readonly ConsultativeAgentDefinition[] 
           hardcodedValue: {
             agentId: "agent-memory",
             recalledCases: [],
+            recalledPerformance: [],
             recommendedFollowUps: [
               "memory lookup unavailable; proceed with explicit uncertainty",
             ],

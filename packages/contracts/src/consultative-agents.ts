@@ -125,6 +125,11 @@ export interface MemoryAgentOutput extends AgentAnalysisBase {
     relevance: number;
     warning?: string;
   }>;
+  recalledPerformance: Array<{
+    outcome: string;
+    resultUsd: number;
+    lesson: string;
+  }>;
   recommendedFollowUps: string[];
 }
 
@@ -272,6 +277,13 @@ const isMemoryAgentOutput: Validator<MemoryAgentOutput> = isObjectOf({
       pattern: isString,
       relevance: isNumber,
       warning: isOptional(isString),
+    }),
+  ),
+  recalledPerformance: isArrayOf(
+    isObjectOf({
+      outcome: isString,
+      resultUsd: isNumber,
+      lesson: isString,
     }),
   ),
   recommendedFollowUps: isArrayOf(isString),
