@@ -232,16 +232,14 @@ describe("consultative agent catalog", () => {
 
   test("memory, audit, and policy agents are advisory-only with runtime per ADR-0004", () => {
     const expected = [
-      ["agent-memory", "control"],
-      ["agent-audit", "control"],
-      ["agent-policy", "control"],
+      ["agent-memory", "control", "mastra"],
+      ["agent-audit", "control", "mastra"],
+      ["agent-policy", "control", "vercel-ai-sdk"],
     ] as const;
 
-    for (const [agentId, layer] of expected) {
+    for (const [agentId, layer, runtime] of expected) {
       const config = getConsultativeAgentConfig(agentId);
-      expect(
-        agentId === "agent-policy" ? "vercel-ai-sdk" : "mastra",
-      ).toBe(config.runtime);
+      expect(runtime).toBe(config.runtime);
       expect(config.layer).toBe(layer);
       expect(config.permissions).toEqual(["OBSERVE_STATE", "OBSERVE_AUDIT"]);
       expect(config.fallback.hasFallback).toBe(true);

@@ -286,7 +286,7 @@ const isAuditAgentOutput: Validator<AuditAgentOutput> = isObjectOf({
   failurePatterns: isArrayOf(isString),
 });
 
-const isPolicyAgentOutput = isObjectOf({
+const isPolicyAgentOutput: Validator<PolicyAgentOutput> = isObjectOf({
   ...isAgentAnalysisBase,
   agentId: isEnumOf(["agent-policy"] as const),
   internalLimits: isArrayOf(isString),
@@ -295,7 +295,7 @@ const isPolicyAgentOutput = isObjectOf({
   reviewRequired: isBoolean,
   approvalPower: isBooleanLiteralFalse,
   notes: isArrayOf(isString),
-}) as Validator<PolicyAgentOutput>;
+});
 
 export const isConsultativeAgentOutput: Validator<ConsultativeAgentOutput> =
   isOneOf<ConsultativeAgentOutput>([
