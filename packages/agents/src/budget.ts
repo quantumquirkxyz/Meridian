@@ -8,7 +8,6 @@
  */
 
 import type {
-  AgentTokenBudget,
   AgentRuntimePolicy,
   AgentRetryPolicy,
 } from "@agenttrading/contracts";
@@ -70,11 +69,12 @@ export class BudgetEnforcer {
     const budget = policy.tokenBudget;
     const consumption = this.getConsumption(agentId);
 
-    // Check cost budget (per-invocation max)
-    if (budget.maxCostUsd > 0) {
-      // This is a per-invocation check; the runtime passes the budget per call.
-      // We check if the max output tokens alone would exceed the cost.
-      // (Cost estimation is delegated to the runtime; we just enforce the limits.)
+    // Check accumulated cost budget (cumulative across invocations)
+    if (budget.maxCostUsd > 0 && consumption.costUsd >= budget.maxCostUsd) {
+      return {
+        allowed: false,
+        reason: `Accumulated cost ($${consumption.costUsd.toFixed(6)}) exceeds max ($${budget.maxCostUsd})`,
+      };
     }
 
     // Check output token budget (per-invocation)

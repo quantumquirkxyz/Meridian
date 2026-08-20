@@ -31,8 +31,8 @@ class MockAgentAdapter extends BaseAgentAdapter {
   private readonly outputs: AgentOutput[];
   private callIndex = 0;
 
-  constructor(outputs: AgentOutput[]) {
-    super();
+  constructor(outputs: AgentOutput[], options?: { now?: () => number }) {
+    super(options);
     this.outputs = outputs;
   }
 
@@ -46,6 +46,10 @@ class MockAgentAdapter extends BaseAgentAdapter {
 class FailingAdapter extends BaseAgentAdapter {
   readonly adapterId = "failing";
   readonly runtimeName = "failing-runtime";
+
+  constructor(options?: { now?: () => number }) {
+    super(options);
+  }
 
   async run(_input: AgentInput): Promise<AgentOutput> {
     throw new Error("LLM unavailable");
@@ -471,10 +475,10 @@ describe("AgentRuntime", () => {
   test("run succeeds with valid adapter", async () => {
     const registry = new AgentRegistry();
     const output = makeStructuredOutput("alpha-scan");
-    registry.register(
-      makeConfig("alpha-scan"),
-      new MockAgentAdapter([output]),
-    );
+    const adapter = new MockAgentAdapter([output]);
+    // Register a schema validator so AC #1 validation passes
+    adapter.registerSchema("alpha-scan", () => ({ valid: true }));
+    registry.register(makeConfig("alpha-scan"), adapter);
 
     const runtime = new AgentRuntime({ registry });
     const result = await runtime.run(makeInput("alpha-scan"));
@@ -483,6 +487,72 @@ describe("AgentRuntime", () => {
     expect(result.status).toBe("completed");
     expect(result.fallbackUsed).toBe(false);
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test("run fails when schema declared but no validator registered (AC #1)", async () => {
+    const registry = new AgentRegistry();
+    const output = makeStructuredOutput("alpha-scan");
+    // No schema registered on the adapter
+    registry.register(
+      makeConfig("alpha-scan", {
+        outputSchema: { type: "object", properties: { signal: { type: "string" } } },
+      }),
+      new MockAgentAdapter([output]),
+    );
+
+    const runtime = new AgentRuntime({ registry });
+    const result = await runtime.run(makeInput("alpha-scan"));
+
+    // Should fail because config declares a schema but no validator is registered
+    expect(result.output.kind).toBe("error");
+    expect(result.status).toBe("fallback_used");
+  });
+
+  test("run accepts output when no schema configured (AC #1 graceful degradation)", async () => {
+    const registry = new AgentRegistry();
+    const output = makeStructuredOutput("alpha-scan");
+    // Default config has outputSchema: { type: "object" } — treated as no real schema
+    registry.register(
+      makeConfig("alpha-scan"),
+      new MockAgentAdapter([output]),
+    );
+
+    const runtime = new AgentRuntime({ registry });
+    const result = await runtime.run(makeInput("alpha-scan"));
+
+    // Should succeed — no real schema configured, so output is accepted
+    expect(result.output.kind).toBe("structured");
+    expect(result.status).toBe("completed");
+  });
+
+  test("run returns budget_exceeded when budget is exceeded (AC #4)", async () => {
+    const registry = new AgentRegistry();
+    const output = makeStructuredOutput("alpha-scan");
+    const adapter = new MockAgentAdapter([output]);
+    adapter.registerSchema("alpha-scan", () => ({ valid: true }));
+    registry.register(
+      makeConfig("alpha-scan", {
+        policy: {
+          tokenBudget: { maxInputTokens: 4096, maxOutputTokens: 100, maxCostUsd: 0.001 },
+          timeoutMs: 30_000,
+          retry: { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 10_000 },
+        },
+      }),
+      adapter,
+    );
+
+    const budget = new BudgetEnforcer();
+    // Pre-load consumption near the budget limit
+    budget.recordConsumption("alpha-scan", 0, 0, 0.001);
+
+    const runtime = new AgentRuntime({ registry, budget });
+    const result = await runtime.run(makeInput("alpha-scan"));
+
+    expect(result.output.kind).toBe("error");
+    expect(result.status).toBe("failed");
+    if (result.output.kind === "error") {
+      expect(result.output.errorCode).toBe("BUDGET_EXCEEDED");
+    }
   });
 
   test("run retries on failure", async () => {
@@ -541,10 +611,9 @@ describe("AgentRuntime", () => {
   test("logger records invocation events", async () => {
     const registry = new AgentRegistry();
     const output = makeStructuredOutput("alpha-scan");
-    registry.register(
-      makeConfig("alpha-scan"),
-      new MockAgentAdapter([output]),
-    );
+    const adapter = new MockAgentAdapter([output]);
+    adapter.registerSchema("alpha-scan", () => ({ valid: true }));
+    registry.register(makeConfig("alpha-scan"), adapter);
 
     const logger = new AgentLogger();
     const runtime = new AgentRuntime({ registry, logger });

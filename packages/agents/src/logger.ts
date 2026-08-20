@@ -49,6 +49,11 @@ export interface AgentLogEntry {
 export class AgentLogger {
   private readonly entries: AgentLogEntry[] = [];
   private entryCounter = 0;
+  private readonly now: () => number;
+
+  constructor(options?: { now?: () => number }) {
+    this.now = options?.now ?? (() => Date.now());
+  }
 
   /**
    * Log an agent operation.
@@ -67,7 +72,7 @@ export class AgentLogger {
       agentId: params.agentId,
       operation: params.operation,
       message: params.message,
-      timestampMs: Date.now(),
+      timestampMs: this.now(),
       data: params.data,
       durationMs: params.durationMs,
     };

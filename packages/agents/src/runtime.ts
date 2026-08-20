@@ -64,9 +64,9 @@ export class AgentRuntime {
   constructor(options: AgentRuntimeOptions) {
     this.registry = options.registry;
     this.memory = options.memory ?? new AgentMemory();
-    this.logger = options.logger ?? new AgentLogger();
-    this.budget = options.budget ?? new BudgetEnforcer();
     this.now = options.now ?? (() => Date.now());
+    this.logger = options.logger ?? new AgentLogger({ now: this.now });
+    this.budget = options.budget ?? new BudgetEnforcer();
   }
 
   /**
@@ -109,10 +109,31 @@ export class AgentRuntime {
     const adapter = registration.adapter;
     const policy = registration.config.policy;
 
-    // 2. Log invocation start
+    // 2. Pre-flight budget check (AC #4)
+    const budgetCheck = this.budget.wouldExceedBudget(
+      input.agentId,
+      policy,
+      policy.tokenBudget.maxOutputTokens,
+    );
+    if (!budgetCheck.allowed) {
+      this.logger.logBudgetExceeded(
+        input.agentId,
+        this.budget.getConsumption(input.agentId).costUsd,
+        policy.tokenBudget.maxCostUsd,
+        "cost",
+      );
+      return this.buildErrorResult(
+        input.agentId,
+        "BUDGET_EXCEEDED",
+        budgetCheck.reason ?? "Budget exceeded",
+        startTime,
+      );
+    }
+
+    // 3. Log invocation start
     this.logger.logInvocationStart(input.agentId, input.payload);
 
-    // 3. Run with retry and timeout
+    // 4. Run with retry and timeout
     let lastError: string | undefined;
     let retriesAttempted = 0;
     const maxAttempts = policy.retry.maxAttempts;
@@ -272,6 +293,12 @@ export class AgentRuntime {
 
   /**
    * Validate the agent output against its schema.
+   *
+   * AC #1: Schema validation is fail-closed. When the agent config
+   * declares an outputSchema but no validator is registered for the
+   * agent, validation fails. When no outputSchema is configured, the
+   * output is accepted with a warning (graceful degradation for agents
+   * that genuinely have no schema).
    */
   private validateOutput(
     agentId: string,
@@ -282,12 +309,10 @@ export class AgentRuntime {
     // Explanations are inherently non-executable; structured output must
     // be validated against the agent's schema.
     if (output.kind === "explanation") {
-      // Explanations are valid but non-executable by design.
       return { valid: true };
     }
 
     if (output.kind === "error") {
-      // Error outputs are valid by construction.
       return { valid: true };
     }
 
@@ -297,7 +322,38 @@ export class AgentRuntime {
       return { valid: false, errors: [`No adapter found for agent: ${agentId}`] };
     }
 
-    return adapter.validateOutput(agentId, output.payload, schemaName);
+    // AC #1: fail-closed — if a schema is registered, validate against it.
+    // If no schema is registered, check the agent config.
+    if (adapter.isSchemaRegistered(agentId)) {
+      return adapter.validateOutput(agentId, output.payload, schemaName);
+    }
+
+    // No schema registered on the adapter. Check if the agent config
+    // declares an outputSchema (not the default placeholder).
+    const registration = this.registry.get(agentId);
+    const configSchema = registration?.config.outputSchema;
+    const hasRealSchema =
+      configSchema !== undefined &&
+      !("type" in configSchema && Object.keys(configSchema).length === 1);
+
+    if (hasRealSchema) {
+      // Agent declares a schema but no validator is registered — fail.
+      return {
+        valid: false,
+        errors: [
+          `Agent ${agentId} declares an output schema but no validator is registered`,
+        ],
+      };
+    }
+
+    // No schema declared and none registered — accept with warning.
+    this.logger.log({
+      level: "warn",
+      agentId,
+      operation: "schema:missing",
+      message: `No output schema configured for agent ${agentId}; output accepted without validation`,
+    });
+    return { valid: true };
   }
 
   /**

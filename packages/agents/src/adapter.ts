@@ -63,6 +63,11 @@ export interface AgentAdapter {
   run(input: AgentInput): Promise<AgentOutput>;
 
   /**
+   * Check whether a schema validator is registered for the given agent.
+   */
+  isSchemaRegistered(agentId: string): boolean;
+
+  /**
    * Validate an agent's output against its declared schema.
    * Returns a validation result with errors if the output doesn't match.
    */
@@ -99,6 +104,13 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   abstract readonly adapterId: string;
   abstract readonly runtimeName: string;
 
+  /** Injectable clock; defaults to Date.now. */
+  private readonly now: () => number;
+
+  constructor(options?: { now?: () => number }) {
+    this.now = options?.now ?? (() => Date.now());
+  }
+
   abstract run(input: AgentInput): Promise<AgentOutput>;
 
   /**
@@ -122,7 +134,15 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   }
 
   /**
+   * Check whether a schema validator is registered for the given agent.
+   */
+  isSchemaRegistered(agentId: string): boolean {
+    return this.schemaValidators.has(agentId);
+  }
+
+  /**
    * Validate output against registered schema.
+   * Returns invalid when no schema is registered (fail-closed per AC #1).
    */
   validateOutput(
     agentId: string,
@@ -131,9 +151,10 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
   ): SchemaValidationResult {
     const validator = this.schemaValidators.get(agentId);
     if (!validator) {
-      // No schema registered: output is valid by default.
-      // Schemas are optional per-agent; when absent, the output passes.
-      return { valid: true };
+      return {
+        valid: false,
+        errors: [`No schema registered for agent: ${agentId}`],
+      };
     }
     return validator(output);
   }
@@ -148,7 +169,7 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
       agentId,
       errorCode: "FALLBACK_TRIGGERED",
       message: `Deterministic fallback triggered: ${reason}`,
-      timestampMs: Date.now(),
+      timestampMs: this.now(),
       fallbackUsed: true,
     };
   }
@@ -165,8 +186,8 @@ export abstract class BaseAgentAdapter implements AgentAdapter {
     metadata?: Record<string, unknown>;
   }): AgentAuditEntry {
     return {
-      eventId: `agent-${params.agentId}-${Date.now()}`,
-      timestampMs: Date.now(),
+      eventId: `agent-${params.agentId}-${this.now()}`,
+      timestampMs: this.now(),
       agentId: params.agentId,
       action: params.action,
       fallbackUsed: params.fallbackUsed,
