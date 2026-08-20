@@ -16,7 +16,7 @@ import {
   isExecutableRiskOutcome,
   MODULE_ACTORS,
 } from "../stategraph/topology.ts";
-import { RiskGate } from "../risk/risk-gate.ts";
+import { RiskEngine } from "../risk/risk-gate.ts";
 
 /**
  * Simulated opportunity flow (issue #13 AC4, the Phase Zero exit criterion):
@@ -60,7 +60,7 @@ export interface SimulatedFlowResult {
 /** Inputs that drive one deterministic simulated opportunity walk. */
 export interface SimulatedFlowOptions {
   graph: StateGraph;
-  riskGate: RiskGate;
+  riskGate: RiskEngine;
   scenario: SimulatedFlowScenario;
   timestampMs: number;
 }
