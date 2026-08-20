@@ -7,9 +7,11 @@ import {
   isAgentFallback,
   isAgentAuditEntry,
   isAgentStatus,
+  isConsultativeAgentOutput,
   parseAgentInput,
   parseAgentOutput,
   parseAgentRunResult,
+  parseConsultativeAgentOutput,
   OUTPUT_KINDS,
   AGENT_STATUS,
   type AgentInput,
@@ -20,6 +22,7 @@ import {
   type AgentRunResult,
   type AgentRuntimePolicy,
   type AgentFallback,
+  type ConsultativeAgentOutput,
 } from "../src/index.ts";
 
 // ── Fixtures ───────────────────────────────────────────────────────────
@@ -391,6 +394,78 @@ describe("AgentAuditEntry", () => {
         eventId: "audit-1",
         agentId: "test",
         action: "test",
+      }),
+    ).toBe(false);
+  });
+});
+
+// ── Consultative agent outputs ────────────────────────────────────────
+
+function validConsultativeOutput(
+  overrides?: Partial<ConsultativeAgentOutput>,
+): ConsultativeAgentOutput {
+  return {
+    agentId: "agent-arbitrage-alpha",
+    confidence: 0.78,
+    summary: "Route remains profitable after fees.",
+    assumptions: ["Stable venue latency", "No inventory shock"],
+    invalidationReasons: [],
+    candidateSignal: "ARB:BTC-USDT",
+    expectedNetProfitUsd: 42,
+    costBreakdownUsd: {
+      feesUsd: 4,
+      slippageUsd: 5,
+      gasUsd: 1,
+      bridgeCostUsd: 0,
+      fundingCostUsd: 0,
+      latencyRiskUsd: 2,
+      failureRiskUsd: 1,
+      safetyBufferUsd: 3,
+    },
+    ...overrides,
+  } as ConsultativeAgentOutput;
+}
+
+describe("ConsultativeAgentOutput", () => {
+  test("arbitrage alpha output passes validation", () => {
+    const output = validConsultativeOutput();
+    expect(isConsultativeAgentOutput(output)).toBe(true);
+    expect(parseConsultativeAgentOutput(output)).toEqual(output);
+  });
+
+  test("planner supervisor output includes planning fields", () => {
+    const output: ConsultativeAgentOutput = {
+      agentId: "agent-planner-supervisor",
+      confidence: 0.66,
+      summary: "Coordinate analysis before review.",
+      assumptions: ["Market graph is fresh"],
+      invalidationReasons: ["MIN_EDGE"],
+      plannedSteps: ["scan", "rank", "debate"],
+      recommendedMode: "OBSERVE_ONLY",
+    };
+    expect(isConsultativeAgentOutput(output)).toBe(true);
+  });
+
+  test("debate output carries invalidation reasons but no execution authority", () => {
+    const output: ConsultativeAgentOutput = {
+      agentId: "agent-bull",
+      confidence: 0.72,
+      summary: "Bull case remains intact.",
+      assumptions: ["Liquidity persists"],
+      invalidationReasons: ["MIN_EDGE"],
+      candidateId: "cand-1",
+      confidenceDelta: 0.08,
+      stance: "bullish",
+    };
+    expect(isConsultativeAgentOutput(output)).toBe(true);
+  });
+
+  test("invalid consultative output is rejected", () => {
+    expect(
+      isConsultativeAgentOutput({
+        agentId: "agent-arbitrage-alpha",
+        confidence: 0.5,
+        summary: "missing fields",
       }),
     ).toBe(false);
   });

@@ -89,8 +89,8 @@ describe("permission boundary (issue #23 AC1 — agents never execute)", () => {
     const registry = defaultPermissionRegistry();
     for (const perm of FORBIDDEN) {
       // Existing agent IDs are enforced at runtime: grant() throws.
-      expect(() => registry.grant("agent-planner", perm)).toThrow();
-      expect(() => registry.grant("agent-audit", perm)).toThrow();
+      expect(() => registry.grant("agent-planner-supervisor", perm)).toThrow();
+      expect(() => registry.grant("agent-execution-advisor", perm)).toThrow();
       expect(() => registry.grant("agent-arbitrage-alpha", perm)).toThrow();
     }
     // Modules/engines are unaffected — they are not in the agent set.
@@ -118,10 +118,23 @@ describe("permission boundary (issue #23 AC1 — agents never execute)", () => {
     expect(registry.has(MODULE_ACTORS.executionEngine, "SIGN_TRANSACTION")).toBe(true);
   });
 
-  test("agent-analyst is a pure observer: no proposal or execution permissions", () => {
+  test("issue #28 consultative agents are all present in the permission boundary", () => {
+    expect(AGENT_IDS).toEqual([
+      "agent-planner-supervisor",
+      "agent-arbitrage-alpha",
+      "agent-market-regime",
+      "agent-bull",
+      "agent-bear",
+      "agent-skeptic",
+      "agent-risk-analyst",
+      "agent-execution-advisor",
+    ]);
+  });
+
+  test("agent-audit is a pure observer: no proposal or execution permissions", () => {
     const registry = defaultPermissionRegistry();
-    expect(registry.has("agent-audit", "OBSERVE_AUDIT")).toBe(true);
-    expect(registry.has("agent-audit", "OBSERVE_STATE")).toBe(true);
+    expect(registry.has("agent-audit", "OBSERVE_AUDIT")).toBe(false);
+    expect(registry.has("agent-audit", "OBSERVE_STATE")).toBe(false);
     // Cannot propose or execute
     expect(registry.has("agent-audit", "PROPOSE_SIGNAL")).toBe(false);
     expect(registry.has("agent-audit", "APPROVE_RISK")).toBe(false);
