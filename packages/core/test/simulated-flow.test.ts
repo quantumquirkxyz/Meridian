@@ -6,7 +6,7 @@ import {
   buildDefaultGraph,
   defaultPermissionRegistry,
 } from "../src/stategraph/topology.ts";
-import { DEFAULT_RISK_POLICY, RiskGate } from "../src/risk/risk-gate.ts";
+import { DEFAULT_RISK_POLICY, RiskEngine } from "../src/risk/risk-gate.ts";
 import {
   runSimulatedOpportunityFlow,
   type SimulatedFlowResult,
@@ -17,7 +17,7 @@ const FIXED_TS = 1_700_000_000_000;
 function flowHarness(): {
   graph: StateGraph;
   audit: AuditLog;
-  gate: RiskGate;
+  gate: RiskEngine;
   run: (
     id: string,
     expectedNetProfitUsd: number,
@@ -33,7 +33,7 @@ function flowHarness(): {
     audit,
     now: () => FIXED_TS,
   });
-  const gate = new RiskGate(DEFAULT_RISK_POLICY);
+  const gate = new RiskEngine(DEFAULT_RISK_POLICY);
   return {
     graph,
     audit,
