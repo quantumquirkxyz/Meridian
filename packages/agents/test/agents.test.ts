@@ -16,6 +16,9 @@ import {
   CONSULTATIVE_AGENT_CONFIGS,
   CONSULTATIVE_AGENT_IDS,
   getConsultativeAgentConfig,
+  MemoryConsultativeAdapter,
+  AuditConsultativeAdapter,
+  PolicyConsultativeAdapter,
   createDefaultAgentConfig,
   RUNTIME_TYPES,
 } from "../src/index.ts";
@@ -244,6 +247,126 @@ describe("consultative agent catalog", () => {
       expect(config.permissions).toEqual(["OBSERVE_STATE", "OBSERVE_AUDIT"]);
       expect(config.fallback.hasFallback).toBe(true);
     }
+  });
+});
+
+describe("consultative behavioral runtimes", () => {
+  test("memory runtime recalls durable state and warns on weak precedents", async () => {
+    const memory = new AgentMemory();
+    memory.setState("agent-memory", "cases", [
+      {
+        caseId: "case-1",
+        pattern: "slippage spike",
+        relevance: 0.92,
+        warning: "execution window narrowed",
+      },
+      {
+        caseId: "case-2",
+        pattern: "latency regression",
+        relevance: 0.31,
+      },
+    ]);
+    memory.setState("agent-memory", "performance", [
+      { outcome: "positive", resultUsd: 14.2, lesson: "keep venue diversity" },
+    ]);
+    const runtime = new MemoryConsultativeAdapter(memory, CONSULTATIVE_AGENT_CONFIGS);
+
+    const result = await runtime.run({
+      agentId: "agent-memory",
+      payload: { followUps: ["verify venue routing"] },
+      permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
+      timestampMs: Date.now(),
+      conversationHistory: [{ role: "user", content: "recall last failure" }],
+    });
+
+    expect(result.kind).toBe("structured");
+    if (result.kind !== "structured") return;
+    const payload = result.payload as {
+      agentId: "agent-memory";
+      recalledCases: Array<{ caseId: string; warning?: string }>;
+      recalledPerformance: Array<{ outcome: string; resultUsd: number; lesson: string }>;
+      recommendedFollowUps: string[];
+    };
+    expect(payload.agentId).toBe("agent-memory");
+    expect(payload.recalledCases).toHaveLength(2);
+    expect(payload.recalledCases[0].caseId).toBe("case-1");
+    expect(payload.recalledCases[1].warning).toBe(
+      "low relevance; verify before reuse",
+    );
+    expect(payload.recalledPerformance).toHaveLength(1);
+    expect(payload.recommendedFollowUps).toContain("verify venue routing");
+    expect(memory.getMessages("agent-memory")).toHaveLength(1);
+  });
+
+  test("audit runtime produces a readable decision summary and quality score", async () => {
+    const runtime = new AuditConsultativeAdapter(CONSULTATIVE_AGENT_CONFIGS);
+
+    const result = await runtime.run({
+      agentId: "agent-audit",
+      payload: {
+        decisionSummary: "route the order through the lower-fee venue",
+        signal: {
+          candidateId: "arb-17",
+          qualityDimensions: {
+            completeness: 0.9,
+            consistency: 0.8,
+            traceability: 1,
+          },
+          failurePatterns: ["late venue response"],
+        },
+      },
+      permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
+      timestampMs: Date.now(),
+    });
+
+    expect(result.kind).toBe("structured");
+    if (result.kind !== "structured") return;
+    const payload = result.payload as {
+      agentId: "agent-audit";
+      qualityScore: number;
+      decisionSummary: string;
+      consistencyFindings: string[];
+    };
+    expect(payload.agentId).toBe("agent-audit");
+    expect(payload.qualityScore).toBeGreaterThan(0.5);
+    expect(payload.decisionSummary).toContain("route the order");
+    expect(payload.consistencyFindings.join(" ")).toContain(
+      "failure patterns observed",
+    );
+  });
+
+  test("policy runtime blocks internal constraints without approval power", async () => {
+    const runtime = new PolicyConsultativeAdapter(CONSULTATIVE_AGENT_CONFIGS);
+
+    const blocked = await runtime.run({
+      agentId: "agent-policy",
+      payload: {
+        policy: {
+          blockedVenues: ["venue-x"],
+          internalLimits: ["max exposure 1.5%"],
+          userConfiguredTerms: ["no market orders"],
+          venue: "venue-x",
+          terms: ["no market orders"],
+        },
+      },
+      permissions: ["OBSERVE_STATE", "OBSERVE_AUDIT"],
+      timestampMs: Date.now(),
+    });
+
+    expect(blocked.kind).toBe("structured");
+    if (blocked.kind !== "structured") return;
+    const payload = blocked.payload as {
+      agentId: "agent-policy";
+      reviewRequired: boolean;
+      approvalPower: false;
+      blockedVenues: string[];
+      notes: string[];
+    };
+    expect(payload.agentId).toBe("agent-policy");
+    expect(payload.reviewRequired).toBe(true);
+    expect(payload.approvalPower).toBe(false);
+    expect(payload.blockedVenues).toEqual(["venue-x"]);
+    expect(payload.notes.join(" ")).toContain("blocked by internal policy");
   });
 });
 
