@@ -7,6 +7,7 @@ import {
   defaultPermissionRegistry,
 } from "../src/stategraph/topology.ts";
 import { DEFAULT_RISK_POLICY, RiskEngine } from "../src/risk/risk-gate.ts";
+import { ReconciliationEngine } from "../src/reconciliation/reconciliation-engine.ts";
 import {
   runSimulatedOpportunityFlow,
   type SimulatedFlowResult,
@@ -34,6 +35,7 @@ function flowHarness(): {
     now: () => FIXED_TS,
   });
   const gate = new RiskEngine(DEFAULT_RISK_POLICY);
+  const reconciliationEngine = new ReconciliationEngine();
   return {
     graph,
     audit,
@@ -42,6 +44,7 @@ function flowHarness(): {
       runSimulatedOpportunityFlow({
         graph,
         riskGate: gate,
+        reconciliationEngine,
         scenario: { id, expectedNetProfitUsd, ...overrides },
         timestampMs: FIXED_TS,
       }),
