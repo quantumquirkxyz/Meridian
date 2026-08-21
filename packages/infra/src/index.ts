@@ -34,3 +34,17 @@ export {
   BetaControlInkTui,
   type BetaControlInkTuiProps,
 } from "./control-tui-ink.tsx";
+export {
+  GAMMA_CONTROL_COMMAND_DESCRIPTORS,
+  GammaControlTuiModel,
+  gammaCommandForHotkey,
+  type GammaControlCommandRow,
+  type GammaControlCommand,
+  type GammaControlTuiModelOptions,
+  type GammaControlPort,
+  type GammaControlPortResult,
+  type GammaControlPortStatus,
+  type GammaControlStatusRow,
+  type GammaControlTuiView,
+  type GammaPaperLoopRunner,
+} from "./gamma-control-tui.ts";
