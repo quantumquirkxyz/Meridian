@@ -77,7 +77,7 @@ function sourceFiles(dir: string): string[] {
       const full = join(p, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (entry.name.endsWith(".ts")) {
+      } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
         out.push(full);
       }
     }
@@ -174,6 +174,21 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
       const content = readFileSync(file, "utf8");
       for (const match of content.matchAll(importSpecifiers)) {
         expect(isForbiddenModule(match[1])).toBe(false);
+      }
+    }
+  });
+
+  test("infra source never imports core, connectors, or LLM modules", () => {
+    const importSpecifiers =
+      /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+    for (const file of sourceFiles("infra")) {
+      const content = readFileSync(file, "utf8");
+      for (const match of content.matchAll(importSpecifiers)) {
+        const spec = match[1];
+        expect(spec).not.toContain("@agenttrading/core");
+        expect(spec).not.toMatch(/\.\.\/core/);
+        expect(spec).not.toMatch(/\.\.\/connectors/);
+        expect(isForbiddenModule(spec)).toBe(false);
       }
     }
   });

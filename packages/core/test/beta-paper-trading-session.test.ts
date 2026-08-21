@@ -62,6 +62,41 @@ function recommendationFor(input: AgentInput): ConsultativeAgentOutput {
           safetyBufferUsd: 0,
         },
       };
+    case "agent-market-regime":
+      return {
+        ...base,
+        agentId: "agent-market-regime",
+        regime: "choppy",
+        recommendedMode: "PAPER_ONLY",
+      };
+    case "agent-bull":
+      return {
+        ...base,
+        agentId: "agent-bull",
+        candidateId: String(input.payload.candidateId),
+        confidenceDelta: 0.05,
+        invalidationReasons: [],
+        stance: "bullish",
+      };
+    case "agent-bear":
+      return {
+        ...base,
+        agentId: "agent-bear",
+        candidateId: String(input.payload.candidateId),
+        confidenceDelta: -0.02,
+        invalidationReasons: [],
+        stance: "bearish",
+      };
+    case "agent-skeptic":
+      return {
+        ...base,
+        agentId: "agent-skeptic",
+        candidateId: String(input.payload.candidateId),
+        confidenceDelta: -0.1,
+        invalidationReasons: ["MIN_LIQUIDITY"],
+        stance: "skeptical",
+        requiredEvidence: ["confirmed liquidity", "fresh inventory"],
+      };
     case "agent-risk-analyst":
       return {
         ...base,
@@ -83,6 +118,36 @@ function recommendationFor(input: AgentInput): ConsultativeAgentOutput {
           },
         ],
         recommendedMode: "PAPER_ONLY",
+      };
+    case "agent-memory":
+      return {
+        ...base,
+        agentId: "agent-memory",
+        recalledCases: [
+          {
+            caseId: "case-paper-1",
+            pattern: "paper venue fill latency",
+            relevance: 0.7,
+            warning: "verify reconciliation before reuse",
+          },
+        ],
+        recalledPerformance: [
+          {
+            outcome: "filled",
+            resultUsd: 0,
+            lesson: "paper fills require reconciliation evidence",
+          },
+        ],
+        recommendedFollowUps: ["persist post-trade report"],
+      };
+    case "agent-audit":
+      return {
+        ...base,
+        agentId: "agent-audit",
+        qualityScore: 0.9,
+        decisionSummary: "typed runtime audit recommendation",
+        consistencyFindings: [],
+        failurePatterns: [],
       };
     default:
       throw new Error(`unexpected agent ${input.agentId}`);
@@ -131,7 +196,7 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     expect(report.scenarioId).toBe("beta-approved-1");
     expect(report.orderIntent?.idempotencyKey).toBe("intent-beta-approved-1");
     expect(report.riskDecision?.decision).toBe("REDUCE_SIZE");
-    expect(report.agentRecommendations.length).toBeGreaterThanOrEqual(4);
+    expect(report.agentRecommendations.length).toBeGreaterThanOrEqual(10);
     expect(report.agentRecommendations.map((rec) => rec.agentId)).toContain(
       "agent-risk-analyst",
     );
@@ -170,15 +235,54 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     session.startPaperTrading();
     const result = await session.runPaperCycle(approvedScenario());
 
-    expect(calls.map((call) => call.agentId)).toEqual([
-      "agent-planner-supervisor",
-      "agent-arbitrage-alpha",
-      "agent-risk-analyst",
-      "agent-execution-advisor",
-    ]);
     expect(result.report.agentRecommendations.map((rec) => rec.summary)).toEqual(
       calls.map((call) => `runtime recommendation for ${call.agentId}`),
     );
+    expect(calls.map((call) => String(call.agentId))).toEqual([
+      "agent-planner-supervisor",
+      "agent-arbitrage-alpha",
+      "agent-market-regime",
+      "agent-bull",
+      "agent-bear",
+      "agent-skeptic",
+      "agent-risk-analyst",
+      "agent-execution-advisor",
+      "agent-memory",
+      "agent-audit",
+    ]);
+  });
+
+  test("contains agent runtime failures with deterministic fallback recommendations", async () => {
+    const calls: AgentInput[] = [];
+    const agentRunner: BetaAgentRecommendationRunner = {
+      async run(input) {
+        calls.push(input);
+        if (input.agentId === "agent-skeptic") {
+          throw new Error("skeptic runtime unavailable");
+        }
+        return agentRunResult(input);
+      },
+    };
+    const session = new BetaPaperTradingSession({
+      now: () => FIXED_TS,
+      agentRunner,
+    });
+
+    session.startPaperTrading();
+    const result = await session.runPaperCycle(approvedScenario());
+
+    expect(result.report.agentRecommendations.map((rec) => String(rec.agentId))).toEqual(
+      calls.map((call) => String(call.agentId)),
+    );
+    expect(
+      result.report.agentRecommendations.find(
+        (rec) => rec.agentId === "agent-skeptic",
+      )?.summary,
+    ).toContain("deterministic fallback");
+    expect(result.report.reconstruction.auditLogLines.join("\n")).toContain(
+      "agent-skeptic",
+    );
+    expect(result.riskDecision).toBeDefined();
   });
 
   test("fails closed when risk rejects before paper execution", async () => {
@@ -237,6 +341,8 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     expect(result.report.execution).toBeUndefined();
     expect(result.report.inventory?.validation.blocked).toBe(true);
     expect(result.report.inventory?.validation.reasons.length).toBeGreaterThan(0);
+    expect(result.report.riskDecision?.decision).toBe("REJECT");
+    expect(result.report.reconstruction.riskReasonCodes.length).toBeGreaterThan(0);
   });
 
   test("reconciliation mismatch drives the session into the defensive mode chosen by policy", async () => {
@@ -256,6 +362,30 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     expect(result.path).toContain("CANCEL_ONLY_MODE");
     expect(result.report.reconciliation?.unresolved).toBe(true);
     expect(session.status.running).toBe(false);
+  });
+
+  test("cancel-all cancels observable pending paper orders", async () => {
+    const session = new BetaPaperTradingSession({ now: () => FIXED_TS });
+
+    session.startPaperTrading();
+    const result = await session.runPaperCycle(
+      approvedScenario({
+        id: "beta-pending-cancel",
+        paperExecution: {
+          acceptAfterMs: FIXED_TS,
+          fillAfterMs: FIXED_TS + 60_000,
+        },
+      }),
+    );
+
+    expect(result.report.execution?.state).toBe("ACCEPTED");
+    expect(session.status.openPaperOrders).toBe(1);
+
+    expect(session.control("cancel-all")).toMatchObject({
+      command: "cancel-all",
+      mode: "CANCEL_ONLY",
+      openPaperOrders: 0,
+    });
   });
 
   test("control commands enforce sticky defensive modes and kill switch blocks new paper cycles", async () => {
