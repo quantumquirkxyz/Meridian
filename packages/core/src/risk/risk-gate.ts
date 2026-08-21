@@ -139,6 +139,8 @@ export interface RiskGateInput {
   /** OpportunityCandidate.expectedNetProfitUsd that produced this intent. */
   expectedNetProfitUsd: number;
   mode: SystemMode;
+  /** Set when the order must fail closed before execution due to inventory. */
+  inventoryBlocked?: boolean;
 
   // Rule 11: MIN_DATA_QUALITY
   /** Data-quality score for the intent's data source (0–1). */
@@ -312,6 +314,14 @@ export class RiskEngine {
     };
 
     // ── Defensive rules (system-level) ──────────────────────────────
+
+    // Inventory blocks are fail-closed risk decisions.
+    if (input.inventoryBlocked) {
+      result.decision = "REJECT";
+      result.reasonCodes.push("MIN_LIQUIDITY");
+      result.notes = "inventory blocked execution; no trading allowed";
+      return result;
+    }
 
     // Rule 18: AUDIT_UNAVAILABLE — fail closed
     if (input.auditUnavailable) {

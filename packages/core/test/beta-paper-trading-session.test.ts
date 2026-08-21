@@ -342,6 +342,9 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     expect(result.report.inventory?.validation.blocked).toBe(true);
     expect(result.report.inventory?.validation.reasons.length).toBeGreaterThan(0);
     expect(result.report.riskDecision?.decision).toBe("REJECT");
+    if (result.report.riskDecision?.decision === "REJECT") {
+      expect(result.report.riskDecision.reasonCodes).toContain("MIN_LIQUIDITY");
+    }
     expect(result.report.reconstruction.riskReasonCodes.length).toBeGreaterThan(0);
   });
 

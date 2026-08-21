@@ -417,11 +417,15 @@ export class BetaPaperTradingSession {
         inventoryBlocked: true,
         reasons: inventory.validation.reasons,
       }, ["RISK_REJECTED"]);
-      riskDecision = this.inventoryBlockedRiskDecision(
+      riskDecision = this.riskGate.evaluate({
         orderIntent,
-        inventory.validation,
-        timestampMs,
-      );
+        expectedNetProfitUsd: scenario.expectedNetProfitUsd,
+        mode: this.graph.currentMode,
+        dataQualityScore: scenario.dataQualityScore,
+        liquidityDepthUsd: this.market(scenario).liquidityUsd,
+        evaluatedAtMs: timestampMs,
+        inventoryBlocked: true,
+      });
       this.audit.record({
         eventId: `risk-${scenario.id}`,
         timestampMs,
@@ -832,20 +836,6 @@ export class BetaPaperTradingSession {
       snapshot,
     );
     return { snapshot, validation };
-  }
-
-  private inventoryBlockedRiskDecision(
-    orderIntent: OrderIntent,
-    validation: InventoryValidation,
-    timestampMs: number,
-  ): RiskDecision {
-    return {
-      decision: "REJECT",
-      orderIntentIdempotencyKey: orderIntent.idempotencyKey,
-      evaluatedAtMs: timestampMs,
-      reasonCodes: ["MIN_LIQUIDITY"],
-      notes: `inventory blocked execution: ${validation.reasons.join("; ")}`,
-    };
   }
 
   private market(scenario: BetaPaperTradingScenario): PaperMarketSnapshot {
