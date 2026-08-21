@@ -138,6 +138,40 @@ describe("PaperExecutionEngine", () => {
     expect(engine.snapshot("intent-1")).toBeUndefined();
   });
 
+  test("exposes and cancels all pending paper orders", () => {
+    const engine = new PaperExecutionEngine();
+    engine.submit({
+      intent: intent({ idempotencyKey: "intent-1" }),
+      riskDecision: approvedDecision({ orderIntentIdempotencyKey: "intent-1" }),
+      market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 500 },
+      submittedAtMs: 1_000,
+      acceptAfterMs: 1_010,
+      fillAfterMs: 2_000,
+    });
+    engine.submit({
+      intent: intent({ idempotencyKey: "intent-2" }),
+      riskDecision: approvedDecision({ orderIntentIdempotencyKey: "intent-2" }),
+      market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 500 },
+      submittedAtMs: 1_000,
+      acceptAfterMs: 1_010,
+      fillAfterMs: 2_000,
+    });
+
+    expect(engine.pendingSnapshots().map((order) => order.orderId)).toEqual([
+      "intent-1",
+      "intent-2",
+    ]);
+    expect(engine.openOrderCount()).toBe(2);
+
+    const cancelled = engine.cancelAll(1_020);
+    expect(cancelled.map((order) => order.state)).toEqual([
+      "CANCELLED",
+      "CANCELLED",
+    ]);
+    expect(engine.openOrderCount()).toBe(0);
+    expect(engine.pendingSnapshots()).toEqual([]);
+  });
+
   test("rejects expired intents and rejected risk decisions", () => {
     const engine = new PaperExecutionEngine();
 

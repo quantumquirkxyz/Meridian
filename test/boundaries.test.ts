@@ -12,9 +12,8 @@ import { join } from "node:path";
  *   - agents depends only on contracts and never imports core
  *     (ARCHITECTURE.md:88; agents never imports core).
  *
- * `infra` is not restricted to contracts-only by ARCHITECTURE.md:88 (only
- * graph, harness, and connectors are); it may legitimately depend on core
- * later. We assert only that it never depends on LLM/framework runtimes.
+ * `infra` owns observability and the operator control TUI, so ADR-0008 and
+ * ADR-0010 explicitly allow contracts, events, ink, and react only.
  */
 const PACKAGE_DIRS = [
   "contracts",
@@ -78,7 +77,7 @@ function sourceFiles(dir: string): string[] {
       const full = join(p, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (entry.name.endsWith(".ts")) {
+      } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
         out.push(full);
       }
     }
@@ -129,6 +128,12 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
 
   test("infra never depends on LLM/framework runtimes", () => {
     const { dependencies = {} } = packageJson("infra");
+    expect(Object.keys(dependencies).sort()).toEqual([
+      "@agenttrading/contracts",
+      "@agenttrading/events",
+      "ink",
+      "react",
+    ]);
     for (const dep of Object.keys(dependencies)) {
       expect(isForbiddenModule(dep)).toBe(false);
     }
@@ -169,6 +174,21 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
       const content = readFileSync(file, "utf8");
       for (const match of content.matchAll(importSpecifiers)) {
         expect(isForbiddenModule(match[1])).toBe(false);
+      }
+    }
+  });
+
+  test("infra source never imports core, connectors, or LLM modules", () => {
+    const importSpecifiers =
+      /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+    for (const file of sourceFiles("infra")) {
+      const content = readFileSync(file, "utf8");
+      for (const match of content.matchAll(importSpecifiers)) {
+        const spec = match[1];
+        expect(spec).not.toContain("@agenttrading/core");
+        expect(spec).not.toMatch(/\.\.\/core/);
+        expect(spec).not.toMatch(/\.\.\/connectors/);
+        expect(isForbiddenModule(spec)).toBe(false);
       }
     }
   });

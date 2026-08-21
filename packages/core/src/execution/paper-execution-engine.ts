@@ -374,6 +374,25 @@ export class PaperExecutionEngine {
     return pending.snapshot;
   }
 
+  cancelAll(cancelledAtMs: number): PaperOrderSnapshot[] {
+    const cancelled: PaperOrderSnapshot[] = [];
+    for (const orderId of [...this.pending.keys()]) {
+      const snapshot = this.cancel(orderId, cancelledAtMs);
+      if (snapshot !== undefined) {
+        cancelled.push(snapshot);
+      }
+    }
+    return cancelled;
+  }
+
+  pendingSnapshots(): PaperOrderSnapshot[] {
+    return [...this.pending.values()].map((pending) => pending.snapshot);
+  }
+
+  openOrderCount(): number {
+    return this.pending.size;
+  }
+
   snapshot(orderId: string): PaperOrderSnapshot | undefined {
     return this.pending.get(orderId)?.snapshot;
   }
