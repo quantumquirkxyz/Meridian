@@ -48,8 +48,6 @@ import {
   type CanaryPreCheckResult,
 } from "./live-execution-engine.ts";
 import {
-  PaperExecutionEngine,
-  type PaperExecutionSubmitInput,
   type PaperOrderSnapshot,
 } from "../execution/paper-execution-engine.ts";
 
@@ -476,9 +474,7 @@ export class CanarySession {
   private handleStop(statusBefore: GammaControlStatus): GammaControlResult {
     this.running = false;
     this.paused = false;
-    // Cancel all open orders on stop.
-    this.execution.cancelAll(this.now());
-    this.openOrders = [];
+    this.cancelAllOpenOrders();
     this.currentMode = "PAPER_ONLY";
     this.recordAudit("CANARY_STOPPED", {});
     return { ...this.status, command: "stop", ok: true };
