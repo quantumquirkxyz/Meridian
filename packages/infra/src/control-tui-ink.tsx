@@ -1,31 +1,24 @@
 import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import {
-  type BetaControlCommand,
   type BetaControlResult,
 } from "@agenttrading/contracts";
 import {
   BetaControlTuiModel,
+  commandForHotkey,
   type BetaControlCommandRow,
+  type BetaPaperLoopRunner,
   type BetaControlPort,
   type BetaControlStatusRow,
 } from "./control-tui.ts";
 
 export interface BetaControlInkTuiProps {
   session: BetaControlPort;
+  loopRunner?: BetaPaperLoopRunner;
   onDispatch?: (result: BetaControlResult) => void;
   onError?: (error: Error) => void;
   onExit?: () => void;
 }
-
-const HOTKEY_COMMANDS: Record<string, BetaControlCommand> = {
-  s: "start",
-  x: "stop",
-  c: "cancel-all",
-  "$": "cash-only",
-  r: "reduce-only",
-  h: "halt",
-};
 
 function emphasisColor(row: BetaControlStatusRow): "white" | "yellow" | "red" {
   if (row.emphasis === "danger") return "red";
@@ -44,11 +37,14 @@ function commandColor(row: BetaControlCommandRow): "cyan" | "red" {
  */
 export function BetaControlInkTui({
   session,
+  loopRunner,
   onDispatch,
   onError,
   onExit,
 }: BetaControlInkTuiProps): React.ReactElement {
-  const [model] = useState(() => new BetaControlTuiModel(session));
+  const [model] = useState(
+    () => new BetaControlTuiModel(session, { loopRunner }),
+  );
   const [, rerender] = useState(0);
 
   useInput((input, key) => {
@@ -57,7 +53,7 @@ export function BetaControlInkTui({
       return;
     }
 
-    const command = HOTKEY_COMMANDS[input];
+    const command = commandForHotkey(input);
     if (command === undefined) return;
 
     try {

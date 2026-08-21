@@ -147,6 +147,11 @@ describe("BetaPaperTradingSession (issue #33)", () => {
       "MAX_RISK_PER_TRADE",
     );
     expect(result.auditEvents.every(isAuditEvent)).toBe(true);
+    expect(
+      result.auditEvents.some((event) =>
+        event.reasonCodes?.includes("ORCHESTRATED"),
+      ),
+    ).toBe(true);
   });
 
   test("routes consultative recommendations through the injected agent runner", async () => {
@@ -280,6 +285,10 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     expect(killSwitch.control("halt").mode).toBe("HALT");
     expect(killSwitch.status.killSwitchActive).toBe(true);
     expect(() => killSwitch.control("start")).toThrow(/kill switch/i);
+    expect(() => killSwitch.control("cash-only")).toThrow(
+      /failed to enter CASH_ONLY_MODE/,
+    );
+    expect(killSwitch.status.mode).toBe("HALT");
     await expect(killSwitch.runPaperCycle(approvedScenario())).rejects.toThrow(
       /kill switch/i,
     );

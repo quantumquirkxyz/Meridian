@@ -50,6 +50,11 @@ import {
   defaultPermissionRegistry,
   isExecutableRiskOutcome,
 } from "../stategraph/topology.ts";
+import {
+  Orchestrator,
+  defaultFallbacks,
+  defaultStateTimeouts,
+} from "../stategraph/orchestrator.ts";
 
 export interface BetaAgentRecommendationRunner {
   run(input: AgentInput): Promise<AgentRunResult>;
@@ -175,6 +180,7 @@ function structuredAgentPayload(
 export class BetaPaperTradingSession {
   private readonly now: () => number;
   private graph: StateGraph;
+  private orchestrator: Orchestrator;
   private audit: AuditLog;
   private readonly riskGate = new RiskEngine(DEFAULT_RISK_POLICY);
   private readonly reconciliationEngine = new ReconciliationEngine();
@@ -190,6 +196,7 @@ export class BetaPaperTradingSession {
     this.agentRunner = options.agentRunner;
     this.audit = new AuditLog();
     this.graph = this.newGraph("PAPER_ONLY");
+    this.orchestrator = this.newOrchestrator(this.graph);
   }
 
   get status(): BetaControlStatus {
@@ -238,7 +245,6 @@ export class BetaPaperTradingSession {
       case "reduce-only":
         return this.enterDefensiveMode(command, "REDUCE_ONLY_MODE");
       case "halt":
-        this.halted = true;
         return this.enterDefensiveMode(command, "HALT");
     }
   }
@@ -266,7 +272,7 @@ export class BetaPaperTradingSession {
       data?: Record<string, unknown>,
       reasonCodes?: readonly AuditReasonCode[],
     ): TransitionOutcome => {
-      const outcome = this.graph.transition({
+      const outcome = this.orchestrator.transition({
         to,
         actor,
         data,
@@ -540,16 +546,43 @@ export class BetaPaperTradingSession {
     });
   }
 
+  private newOrchestrator(graph: StateGraph): Orchestrator {
+    return new Orchestrator({
+      graph,
+      permissions: graph.permissionRegistry,
+      audit: this.audit,
+      stateTimeouts: defaultStateTimeouts(),
+      fallbacks: defaultFallbacks(),
+      now: this.now,
+    });
+  }
+
   private enterDefensiveMode(
     command: BetaControlCommand,
     state: StateName,
   ): BetaControlResult {
     this.running = false;
-    this.graph.transition({
-      to: state,
-      actor: MODULE_ACTORS.operator,
-      timestampMs: this.now(),
-    });
+    const outcome =
+      state === "HALT"
+        ? this.orchestrator.transition({
+            to: state,
+            actor: MODULE_ACTORS.operator,
+            timestampMs: this.now(),
+            data: { killSwitch: true },
+          })
+        : this.orchestrator.enterDegradedMode(
+            state,
+            MODULE_ACTORS.operator,
+            `operator requested ${command}`,
+          );
+    if (!outcome.ok) {
+      throw new Error(
+        `control command ${command} failed to enter ${state}: ${outcome.reasonCode}`,
+      );
+    }
+    if (state === "HALT") {
+      this.halted = true;
+    }
     return { command, ...this.status };
   }
 

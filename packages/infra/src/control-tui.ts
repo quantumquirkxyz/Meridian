@@ -23,6 +23,8 @@ export interface BetaControlCommandRow {
   dangerous: boolean;
 }
 
+export interface BetaControlCommandDescriptor extends BetaControlCommandRow {}
+
 export interface BetaControlStatusRow {
   label: string;
   value: string;
@@ -36,23 +38,61 @@ export interface BetaControlTuiView {
   footer: string;
 }
 
-const COMMAND_LABELS: Record<BetaControlCommand, string> = {
-  start: "Start paper loop",
-  stop: "Stop paper loop",
-  "cancel-all": "Cancel-only mode",
-  "cash-only": "Cash-only mode",
-  "reduce-only": "Reduce-only mode",
-  halt: "Kill switch",
-};
+export interface BetaPaperLoopRunner {
+  start(): void;
+  stop(): void;
+}
 
-const COMMAND_HOTKEYS: Record<BetaControlCommand, string> = {
-  start: "s",
-  stop: "x",
-  "cancel-all": "c",
-  "cash-only": "$",
-  "reduce-only": "r",
-  halt: "h",
-};
+export interface BetaControlTuiModelOptions {
+  loopRunner?: BetaPaperLoopRunner;
+}
+
+export const BETA_CONTROL_COMMAND_DESCRIPTORS: readonly BetaControlCommandDescriptor[] =
+  [
+    {
+      command: "start",
+      hotkey: "s",
+      label: "Start paper loop",
+      dangerous: false,
+    },
+    {
+      command: "stop",
+      hotkey: "x",
+      label: "Stop paper loop",
+      dangerous: false,
+    },
+    {
+      command: "cancel-all",
+      hotkey: "c",
+      label: "Cancel-only mode",
+      dangerous: true,
+    },
+    {
+      command: "cash-only",
+      hotkey: "$",
+      label: "Cash-only mode",
+      dangerous: false,
+    },
+    {
+      command: "reduce-only",
+      hotkey: "r",
+      label: "Reduce-only mode",
+      dangerous: false,
+    },
+    {
+      command: "halt",
+      hotkey: "h",
+      label: "Kill switch",
+      dangerous: true,
+    },
+  ];
+
+export function commandForHotkey(
+  input: string,
+): BetaControlCommand | undefined {
+  return BETA_CONTROL_COMMAND_DESCRIPTORS.find((row) => row.hotkey === input)
+    ?.command;
+}
 
 function modeEmphasis(
   status: BetaControlStatus,
@@ -87,12 +127,15 @@ function renderStatus(status: BetaControlStatus): BetaControlStatusRow[] {
 }
 
 function renderCommands(): BetaControlCommandRow[] {
-  return BETA_CONTROL_COMMANDS.map((command) => ({
-    command,
-    hotkey: COMMAND_HOTKEYS[command],
-    label: COMMAND_LABELS[command],
-    dangerous: command === "halt" || command === "cancel-all",
-  }));
+  return BETA_CONTROL_COMMANDS.map((command) => {
+    const descriptor = BETA_CONTROL_COMMAND_DESCRIPTORS.find(
+      (row) => row.command === command,
+    );
+    if (descriptor === undefined) {
+      throw new Error(`missing descriptor for beta control command ${command}`);
+    }
+    return { ...descriptor };
+  });
 }
 
 /**
@@ -102,8 +145,14 @@ function renderCommands(): BetaControlCommandRow[] {
  */
 export class BetaControlTuiModel {
   private lastError: string | undefined;
+  private readonly loopRunner: BetaPaperLoopRunner | undefined;
 
-  constructor(private readonly session: BetaControlPort) {}
+  constructor(
+    private readonly session: BetaControlPort,
+    options: BetaControlTuiModelOptions = {},
+  ) {
+    this.loopRunner = options.loopRunner;
+  }
 
   get status(): BetaControlStatus {
     return this.session.status;
@@ -123,6 +172,11 @@ export class BetaControlTuiModel {
   dispatch(command: BetaControlCommand): BetaControlResult {
     try {
       const result = this.session.control(command);
+      if (command === "start") {
+        this.loopRunner?.start();
+      } else if (command === "stop" || result.mode !== "PAPER_ONLY") {
+        this.loopRunner?.stop();
+      }
       this.lastError = undefined;
       return result;
     } catch (error) {
