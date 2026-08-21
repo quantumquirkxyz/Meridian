@@ -942,7 +942,7 @@ export class BetaPaperTradingSession {
   }): BetaPaperCycleResult {
     const auditEvents = this.audit.all();
     const report: BetaPostTradeReport = {
-      reportId: `post-trade-${options.scenario.id}`,
+      reportId: `post-trade-${options.scenario.id}-${options.timestampMs}`,
       scenarioId: options.scenario.id,
       createdAtMs: options.timestampMs,
       paperOnly: true,
@@ -1129,18 +1129,8 @@ export class BetaPaperTradingSession {
             ? []
             : [`agent runtime fallback: ${options.runtimeError}`],
         };
-      case "agent-policy":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} policy agent has no approval authority.`,
-          internalLimits: ["paper-only"],
-          blockedVenues: [],
-          userConfiguredTerms: [],
-          reviewRequired: false,
-          approvalPower: false,
-          notes: ["Risk Engine remains final authority."],
-        };
+      default:
+        throw new Error(`unknown agent ${agentId}`);
     }
   }
 

@@ -64,7 +64,7 @@ export const BETA_CONTROL_COMMAND_DESCRIPTORS: readonly BetaControlCommandDescri
     {
       command: "cancel-all",
       hotkey: "c",
-      label: "Cancel-only mode",
+      label: "Cancel all paper orders",
       dangerous: true,
     },
     {
@@ -165,7 +165,7 @@ export class BetaControlTuiModel {
       commandRows: renderCommands(),
       footer:
         this.lastError ??
-        "Hotkeys: s start, x stop, c cancel-only, r reduce-only, $ cash-only, h halt",
+        "Hotkeys: s start, x stop, c cancel-all, r reduce-only, $ cash-only, h halt",
     };
   }
 
