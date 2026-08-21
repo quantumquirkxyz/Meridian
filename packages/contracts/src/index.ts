@@ -24,3 +24,4 @@ export * from "./events.ts";
 export * from "./loop.ts";
 export * from "./agent.ts";
 export * from "./consultative-agents.ts";
+export * from "./beta-control.ts";

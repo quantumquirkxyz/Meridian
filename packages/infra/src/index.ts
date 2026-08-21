@@ -18,8 +18,15 @@ export { OpportunityRecorder } from "./opportunity-recorder.ts";
 export { ObservabilityService, OBSERVABILITY_SOURCE, OPPORTUNITY_RECORDER_SOURCE } from "./observability.ts";
 export {
   BetaControlTuiModel,
+  type BetaControlCommandRow,
   type BetaControlCommand,
   type BetaControlPort,
   type BetaControlPortResult,
   type BetaControlPortStatus,
+  type BetaControlStatusRow,
+  type BetaControlTuiView,
 } from "./control-tui.ts";
+export {
+  BetaControlInkTui,
+  type BetaControlInkTuiProps,
+} from "./control-tui-ink.tsx";
