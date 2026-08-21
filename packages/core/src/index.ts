@@ -20,3 +20,6 @@ export * from "./loop/loop-engine.ts";
 export * from "./stategraph/orchestrator.ts";
 export * from "./inventory/inventory-engine.ts";
 export * from "./beta/paper-trading-session.ts";
+export * from "./gamma/kill-switch.ts";
+export * from "./gamma/live-execution-engine.ts";
+export * from "./gamma/canary-session.ts";

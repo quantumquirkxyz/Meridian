@@ -1,0 +1,635 @@
+/**
+ * CanarySession: the deterministic Live Canary trading session
+ * (Gamma.1, issue #34). Orchestrates live canary trading with:
+ *
+ * - Bounded capital bucket and hard limits per trade/day/venue/token/chain
+ * - Manual and automatic kill switch
+ * - Emergency modes (cancel-all, reduce-only, cash-only) from TUI
+ * - No orphan orders and no limit violations
+ * - No automatic scaling
+ * - Read/trading key separation (enforced at config level)
+ * - Withdrawals disabled (enforced at config level)
+ *
+ * The session is deterministic — no LLM, no I/O. All state changes
+ * flow through the control port, which is the only way the TUI or
+ * operator can interact with the canary.
+ *
+ * Acceptance criteria:
+ *   AC1: Canary config enforces bounded capital and hard limits per
+ *        trade/day/venue/token/chain.
+ *   AC2: Read and trading keys are separate; withdrawals disabled.
+ *   AC3: Kill switch (manual and automatic) halts live activity.
+ *   AC4: No orphan orders and no limit violations in a live canary session.
+ */
+
+import {
+  type GammaControlCommand,
+  type GammaControlResult,
+  type GammaControlStatus,
+  type SystemMode,
+} from "@agenttrading/contracts";
+import {
+  type CanaryConfig,
+  DEFAULT_CANARY_CONFIG,
+} from "@agenttrading/contracts";
+import {
+  type OrderIntent,
+  type RiskDecision,
+} from "@agenttrading/contracts";
+import { type AuditLog } from "../stategraph/audit-log.ts";
+import {
+  KillSwitch,
+  type KillSwitchInput,
+  type KillSwitchTrigger,
+} from "./kill-switch.ts";
+import {
+  LiveExecutionEngine,
+  type CanaryExecutionState,
+  type CanaryPreCheckResult,
+} from "./live-execution-engine.ts";
+import {
+  type PaperOrderSnapshot,
+} from "../execution/paper-execution-engine.ts";
+
+// ── Types ────────────────────────────────────────────────────────────
+
+/** Day key: a YYYY-MM-DD string representing a calendar day. */
+type DayKey = string & { readonly __brand: "DayKey" };
+/** Week key: a YYYY-MM-DD string representing the start of an ISO week. */
+type WeekKey = string & { readonly __brand: "WeekKey" };
+
+function toDayKey(isoDate: string): DayKey {
+  return isoDate.slice(0, 10) as DayKey;
+}
+
+function toWeekKey(nowMs: number): WeekKey {
+  const d = new Date(nowMs);
+  d.setDate(d.getDate() - d.getDay());
+  return d.toISOString().slice(0, 10) as WeekKey;
+}
+
+export interface CanaryOrderRecord {
+  orderId: string;
+  intent: OrderIntent;
+  riskDecision?: RiskDecision;
+  execution?: PaperOrderSnapshot;
+  preCheck?: CanaryPreCheckResult;
+  submittedAtMs: number;
+  symbol: string;
+  venue: string;
+  chain: string;
+  side: "BUY" | "SELL";
+  notionalUsd: number;
+  state: string;
+}
+
+export interface CanarySessionOptions {
+  /** Injectable clock; defaults to Date.now. */
+  now?: () => number;
+  /** Audit log for recording canary events. */
+  audit?: AuditLog;
+  /** Custom canary config; defaults to DEFAULT_CANARY_CONFIG. */
+  config?: CanaryConfig;
+}
+
+// ── Session ──────────────────────────────────────────────────────────
+
+/**
+ * CanarySession: the deterministic Live Canary trading session.
+ *
+ * Usage:
+ * ```ts
+ * const session = new CanarySession({ config: myConfig });
+ * session.start();
+ * const result = await session.runCycle(scenario);
+ * session.control("halt");
+ * ```
+ */
+export class CanarySession {
+  private readonly config: CanaryConfig;
+  private readonly now: () => number;
+  private readonly audit?: AuditLog;
+  private readonly killSwitch: KillSwitch;
+  private readonly execution: LiveExecutionEngine;
+
+  private running = false;
+  private paused = false;
+  private killSwitchActive = false;
+  private lastAutoKillAtMs?: number;
+  private autoKillTrigger?: string;
+
+  // Cumulative state
+  private dailyPnlUsd = 0;
+  private weeklyPnlUsd = 0;
+  private ordersToday: CanaryOrderRecord[] = [];
+  private ordersThisWeek: CanaryOrderRecord[] = [];
+  private openOrders: CanaryOrderRecord[] = [];
+  private exposurePerToken: Record<string, number> = {};
+  private exposurePerVenue: Record<string, number> = {};
+  private exposurePerChain: Record<string, number> = {};
+  private capitalDeployedUsd = 0;
+  private orphanOrders: CanaryOrderRecord[] = [];
+  private reconciliationUnresolved = false;
+  private currentMode: SystemMode = "NORMAL";
+
+  // Day/week tracking
+  private currentDay: DayKey = "" as DayKey;
+  private currentWeek: WeekKey = "" as WeekKey;
+
+  constructor(options: CanarySessionOptions = {}) {
+    this.config = options.config ?? DEFAULT_CANARY_CONFIG;
+    this.now = options.now ?? (() => Date.now());
+    this.audit = options.audit;
+    this.killSwitch = new KillSwitch(this.config.killSwitch);
+    this.execution = new LiveExecutionEngine(this.config);
+  }
+
+  // ── Public API ───────────────────────────────────────────────────────
+
+  /** Current canary status. */
+  get status(): GammaControlStatus {
+    const nowMs = this.now();
+    this.resetCountersIfNeeded(nowMs);
+
+    return {
+      running: this.running,
+      mode: this.currentMode,
+      state: this.killSwitchActive
+        ? "HALT"
+        : this.paused
+          ? "IDLE"
+          : this.running
+            ? "EXECUTE_ORDER"
+            : "IDLE",
+      killSwitchActive: this.killSwitchActive,
+      openOrders: this.openOrders.length,
+      ordersToday: this.ordersToday.length,
+      ordersThisWeek: this.ordersThisWeek.length,
+      capitalDeployedUsd: this.capitalDeployedUsd,
+      capitalRemainingUsd:
+        this.config.capitalLimits.maxCapitalUsd - this.capitalDeployedUsd,
+      dailyPnlUsd: this.dailyPnlUsd,
+      weeklyPnlUsd: this.weeklyPnlUsd,
+      orphanOrderCount: this.orphanOrders.length,
+      reconciliationUnresolved: this.reconciliationUnresolved,
+      autoKillTrigger: this.autoKillTrigger,
+      paused: this.paused,
+    };
+  }
+
+  /**
+   * Process a control command from the TUI.
+   * Returns the full status after the command.
+   */
+  control(command: GammaControlCommand): GammaControlResult {
+    const statusBefore = this.status;
+
+    switch (command) {
+      case "start":
+        return this.handleStart(statusBefore);
+      case "stop":
+        return this.handleStop(statusBefore);
+      case "pause":
+        return this.handlePause(statusBefore);
+      case "resume":
+        return this.handleResume(statusBefore);
+      case "cancel-all":
+        return this.handleCancelAll(statusBefore);
+      case "cash-only":
+        return this.handleMode("CASH_ONLY", statusBefore);
+      case "reduce-only":
+        return this.handleMode("REDUCE_ONLY", statusBefore);
+      case "halt":
+        return this.handleHalt(statusBefore);
+      default:
+        return {
+          ...statusBefore,
+          command,
+          ok: false,
+          error: `unknown command: ${command}`,
+        };
+    }
+  }
+
+  /**
+   * Pre-check an order intent against canary limits.
+   */
+  preCheckIntent(intent: OrderIntent): CanaryPreCheckResult {
+    if (this.killSwitchActive) {
+      return {
+        allowed: false,
+        reason: "kill switch is active; no orders allowed",
+      };
+    }
+    if (this.paused) {
+      return {
+        allowed: false,
+        reason: "canary is paused; no orders allowed",
+      };
+    }
+    return this.execution.preCheck(intent, this.buildExecutionState());
+  }
+
+  /**
+   * Submit an order intent through the canary session.
+   * Returns the pre-check result and optional execution snapshot.
+   */
+  submitOrder(
+    intent: OrderIntent,
+    riskDecision: RiskDecision,
+    market: { bid: number; ask: number; mid: number; liquidityUsd: number },
+    submittedAtMs?: number,
+  ): {
+    preCheck: CanaryPreCheckResult;
+    execution?: PaperOrderSnapshot;
+  } {
+    const ts = submittedAtMs ?? this.now();
+
+    // Fail-closed: block when kill switch is active or paused.
+    if (this.killSwitchActive) {
+      return {
+        preCheck: {
+          allowed: false,
+          reason: "kill switch is active; no orders allowed",
+        },
+      };
+    }
+    if (this.paused) {
+      return {
+        preCheck: {
+          allowed: false,
+          reason: "canary is paused; no orders allowed",
+        },
+      };
+    }
+
+    const preCheck = this.execution.preCheck(intent, this.buildExecutionState());
+
+    if (!preCheck.allowed) {
+      this.recordAudit("ORDER_REJECTED", {
+        orderId: intent.idempotencyKey,
+        reason: preCheck.reason,
+        blockReason: preCheck.blockReason,
+      });
+      return { preCheck };
+    }
+
+    // Enforce withdrawal disabled at session level.
+    if (!this.config.apiKeys.withdrawalsDisabled) {
+      return {
+        preCheck: {
+          allowed: false,
+          reason: "withdrawals not disabled; canary requires withdrawals disabled on trading key",
+        },
+      };
+    }
+
+    // Check strategy/venue allowlists.
+    if (!this.config.scope.allowedVenues.includes(intent.venue)) {
+      return {
+        preCheck: {
+          allowed: false,
+          reason: `venue ${intent.venue} is not in allowed venues: ${this.config.scope.allowedVenues.join(", ")}`,
+        },
+      };
+    }
+
+    if (!this.config.scope.allowedTokens.includes(intent.symbol)) {
+      return {
+        preCheck: {
+          allowed: false,
+          reason: `token ${intent.symbol} is not in allowed tokens: ${this.config.scope.allowedTokens.join(", ")}`,
+        },
+      };
+    }
+
+    // Submit through the live execution engine.
+    const notionalUsd = (preCheck.approvedQuantity ?? intent.quantity) * intent.price;
+    const execution = this.execution.submit(
+      {
+        intent,
+        riskDecision,
+        market,
+        submittedAtMs: ts,
+        slippageBps: this.config.maxSlippageBps,
+        feeBps: 2,
+      },
+      preCheck,
+    );
+
+    // Track the order.
+    const record: CanaryOrderRecord = {
+      orderId: intent.idempotencyKey,
+      intent,
+      riskDecision,
+      execution,
+      preCheck,
+      submittedAtMs: ts,
+      symbol: intent.symbol,
+      venue: intent.venue,
+      chain: intent.venue,
+      side: intent.side,
+      notionalUsd,
+      state: execution.state,
+    };
+
+    this.openOrders.push(record);
+    this.ordersToday.push(record);
+    this.ordersThisWeek.push(record);
+    this.capitalDeployedUsd += notionalUsd;
+
+    // Update exposure tracking.
+    this.exposurePerToken[intent.symbol] =
+      (this.exposurePerToken[intent.symbol] ?? 0) + notionalUsd;
+    this.exposurePerVenue[intent.venue] =
+      (this.exposurePerVenue[intent.venue] ?? 0) + notionalUsd;
+
+    this.recordAudit("ORDER_SUBMITTED", {
+      orderId: intent.idempotencyKey,
+      symbol: intent.symbol,
+      venue: intent.venue,
+      notionalUsd,
+      preCheckReason: preCheck.reason,
+    });
+
+    // Run automatic kill switch check after every order.
+    this.evaluateAutoKillSwitch();
+
+    return { preCheck, execution };
+  }
+
+  /**
+   * Notify the session that an order has been filled, cancelled, or
+   * rejected externally (e.g. by the exchange connector).
+   */
+  notifyOrderResolved(
+    orderId: string,
+    state: "FILLED" | "CANCELLED" | "REJECTED",
+    pnlUsd: number = 0,
+  ): void {
+    const idx = this.openOrders.findIndex((o) => o.orderId === orderId);
+    if (idx === -1) {
+      // Orphan: we don't have this order in our tracking.
+      this.orphanOrders.push({
+        orderId,
+        intent: {} as OrderIntent,
+        submittedAtMs: this.now(),
+        symbol: "",
+        venue: "",
+        chain: "",
+        side: "BUY",
+        notionalUsd: 0,
+        state: "UNKNOWN",
+      });
+      this.recordAudit("ORPHAN_DETECTED", { orderId, state });
+      this.evaluateAutoKillSwitch();
+      return;
+    }
+
+    const record = this.openOrders[idx];
+    this.openOrders.splice(idx, 1);
+    this.capitalDeployedUsd -= record.notionalUsd;
+
+    // Update exposure.
+    this.exposurePerToken[record.symbol] =
+      (this.exposurePerToken[record.symbol] ?? 0) - record.notionalUsd;
+    this.exposurePerVenue[record.venue] =
+      (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
+
+    if (state === "FILLED") {
+      this.dailyPnlUsd += pnlUsd;
+      this.weeklyPnlUsd += pnlUsd;
+    }
+
+    this.recordAudit("ORDER_RESOLVED", {
+      orderId,
+      state,
+      pnlUsd,
+      symbol: record.symbol,
+      venue: record.venue,
+    });
+
+    // Run automatic kill switch check after every resolution.
+    this.evaluateAutoKillSwitch();
+  }
+
+  /**
+   * Poll the execution engine and return any order events.
+   */
+  pollExecution() {
+    const nowMs = this.now();
+    return this.execution.poll(nowMs);
+  }
+
+  /**
+   * Set reconciliation status. Called by the reconciliation engine.
+   */
+  setReconciliationStatus(unresolved: boolean): void {
+    this.reconciliationUnresolved = unresolved;
+    if (unresolved) {
+      this.recordAudit("RECONCILIATION_UNRESOLVED", {});
+      this.evaluateAutoKillSwitch();
+    }
+  }
+
+  /**
+   * Reset daily counters (called automatically when the day changes).
+   */
+  private resetCountersIfNeeded(nowMs: number): void {
+    const day = toDayKey(new Date(nowMs).toISOString());
+    if (day !== this.currentDay) {
+      this.currentDay = day;
+      this.ordersToday = [];
+      this.dailyPnlUsd = 0;
+    }
+
+    const week = toWeekKey(nowMs);
+    if (week !== this.currentWeek) {
+      this.currentWeek = week;
+      this.ordersThisWeek = [];
+      this.weeklyPnlUsd = 0;
+    }
+  }
+
+  // ── Command Handlers ─────────────────────────────────────────────────
+
+  private handleStart(
+    statusBefore: GammaControlStatus,
+  ): GammaControlResult {
+    if (this.killSwitchActive) {
+      return {
+        ...statusBefore,
+        command: "start",
+        ok: false,
+        error: "cannot start: kill switch is active",
+      };
+    }
+    this.running = true;
+    this.paused = false;
+    this.currentMode = "NORMAL";
+    this.recordAudit("CANARY_STARTED", {});
+    return { ...this.status, command: "start", ok: true };
+  }
+
+  private handleStop(statusBefore: GammaControlStatus): GammaControlResult {
+    this.running = false;
+    this.paused = false;
+    this.cancelAllOpenOrders();
+    this.currentMode = "PAPER_ONLY";
+    this.recordAudit("CANARY_STOPPED", {});
+    return { ...this.status, command: "stop", ok: true };
+  }
+
+  private handlePause(statusBefore: GammaControlStatus): GammaControlResult {
+    if (!this.running) {
+      return {
+        ...statusBefore,
+        command: "pause",
+        ok: false,
+        error: "cannot pause: canary is not running",
+      };
+    }
+    this.paused = true;
+    this.currentMode = "OBSERVE_ONLY";
+    this.recordAudit("CANARY_PAUSED", {});
+    return { ...this.status, command: "pause", ok: true };
+  }
+
+  private handleResume(statusBefore: GammaControlStatus): GammaControlResult {
+    if (!this.paused) {
+      return {
+        ...statusBefore,
+        command: "resume",
+        ok: false,
+        error: "cannot resume: canary is not paused",
+      };
+    }
+    if (this.killSwitchActive) {
+      return {
+        ...statusBefore,
+        command: "resume",
+        ok: false,
+        error: "cannot resume: kill switch is active",
+      };
+    }
+    this.paused = false;
+    this.currentMode = "NORMAL";
+    this.recordAudit("CANARY_RESUMED", {});
+    return { ...this.status, command: "resume", ok: true };
+  }
+
+  private handleCancelAll(
+    statusBefore: GammaControlStatus,
+  ): GammaControlResult {
+    this.cancelAllOpenOrders();
+    this.recordAudit("CANCEL_ALL", {});
+    return { ...this.status, command: "cancel-all", ok: true };
+  }
+
+  private handleMode(
+    mode: SystemMode,
+    statusBefore: GammaControlStatus,
+  ): GammaControlResult {
+    this.currentMode = mode;
+    this.recordAudit("MODE_CHANGED", { mode });
+    return { ...this.status, command: mode === "CASH_ONLY" ? "cash-only" : "reduce-only", ok: true };
+  }
+
+  private handleHalt(statusBefore: GammaControlStatus): GammaControlResult {
+    const result = this.killSwitch.manualHalt(this.killSwitchActive);
+    if (result.shouldHalt) {
+      this.killSwitchActive = true;
+      this.running = false;
+      this.paused = false;
+      this.currentMode = "HALT";
+      this.cancelAllOpenOrders();
+      this.recordAudit("KILL_SWITCH_ACTIVATED", {
+        trigger: "manual",
+        reason: result.reason,
+      });
+    }
+    return { ...this.status, command: "halt", ok: result.shouldHalt };
+  }
+
+  // ── Automatic Kill Switch ────────────────────────────────────────────
+
+  private evaluateAutoKillSwitch(): void {
+    if (this.killSwitchActive) return;
+
+    const input: KillSwitchInput = {
+      alreadyActive: this.killSwitchActive,
+      dailyLossUsd: Math.max(0, -this.dailyPnlUsd),
+      weeklyLossUsd: Math.max(0, -this.weeklyPnlUsd),
+      ordersToday: this.ordersToday.length,
+      orphanOrderCount: this.orphanOrders.length,
+      reconciliationUnresolved: this.reconciliationUnresolved,
+      nowMs: this.now(),
+      lastAutoKillAtMs: this.lastAutoKillAtMs,
+    };
+
+    const result = this.killSwitch.evaluate(input);
+
+    if (result.shouldHalt) {
+      this.killSwitchActive = true;
+      this.running = false;
+      this.paused = false;
+      this.currentMode = "HALT";
+      this.autoKillTrigger = result.trigger;
+      this.lastAutoKillAtMs = this.now();
+      this.cancelAllOpenOrders();
+      this.recordAudit("KILL_SWITCH_ACTIVATED", {
+        trigger: result.trigger,
+        reason: result.reason,
+        automatic: true,
+      });
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+
+  private buildExecutionState(): CanaryExecutionState {
+    this.resetCountersIfNeeded(this.now());
+    return {
+      ordersToday: this.ordersToday,
+      ordersThisWeek: this.ordersThisWeek,
+      openOrders: this.openOrders,
+      exposurePerToken: this.exposurePerToken,
+      exposurePerVenue: this.exposurePerVenue,
+      exposurePerChain: this.exposurePerChain,
+      capitalDeployedUsd: this.capitalDeployedUsd,
+      dailyPnlUsd: this.dailyPnlUsd,
+      weeklyPnlUsd: this.weeklyPnlUsd,
+    };
+  }
+
+  private cancelAllOpenOrders(): void {
+    this.execution.cancelAll(this.now());
+    for (const record of this.openOrders) {
+      this.capitalDeployedUsd -= record.notionalUsd;
+      this.exposurePerToken[record.symbol] =
+        (this.exposurePerToken[record.symbol] ?? 0) - record.notionalUsd;
+      this.exposurePerVenue[record.venue] =
+        (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
+    }
+    this.openOrders = [];
+  }
+
+  private recordAudit(
+    action: string,
+    data: Record<string, unknown>,
+  ): void {
+    this.audit?.record({
+      eventId: `canary-${action}-${this.now()}`,
+      timestampMs: this.now(),
+      action: "STATE_TRANSITION" as any,
+      actor: "canary-session",
+      state: this.killSwitchActive
+        ? "HALT"
+        : this.running
+          ? "EXECUTE_ORDER"
+          : "IDLE",
+      reasonCodes: ["TRANSITION_ALLOWED"],
+      data: { action, ...data },
+    });
+  }
+}
