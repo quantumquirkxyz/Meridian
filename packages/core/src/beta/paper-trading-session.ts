@@ -150,6 +150,12 @@ const AGENT_RECOMMENDATION_IDS = [
   "agent-audit",
 ] as const satisfies readonly ConsultativeAgentId[];
 
+const DEFAULT_QUOTE_BUFFER_MULTIPLIER = 2;
+const DEFAULT_LIQUIDITY_USD = 1_000;
+const DEFAULT_SPREAD = 0.5;
+const DEFAULT_SLIPPAGE_BPS = 30;
+const ORDER_TTL_MS = 60_000;
+
 function riskReasonCodes(decision: RiskDecision | undefined): RiskReasonCode[] {
   if (decision === undefined || !("reasonCodes" in decision)) return [];
   return [...decision.reasonCodes];
@@ -208,6 +214,7 @@ export class BetaPaperTradingSession {
   private readonly paperExecution = new PaperExecutionEngine();
   private readonly agentRunner?: BetaAgentRecommendationRunner;
   private readonly postTradeReports: BetaPostTradeReport[] = [];
+  private reportCounter = 0;
   private running = false;
   private halted = false;
 
@@ -615,7 +622,9 @@ export class BetaPaperTradingSession {
     this.running = false;
     const timestampMs = this.now();
     const cancelledOrders =
-      command === "cancel-all" ? this.paperExecution.cancelAll(timestampMs) : [];
+      command === "cancel-all" || command === "halt"
+        ? this.paperExecution.cancelAll(timestampMs)
+        : [];
     const outcome =
       state === "HALT"
         ? this.orchestrator.transition({
@@ -743,11 +752,7 @@ export class BetaPaperTradingSession {
             error: message,
           },
         });
-        results.push(
-          this.fallbackRecommendationFor(agentId, scenario, candidateId, {
-            runtimeError: message,
-          }),
-        );
+        throw new Error(`agent ${agentId} runtime failure: ${message}`);
       }
     }
     return results.length > 0
@@ -770,8 +775,8 @@ export class BetaPaperTradingSession {
       price: scenario.price ?? 100,
       quoteCurrency: "USDT",
       createdAtMs: timestampMs,
-      expiresAtMs: timestampMs + 60_000,
-      limits: { maxSlippageBps: 30 },
+      expiresAtMs: timestampMs + ORDER_TTL_MS,
+      limits: { maxSlippageBps: DEFAULT_SLIPPAGE_BPS },
     };
   }
 
@@ -813,7 +818,7 @@ export class BetaPaperTradingSession {
       strategyAllocations: [
         {
           strategyId: "beta-paper",
-          maxAllocationUsd: requiredNotionalUsd * 2,
+          maxAllocationUsd: requiredNotionalUsd * DEFAULT_QUOTE_BUFFER_MULTIPLIER,
           deployedUsd: 0,
         },
       ],
@@ -841,10 +846,10 @@ export class BetaPaperTradingSession {
   private market(scenario: BetaPaperTradingScenario): PaperMarketSnapshot {
     const price = scenario.price ?? 100;
     return {
-      bid: price - 0.5,
-      ask: price + 0.5,
+      bid: price - DEFAULT_SPREAD,
+      ask: price + DEFAULT_SPREAD,
       mid: price,
-      liquidityUsd: Number.POSITIVE_INFINITY,
+      liquidityUsd: DEFAULT_LIQUIDITY_USD,
       latencyMs: 1,
       ...scenario.market,
     };
@@ -942,7 +947,7 @@ export class BetaPaperTradingSession {
   }): BetaPaperCycleResult {
     const auditEvents = this.audit.all();
     const report: BetaPostTradeReport = {
-      reportId: `post-trade-${options.scenario.id}-${options.timestampMs}`,
+      reportId: `post-trade-${options.scenario.id}-${options.timestampMs}-${++this.reportCounter}`,
       scenarioId: options.scenario.id,
       createdAtMs: options.timestampMs,
       paperOnly: true,

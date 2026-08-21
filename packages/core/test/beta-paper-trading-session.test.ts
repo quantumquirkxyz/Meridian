@@ -200,7 +200,7 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     expect(report.agentRecommendations.map((rec) => rec.agentId)).toContain(
       "agent-risk-analyst",
     );
-    expect(report.execution?.state).toBe("FILLED");
+    expect(report.execution?.state).toBe("PARTIALLY_FILLED");
     expect(report.inventory?.validation.blocked).toBe(false);
     expect(report.inventory?.snapshot.capitalStates).toContainEqual(
       expect.objectContaining({ asset: "USDT" }),
@@ -269,20 +269,13 @@ describe("BetaPaperTradingSession (issue #33)", () => {
     });
 
     session.startPaperTrading();
-    const result = await session.runPaperCycle(approvedScenario());
-
-    expect(result.report.agentRecommendations.map((rec) => String(rec.agentId))).toEqual(
-      calls.map((call) => String(call.agentId)),
+    await expect(session.runPaperCycle(approvedScenario())).rejects.toThrow(
+      /agent agent-skeptic runtime failure/i,
     );
-    expect(
-      result.report.agentRecommendations.find(
-        (rec) => rec.agentId === "agent-skeptic",
-      )?.summary,
-    ).toContain("deterministic fallback");
-    expect(result.report.reconstruction.auditLogLines.join("\n")).toContain(
+
+    expect(calls.map((call) => String(call.agentId))).toContain(
       "agent-skeptic",
     );
-    expect(result.riskDecision).toBeDefined();
   });
 
   test("fails closed when risk rejects before paper execution", async () => {
