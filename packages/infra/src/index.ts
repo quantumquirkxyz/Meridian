@@ -21,7 +21,6 @@ export {
   BetaControlTuiModel,
   commandForHotkey,
   type BetaControlCommandRow,
-  type BetaControlCommandDescriptor,
   type BetaControlCommand,
   type BetaControlTuiModelOptions,
   type BetaControlPort,

@@ -5,12 +5,6 @@ import {
 } from "./paper-trading-session.ts";
 
 import {
-  type BetaControlCommand,
-  type BetaControlResult,
-  type BetaControlStatus,
-} from "@agenttrading/contracts";
-
-import {
   type BalanceEntry,
   type InventorySnapshot,
   type InventoryValidation,

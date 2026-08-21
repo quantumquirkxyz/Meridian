@@ -21,8 +21,6 @@ export interface BetaControlCommandRow {
   dangerous: boolean;
 }
 
-export interface BetaControlCommandDescriptor extends BetaControlCommandRow {}
-
 export interface BetaControlStatusRow {
   label: string;
   value: string;
@@ -45,22 +43,20 @@ export interface BetaControlTuiModelOptions {
   loopRunner?: BetaPaperLoopRunner;
 }
 
-export const BETA_CONTROL_COMMAND_DESCRIPTORS: readonly BetaControlCommandDescriptor[] =
+const BETA_CONTROL_LABELS: Record<BetaControlCommand, string> = {
+  start: "Start paper loop",
+  stop: "Stop paper loop",
+  "cancel-all": "Cancel all paper orders",
+  "cash-only": "Cash-only mode",
+  "reduce-only": "Reduce-only mode",
+  halt: "Kill switch",
+};
+
+export const BETA_CONTROL_COMMAND_DESCRIPTORS: readonly BetaControlCommandRow[] =
   BETA_CONTROL_COMMANDS.map((command) => ({
     command,
     hotkey: BETA_CONTROL_HOTKEYS[command],
-    label:
-      command === "start"
-        ? "Start paper loop"
-        : command === "stop"
-          ? "Stop paper loop"
-          : command === "cancel-all"
-            ? "Cancel all paper orders"
-            : command === "cash-only"
-              ? "Cash-only mode"
-              : command === "reduce-only"
-                ? "Reduce-only mode"
-                : "Kill switch",
+    label: BETA_CONTROL_LABELS[command],
     dangerous: command === "cancel-all" || command === "halt",
   }));
 
