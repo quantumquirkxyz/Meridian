@@ -15,6 +15,7 @@
 
 import {
   type MarketRegime,
+  MARKET_REGIMES,
   type RegimeChange,
   type RegimeClassification,
   type RegimePerformanceRecord,
@@ -31,14 +32,11 @@ import {
  */
 export class RegimePerformanceTracker {
   private records: Map<MarketRegime, RegimePerformanceRecord> = new Map();
+  private confidenceCounts: Map<MarketRegime, number> = new Map();
 
   constructor() {
     // Initialize all regimes with zeroed records.
-    const regimes: MarketRegime[] = [
-      "trend", "range", "chop", "high_volatility", "low_liquidity",
-      "gas_spike", "degraded_rpc", "degraded_cex", "drawdown",
-    ];
-    for (const regime of regimes) {
+    for (const regime of MARKET_REGIMES) {
       this.records.set(regime, {
         regime,
         tradeCount: 0,
@@ -47,9 +45,9 @@ export class RegimePerformanceTracker {
         lossCount: 0,
         maxDrawdownUsd: 0,
         avgConfidence: 0,
-        confidenceSamples: 0,
         totalTimeMs: 0,
       });
+      this.confidenceCounts.set(regime, 0);
     }
   }
 
@@ -76,10 +74,10 @@ export class RegimePerformanceTracker {
     newConfidence: number,
   ): void {
     const rec = this.records.get(regime)!;
-    rec.confidenceSamples += 1;
+    const count = (this.confidenceCounts.get(regime) ?? 0) + 1;
+    this.confidenceCounts.set(regime, count);
     rec.avgConfidence =
-      (rec.avgConfidence * (rec.confidenceSamples - 1) + newConfidence) /
-      rec.confidenceSamples;
+      (rec.avgConfidence * (count - 1) + newConfidence) / count;
   }
 
   /** Accumulate time spent in a regime. */

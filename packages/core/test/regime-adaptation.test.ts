@@ -110,7 +110,6 @@ describe("Regime contracts", () => {
         lossCount: 0,
         maxDrawdownUsd: 0,
         avgConfidence: 0,
-        confidenceSamples: 0,
         totalTimeMs: 0,
       }),
     ).toBe(true);

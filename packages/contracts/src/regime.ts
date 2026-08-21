@@ -2,6 +2,7 @@ import {
   isArrayOf,
   isBoolean,
   isEnumOf,
+  isNullable,
   isNumber,
   isObjectOf,
   isOptional,
@@ -219,9 +220,7 @@ export const isRegimeChange: Validator<RegimeChange> = isObjectOf({
   appliedPolicy: isRegimePolicy,
 });
 
-function isNullable<T>(inner: Validator<T>): Validator<T | null> {
-  return (value): value is T | null => value === null || inner(value);
-}
+
 
 export function parseRegimeChange(value: unknown): RegimeChange {
   return parse(isRegimeChange, value, "RegimeChange");
@@ -248,8 +247,6 @@ export interface RegimePerformanceRecord {
   maxDrawdownUsd: number;
   /** Average confidence of classifications under this regime. */
   avgConfidence: number;
-  /** Number of confidence samples used for averaging. */
-  confidenceSamples: number;
   /** Total time (ms) spent in this regime. */
   totalTimeMs: number;
 }
@@ -263,7 +260,6 @@ export const isRegimePerformanceRecord: Validator<RegimePerformanceRecord> =
     lossCount: isNumber,
     maxDrawdownUsd: isNumber,
     avgConfidence: isNumber,
-    confidenceSamples: isNumber,
     totalTimeMs: isNumber,
   });
 
