@@ -52,7 +52,6 @@ const GAMMA_CONTROL_LABELS: Record<GammaControlCommand, string> = {
   halt: "Kill switch",
   pause: "Pause canary",
   resume: "Resume canary",
-  "sync-inventory": "Sync inventory",
 };
 
 export const GAMMA_CONTROL_COMMAND_DESCRIPTORS: readonly GammaControlCommandRow[] =
@@ -179,7 +178,7 @@ export class GammaControlTuiModel {
       commandRows: renderGammaCommands(),
       footer:
         this.lastError ??
-        "Hotkeys: s start, x stop, c cancel-all, r reduce-only, $ cash-only, h halt, p pause, u resume, i sync-inventory",
+        "Hotkeys: s start, x stop, c cancel-all, r reduce-only, $ cash-only, h halt, p pause, u resume",
     };
   }
 

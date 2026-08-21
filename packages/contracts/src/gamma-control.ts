@@ -35,7 +35,6 @@ export const GAMMA_CONTROL_COMMANDS = [
   // Gamma-specific canary commands
   "pause",
   "resume",
-  "sync-inventory",
 ] as const;
 
 export type GammaControlCommand = (typeof GAMMA_CONTROL_COMMANDS)[number];
@@ -162,5 +161,4 @@ export const GAMMA_CONTROL_HOTKEYS = {
   halt: "h",
   pause: "p",
   resume: "u",
-  "sync-inventory": "i",
 } as const satisfies Record<GammaControlCommand, string>;

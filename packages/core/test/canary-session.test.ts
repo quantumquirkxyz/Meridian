@@ -109,7 +109,7 @@ describe("GammaControl commands", () => {
   test("all expected commands are valid", () => {
     const commands: GammaControlCommand[] = [
       "start", "stop", "cancel-all", "cash-only", "reduce-only",
-      "halt", "pause", "resume", "sync-inventory",
+      "halt", "pause", "resume",
     ];
     for (const cmd of commands) {
       expect(isGammaControlCommand(cmd)).toBe(true);
@@ -320,6 +320,7 @@ describe("LiveExecutionEngine pre-checks", () => {
         orderId: `o${i}`,
         symbol: "BTC",
         venue: "bybit",
+        chain: "ethereum",
         notionalUsd: 10,
         side: "BUY" as const,
         submittedAtMs: 0,
@@ -339,6 +340,7 @@ describe("LiveExecutionEngine pre-checks", () => {
         orderId: `o${i}`,
         symbol: "BTC",
         venue: "bybit",
+        chain: "ethereum",
         notionalUsd: 10,
         side: "BUY" as const,
         submittedAtMs: 0,
@@ -358,6 +360,7 @@ describe("LiveExecutionEngine pre-checks", () => {
         orderId: `o${i}`,
         symbol: "BTC",
         venue: "bybit",
+        chain: "ethereum",
         notionalUsd: 10,
         side: "BUY" as const,
         submittedAtMs: 0,

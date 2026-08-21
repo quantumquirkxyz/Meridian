@@ -55,6 +55,21 @@ import {
 
 // ── Types ────────────────────────────────────────────────────────────
 
+/** Day key: a YYYY-MM-DD string representing a calendar day. */
+type DayKey = string & { readonly __brand: "DayKey" };
+/** Week key: a YYYY-MM-DD string representing the start of an ISO week. */
+type WeekKey = string & { readonly __brand: "WeekKey" };
+
+function toDayKey(isoDate: string): DayKey {
+  return isoDate.slice(0, 10) as DayKey;
+}
+
+function toWeekKey(nowMs: number): WeekKey {
+  const d = new Date(nowMs);
+  d.setDate(d.getDate() - d.getDay());
+  return d.toISOString().slice(0, 10) as WeekKey;
+}
+
 export interface CanaryOrderRecord {
   orderId: string;
   intent: OrderIntent;
@@ -120,8 +135,8 @@ export class CanarySession {
   private currentMode: SystemMode = "NORMAL";
 
   // Day/week tracking
-  private currentDay: string = "";
-  private currentWeek: string = "";
+  private currentDay: DayKey = "" as DayKey;
+  private currentWeek: WeekKey = "" as WeekKey;
 
   constructor(options: CanarySessionOptions = {}) {
     this.config = options.config ?? DEFAULT_CANARY_CONFIG;
@@ -188,8 +203,6 @@ export class CanarySession {
         return this.handleMode("REDUCE_ONLY", statusBefore);
       case "halt":
         return this.handleHalt(statusBefore);
-      case "sync-inventory":
-        return this.handleSyncInventory(statusBefore);
       default:
         return {
           ...statusBefore,
@@ -425,17 +438,14 @@ export class CanarySession {
    * Reset daily counters (called automatically when the day changes).
    */
   private resetCountersIfNeeded(nowMs: number): void {
-    const day = new Date(nowMs).toISOString().slice(0, 10);
+    const day = toDayKey(new Date(nowMs).toISOString());
     if (day !== this.currentDay) {
       this.currentDay = day;
       this.ordersToday = [];
       this.dailyPnlUsd = 0;
     }
 
-    // Simple week reset (ISO week).
-    const weekStart = new Date(nowMs);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    const week = weekStart.toISOString().slice(0, 10);
+    const week = toWeekKey(nowMs);
     if (week !== this.currentWeek) {
       this.currentWeek = week;
       this.ordersThisWeek = [];
@@ -515,16 +525,7 @@ export class CanarySession {
   private handleCancelAll(
     statusBefore: GammaControlStatus,
   ): GammaControlResult {
-    this.execution.cancelAll(this.now());
-    // Mark all open orders as cancelled.
-    for (const record of this.openOrders) {
-      this.capitalDeployedUsd -= record.notionalUsd;
-      this.exposurePerToken[record.symbol] =
-        (this.exposurePerToken[record.symbol] ?? 0) - record.notionalUsd;
-      this.exposurePerVenue[record.venue] =
-        (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
-    }
-    this.openOrders = [];
+    this.cancelAllOpenOrders();
     this.recordAudit("CANCEL_ALL", {});
     return { ...this.status, command: "cancel-all", ok: true };
   }
@@ -545,27 +546,13 @@ export class CanarySession {
       this.running = false;
       this.paused = false;
       this.currentMode = "HALT";
-      // Cancel all open orders.
-      this.execution.cancelAll(this.now());
-      for (const record of this.openOrders) {
-        this.capitalDeployedUsd -= record.notionalUsd;
-      }
-      this.openOrders = [];
+      this.cancelAllOpenOrders();
       this.recordAudit("KILL_SWITCH_ACTIVATED", {
         trigger: "manual",
         reason: result.reason,
       });
     }
     return { ...this.status, command: "halt", ok: result.shouldHalt };
-  }
-
-  private handleSyncInventory(
-    statusBefore: GammaControlStatus,
-  ): GammaControlResult {
-    // Inventory sync is a no-op at this layer — the connector layer
-    // handles actual API calls. This just records the audit event.
-    this.recordAudit("INVENTORY_SYNC_REQUESTED", {});
-    return { ...this.status, command: "sync-inventory", ok: true };
   }
 
   // ── Automatic Kill Switch ────────────────────────────────────────────
@@ -593,14 +580,7 @@ export class CanarySession {
       this.currentMode = "HALT";
       this.autoKillTrigger = result.trigger;
       this.lastAutoKillAtMs = this.now();
-
-      // Cancel all open orders.
-      this.execution.cancelAll(this.now());
-      for (const record of this.openOrders) {
-        this.capitalDeployedUsd -= record.notionalUsd;
-      }
-      this.openOrders = [];
-
+      this.cancelAllOpenOrders();
       this.recordAudit("KILL_SWITCH_ACTIVATED", {
         trigger: result.trigger,
         reason: result.reason,
@@ -624,6 +604,18 @@ export class CanarySession {
       dailyPnlUsd: this.dailyPnlUsd,
       weeklyPnlUsd: this.weeklyPnlUsd,
     };
+  }
+
+  private cancelAllOpenOrders(): void {
+    this.execution.cancelAll(this.now());
+    for (const record of this.openOrders) {
+      this.capitalDeployedUsd -= record.notionalUsd;
+      this.exposurePerToken[record.symbol] =
+        (this.exposurePerToken[record.symbol] ?? 0) - record.notionalUsd;
+      this.exposurePerVenue[record.venue] =
+        (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
+    }
+    this.openOrders = [];
   }
 
   private recordAudit(
