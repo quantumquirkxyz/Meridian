@@ -18,7 +18,6 @@ import {
 } from "@agenttrading/contracts";
 import {
   PaperExecutionEngine,
-  type PaperExecutionSubmitInput,
   type PaperMarketSnapshot,
   type PaperOrderSnapshot,
 } from "../execution/paper-execution-engine.ts";
@@ -43,6 +42,7 @@ import {
   type ReconciliationSnapshot,
 } from "../reconciliation/reconciliation-engine.ts";
 import { DEFAULT_RISK_POLICY, RiskEngine } from "../risk/risk-gate.ts";
+import { PaperScenarioExecutor } from "./paper-scenario-executor.ts";
 import { AuditLog } from "../stategraph/audit-log.ts";
 import { StateGraph, type TransitionOutcome } from "../stategraph/state-graph.ts";
 import {
@@ -150,11 +150,202 @@ const AGENT_RECOMMENDATION_IDS = [
   "agent-audit",
 ] as const satisfies readonly ConsultativeAgentId[];
 
-const DEFAULT_QUOTE_BUFFER_MULTIPLIER = 2;
-const DEFAULT_LIQUIDITY_USD = 1_000;
-const DEFAULT_SPREAD = 0.5;
-const DEFAULT_SLIPPAGE_BPS = 30;
-const ORDER_TTL_MS = 60_000;
+type FallbackGenerator = (
+  scenario: BetaPaperTradingScenario,
+  candidateId: string,
+  options?: { runtimeError?: string },
+) => ConsultativeAgentOutput;
+
+function fallbackBase(
+  scenario: BetaPaperTradingScenario,
+  options: { runtimeError?: string } = {},
+) {
+  const invalidationReasons =
+    scenario.expectedNetProfitUsd > 0 ? [] : ["MIN_EDGE" as RiskReasonCode];
+  return {
+    confidence: scenario.expectedNetProfitUsd > 0 ? 0.75 : 0.25,
+    assumptions: ["paper mode", "deterministic fallback", "no real capital"],
+    invalidationReasons,
+    summaryPrefix:
+      options.runtimeError === undefined
+        ? "Fallback"
+        : `Runtime error (${options.runtimeError}); deterministic fallback`,
+  };
+}
+
+function fallbackRecommendations(): Record<
+  ConsultativeAgentId,
+  FallbackGenerator
+> {
+  return {
+    "agent-planner-supervisor": (scenario, _candidateId, options) => {
+      const { summaryPrefix, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-planner-supervisor",
+        summary: `${summaryPrefix} planner keeps the candidate inside the paper cycle.`,
+        plannedSteps: [
+          "run loops",
+          "collect advisory review",
+          "risk validate",
+          "paper execute",
+          "reconcile",
+          "audit",
+        ],
+        recommendedMode: "PAPER_ONLY",
+      };
+    },
+    "agent-arbitrage-alpha": (scenario, candidateId, options) => {
+      const { summaryPrefix, invalidationReasons, ...base } = fallbackBase(scenario, options);
+      const alphaInvalidationReasons: [RiskReasonCode, ...RiskReasonCode[]] =
+        invalidationReasons.length > 0
+          ? [invalidationReasons[0] as RiskReasonCode, ...invalidationReasons.slice(1)]
+          : ["MIN_EDGE"];
+      return {
+        ...base,
+        agentId: "agent-arbitrage-alpha",
+        summary: `${summaryPrefix} alpha reports the scenario-provided candidate edge.`,
+        candidateSignal: candidateId,
+        expectedNetProfitUsd: scenario.expectedNetProfitUsd,
+        invalidationReasons: alphaInvalidationReasons,
+        costBreakdownUsd: {
+          feesUsd: 0,
+          slippageUsd: 0,
+          gasUsd: 0,
+          bridgeCostUsd: 0,
+          fundingCostUsd: 0,
+          latencyRiskUsd: 0,
+          failureRiskUsd: 0,
+          safetyBufferUsd: 0,
+        },
+      };
+    },
+    "agent-market-regime": (scenario, _candidateId, options) => {
+      const { summaryPrefix, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-market-regime",
+        summary: `${summaryPrefix} market regime classifies the fixture conservatively.`,
+        regime: "unknown" as const,
+        recommendedMode: "PAPER_ONLY",
+      };
+    },
+    "agent-bull": (scenario, candidateId, options) => {
+      const { summaryPrefix, invalidationReasons, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-bull",
+        summary: `${summaryPrefix} bull case remains advisory only.`,
+        candidateId,
+        confidenceDelta: scenario.expectedNetProfitUsd > 0 ? 0.05 : 0,
+        invalidationReasons,
+        stance: "bullish" as const,
+      };
+    },
+    "agent-bear": (scenario, candidateId, options) => {
+      const { summaryPrefix, invalidationReasons, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-bear",
+        summary: `${summaryPrefix} bear case checks downside before risk authority.`,
+        candidateId,
+        confidenceDelta: scenario.expectedNetProfitUsd > 0 ? -0.05 : -0.2,
+        invalidationReasons,
+        stance: "bearish" as const,
+      };
+    },
+    "agent-skeptic": (scenario, candidateId, options) => {
+      const { summaryPrefix, invalidationReasons, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-skeptic",
+        summary: `${summaryPrefix} skeptic requires deterministic evidence before execution.`,
+        candidateId,
+        confidenceDelta: -0.1,
+        invalidationReasons,
+        stance: "skeptical" as const,
+        requiredEvidence: ["risk decision", "inventory validation", "reconciliation"],
+      };
+    },
+    "agent-risk-analyst": (scenario, _candidateId, options) => {
+      const { summaryPrefix, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-risk-analyst",
+        summary: `${summaryPrefix} risk analyst defers authority to the Risk Engine.`,
+        riskNarrative: "Risk authority remains deterministic.",
+        controls: ["risk gate", "paper-only", "reconciliation", "audit"],
+        residualRisks: ["fixture realism"],
+      };
+    },
+    "agent-execution-advisor": (scenario, _candidateId, options) => {
+      const { summaryPrefix, invalidationReasons, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-execution-advisor",
+        summary: `${summaryPrefix} execution advisor restricts execution to paper mode.`,
+        executionPlanCandidates: [
+          {
+            venue: scenario.venue ?? "bybit-paper",
+            orderType: "limit" as const,
+            expectedNetProfitUsd: scenario.expectedNetProfitUsd,
+            assumptions: ["paper order state machine"],
+            invalidationReasons,
+          },
+        ],
+        recommendedMode: "PAPER_ONLY",
+      };
+    },
+    "agent-memory": (scenario, _candidateId, options) => {
+      const { summaryPrefix, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-memory",
+        summary: `${summaryPrefix} memory recalls no production-capital precedent.`,
+        recalledCases: [
+          {
+            caseId: `memory-${scenario.id}`,
+            pattern: "paper-only beta cycle",
+            relevance: 0.5,
+            warning: "do not extrapolate paper fills to live venues",
+          },
+        ],
+        recalledPerformance: [],
+        recommendedFollowUps: ["persist audit trail", "review reconciliation"],
+      };
+    },
+    "agent-audit": (scenario, _candidateId, options) => {
+      const { summaryPrefix, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-audit",
+        summary: `${summaryPrefix} audit agent requests a complete post-trade report.`,
+        qualityScore: 0.75,
+        decisionSummary: "Decision remains reconstructable from deterministic logs.",
+        consistencyFindings: [],
+        failurePatterns: options?.runtimeError === undefined
+          ? []
+          : [`agent runtime fallback: ${options.runtimeError}`],
+      };
+    },
+    "agent-policy": (scenario, _candidateId, options) => {
+      const { summaryPrefix, ...base } = fallbackBase(scenario, options);
+      return {
+        ...base,
+        agentId: "agent-policy",
+        summary: `${summaryPrefix} policy review found no blocking internal constraints.`,
+        internalLimits: [],
+        blockedVenues: [],
+        userConfiguredTerms: [],
+        reviewRequired: false,
+        approvalPower: false as const,
+        notes: [],
+      };
+    },
+  };
+}
+
+const FALLBACK_RECOMMENDATIONS = fallbackRecommendations();
 
 function riskReasonCodes(decision: RiskDecision | undefined): RiskReasonCode[] {
   if (decision === undefined || !("reasonCodes" in decision)) return [];
@@ -212,6 +403,7 @@ export class BetaPaperTradingSession {
   private readonly reconciliationEngine = new ReconciliationEngine();
   private readonly inventoryEngine = new InventoryEngine();
   private readonly paperExecution = new PaperExecutionEngine();
+  private readonly scenarioExecutor: PaperScenarioExecutor;
   private readonly agentRunner?: BetaAgentRecommendationRunner;
   private readonly postTradeReports: BetaPostTradeReport[] = [];
   private reportCounter = 0;
@@ -221,6 +413,10 @@ export class BetaPaperTradingSession {
   constructor(options: BetaPaperTradingSessionOptions = {}) {
     this.now = options.now ?? (() => Date.now());
     this.agentRunner = options.agentRunner;
+    this.scenarioExecutor = new PaperScenarioExecutor(
+      this.inventoryEngine,
+      this.paperExecution,
+    );
     this.audit = new AuditLog();
     this.graph = this.newGraph("PAPER_ONLY");
     this.orchestrator = this.newOrchestrator(this.graph);
@@ -398,7 +594,7 @@ export class BetaPaperTradingSession {
     step("BUILD_ORDER_INTENT", MODULE_ACTORS.planner, {
       candidates: [candidate],
     });
-    const orderIntent = this.buildOrderIntent(scenario, candidate.id, timestampMs);
+    const orderIntent = this.scenarioExecutor.buildOrderIntent(scenario, candidate.id, timestampMs);
     this.audit.record({
       eventId: `intent-${scenario.id}`,
       timestampMs,
@@ -412,7 +608,7 @@ export class BetaPaperTradingSession {
       },
     });
 
-    const inventory = this.evaluateInventory(scenario, orderIntent, timestampMs);
+    const inventory = this.scenarioExecutor.evaluateInventory(scenario, orderIntent, timestampMs);
     if (inventory.validation.blocked) {
       step("REQUEST_AGENT_REVIEW", MODULE_ACTORS.planner, {
         orderIntent,
@@ -424,15 +620,15 @@ export class BetaPaperTradingSession {
         inventoryBlocked: true,
         reasons: inventory.validation.reasons,
       }, ["RISK_REJECTED"]);
-      riskDecision = this.riskGate.evaluate({
-        orderIntent,
-        expectedNetProfitUsd: scenario.expectedNetProfitUsd,
-        mode: this.graph.currentMode,
-        dataQualityScore: scenario.dataQualityScore,
-        liquidityDepthUsd: this.market(scenario).liquidityUsd,
-        evaluatedAtMs: timestampMs,
-        inventoryBlocked: true,
-      });
+    riskDecision = this.riskGate.evaluate({
+      orderIntent,
+      expectedNetProfitUsd: scenario.expectedNetProfitUsd,
+      mode: this.graph.currentMode,
+      dataQualityScore: scenario.dataQualityScore,
+      liquidityDepthUsd: this.scenarioExecutor.market(scenario).liquidityUsd,
+      evaluatedAtMs: timestampMs,
+      inventoryBlocked: true,
+    });
       this.audit.record({
         eventId: `risk-${scenario.id}`,
         timestampMs,
@@ -488,7 +684,7 @@ export class BetaPaperTradingSession {
       expectedNetProfitUsd: scenario.expectedNetProfitUsd,
       mode: this.graph.currentMode,
       dataQualityScore: scenario.dataQualityScore,
-      liquidityDepthUsd: this.market(scenario).liquidityUsd,
+      liquidityDepthUsd: this.scenarioExecutor.market(scenario).liquidityUsd,
       evaluatedAtMs: timestampMs,
     });
     this.audit.record({
@@ -539,7 +735,7 @@ export class BetaPaperTradingSession {
       orderIntent,
       inventoryValidation: inventory.validation,
     }, ["RISK_APPROVED"]);
-    execution = this.executePaperOrder(scenario, orderIntent, riskDecision, timestampMs);
+    execution = this.scenarioExecutor.executePaperOrder(scenario, orderIntent, riskDecision, timestampMs);
     step("EXECUTE_ORDER", MODULE_ACTORS.executionEngine, {
       precheck: "PASS",
       expectedNetProfitUsd: scenario.expectedNetProfitUsd,
@@ -760,127 +956,6 @@ export class BetaPaperTradingSession {
       : this.fallbackRecommendations(scenario, candidateId);
   }
 
-  private buildOrderIntent(
-    scenario: BetaPaperTradingScenario,
-    opportunityId: string,
-    timestampMs: number,
-  ): OrderIntent {
-    return {
-      idempotencyKey: `intent-${scenario.id}`,
-      opportunityId,
-      venue: scenario.venue ?? "bybit-paper",
-      symbol: scenario.symbol ?? "BTC/USDT",
-      side: "BUY",
-      quantity: scenario.quantity ?? 0.01,
-      price: scenario.price ?? 100,
-      quoteCurrency: "USDT",
-      createdAtMs: timestampMs,
-      expiresAtMs: timestampMs + ORDER_TTL_MS,
-      limits: { maxSlippageBps: DEFAULT_SLIPPAGE_BPS },
-    };
-  }
-
-  private evaluateInventory(
-    scenario: BetaPaperTradingScenario,
-    orderIntent: OrderIntent,
-    timestampMs: number,
-  ): { snapshot: InventorySnapshot; validation: InventoryValidation } {
-    const baseAsset = orderIntent.symbol.split("/")[0] ?? "BTC";
-    const quoteAsset = orderIntent.quoteCurrency;
-    const requiredNotionalUsd = orderIntent.quantity * orderIntent.price;
-    const paperInventory = scenario.paperInventory ?? {
-      balances: [
-        {
-          venueType: "CEX" as const,
-          venue: orderIntent.venue,
-          chain: "",
-          asset: quoteAsset,
-          available: requiredNotionalUsd * 2,
-          locked: 0,
-          exposed: 0,
-          lastSyncAtMs: timestampMs,
-        },
-        {
-          venueType: "CEX" as const,
-          venue: orderIntent.venue,
-          chain: "",
-          asset: baseAsset,
-          available: 0,
-          locked: 0,
-          exposed: 0,
-          lastSyncAtMs: timestampMs,
-        },
-      ],
-      prices: {
-        [baseAsset.toUpperCase()]: orderIntent.price,
-        [quoteAsset.toUpperCase()]: 1,
-      },
-      strategyAllocations: [
-        {
-          strategyId: "beta-paper",
-          maxAllocationUsd: requiredNotionalUsd * DEFAULT_QUOTE_BUFFER_MULTIPLIER,
-          deployedUsd: 0,
-        },
-      ],
-    };
-    const snapshot = this.inventoryEngine.snapshot({
-      balances: paperInventory.balances,
-      prices: paperInventory.prices,
-      strategyAllocations: paperInventory.strategyAllocations,
-      evaluatedAtMs: timestampMs,
-    });
-    const validation = this.inventoryEngine.validate(
-      {
-        asset: quoteAsset,
-        venue: orderIntent.venue,
-        side: "BUY",
-        notionalUsd: requiredNotionalUsd,
-        strategyId: "beta-paper",
-        evaluatedAtMs: timestampMs,
-      },
-      snapshot,
-    );
-    return { snapshot, validation };
-  }
-
-  private market(scenario: BetaPaperTradingScenario): PaperMarketSnapshot {
-    const price = scenario.price ?? 100;
-    return {
-      bid: price - DEFAULT_SPREAD,
-      ask: price + DEFAULT_SPREAD,
-      mid: price,
-      liquidityUsd: DEFAULT_LIQUIDITY_USD,
-      latencyMs: 1,
-      ...scenario.market,
-    };
-  }
-
-  private executePaperOrder(
-    scenario: BetaPaperTradingScenario,
-    orderIntent: OrderIntent,
-    riskDecision: ExecutableRiskDecision,
-    timestampMs: number,
-  ): PaperOrderSnapshot {
-    const executionOptions = scenario.paperExecution ?? {};
-    const execution = this.paperExecution.submit({
-      intent: orderIntent,
-      riskDecision,
-      market: this.market(scenario),
-      submittedAtMs: timestampMs,
-      acceptAfterMs: executionOptions.acceptAfterMs ?? timestampMs,
-      fillAfterMs: executionOptions.fillAfterMs ?? timestampMs,
-      fillDelayMs: executionOptions.fillDelayMs,
-      cancelAfterMs: executionOptions.cancelAfterMs,
-      rejectReason: executionOptions.rejectReason,
-      expiryAfterMs: executionOptions.expiryAfterMs,
-      slippageBps: executionOptions.slippageBps,
-      feeBps: executionOptions.feeBps,
-      fundingCostUsd: executionOptions.fundingCostUsd,
-    } satisfies PaperExecutionSubmitInput);
-    this.paperExecution.poll(timestampMs);
-    return execution;
-  }
-
   private reconcilePaperOrder(
     scenario: BetaPaperTradingScenario,
     execution: PaperOrderSnapshot,
@@ -992,151 +1067,11 @@ export class BetaPaperTradingSession {
     candidateId: string,
     options: { runtimeError?: string } = {},
   ): ConsultativeAgentOutput {
-    const invalidationReasons =
-      scenario.expectedNetProfitUsd > 0 ? [] : ["MIN_EDGE" as RiskReasonCode];
-    const alphaInvalidationReasons: [RiskReasonCode, ...RiskReasonCode[]] =
-      invalidationReasons.length > 0
-        ? [invalidationReasons[0] as RiskReasonCode, ...invalidationReasons.slice(1)]
-        : ["MIN_EDGE"];
-    const summaryPrefix = options.runtimeError === undefined
-      ? "Fallback"
-      : `Runtime error (${options.runtimeError}); deterministic fallback`;
-    const base = {
-      confidence: scenario.expectedNetProfitUsd > 0 ? 0.75 : 0.25,
-      assumptions: ["paper mode", "deterministic fallback", "no real capital"],
-      invalidationReasons,
-    };
-
-    switch (agentId) {
-      case "agent-planner-supervisor":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} planner keeps the candidate inside the paper cycle.`,
-          plannedSteps: [
-            "run loops",
-            "collect advisory review",
-            "risk validate",
-            "paper execute",
-            "reconcile",
-            "audit",
-          ],
-          recommendedMode: "PAPER_ONLY",
-        };
-      case "agent-arbitrage-alpha":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} alpha reports the scenario-provided candidate edge.`,
-          candidateSignal: candidateId,
-          expectedNetProfitUsd: scenario.expectedNetProfitUsd,
-          invalidationReasons: alphaInvalidationReasons,
-          costBreakdownUsd: {
-            feesUsd: 0,
-            slippageUsd: 0,
-            gasUsd: 0,
-            bridgeCostUsd: 0,
-            fundingCostUsd: 0,
-            latencyRiskUsd: 0,
-            failureRiskUsd: 0,
-            safetyBufferUsd: 0,
-          },
-        };
-      case "agent-market-regime":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} market regime classifies the fixture conservatively.`,
-          regime: "unknown",
-          recommendedMode: "PAPER_ONLY",
-        };
-      case "agent-bull":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} bull case remains advisory only.`,
-          candidateId,
-          confidenceDelta: scenario.expectedNetProfitUsd > 0 ? 0.05 : 0,
-          invalidationReasons,
-          stance: "bullish",
-        };
-      case "agent-bear":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} bear case checks downside before risk authority.`,
-          candidateId,
-          confidenceDelta: scenario.expectedNetProfitUsd > 0 ? -0.05 : -0.2,
-          invalidationReasons,
-          stance: "bearish",
-        };
-      case "agent-skeptic":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} skeptic requires deterministic evidence before execution.`,
-          candidateId,
-          confidenceDelta: -0.1,
-          invalidationReasons,
-          stance: "skeptical",
-          requiredEvidence: ["risk decision", "inventory validation", "reconciliation"],
-        };
-      case "agent-risk-analyst":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} risk analyst defers authority to the Risk Engine.`,
-          riskNarrative: "Risk authority remains deterministic.",
-          controls: ["risk gate", "paper-only", "reconciliation", "audit"],
-          residualRisks: ["fixture realism"],
-        };
-      case "agent-execution-advisor":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} execution advisor restricts execution to paper mode.`,
-          executionPlanCandidates: [
-            {
-              venue: scenario.venue ?? "bybit-paper",
-              orderType: "limit",
-              expectedNetProfitUsd: scenario.expectedNetProfitUsd,
-              assumptions: ["paper order state machine"],
-              invalidationReasons,
-            },
-          ],
-          recommendedMode: "PAPER_ONLY",
-        };
-      case "agent-memory":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} memory recalls no production-capital precedent.`,
-          recalledCases: [
-            {
-              caseId: `memory-${scenario.id}`,
-              pattern: "paper-only beta cycle",
-              relevance: 0.5,
-              warning: "do not extrapolate paper fills to live venues",
-            },
-          ],
-          recalledPerformance: [],
-          recommendedFollowUps: ["persist audit trail", "review reconciliation"],
-        };
-      case "agent-audit":
-        return {
-          ...base,
-          agentId,
-          summary: `${summaryPrefix} audit agent requests a complete post-trade report.`,
-          qualityScore: 0.75,
-          decisionSummary: "Decision remains reconstructable from deterministic logs.",
-          consistencyFindings: [],
-          failurePatterns: options.runtimeError === undefined
-            ? []
-            : [`agent runtime fallback: ${options.runtimeError}`],
-        };
-      default:
-        throw new Error(`unknown agent ${agentId}`);
+    const generator = FALLBACK_RECOMMENDATIONS[agentId];
+    if (generator === undefined) {
+      throw new Error(`unknown agent ${agentId}`);
     }
+    return generator(scenario, candidateId, options);
   }
 
   private fallbackRecommendations(

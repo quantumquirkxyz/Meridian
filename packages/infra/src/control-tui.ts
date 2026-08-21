@@ -1,20 +1,18 @@
 import {
   BETA_CONTROL_COMMANDS,
+  BETA_CONTROL_HOTKEYS,
   type BetaControlCommand,
+  type BetaControlPort,
   type BetaControlResult,
   type BetaControlStatus,
 } from "@agenttrading/contracts";
 
 export type {
   BetaControlCommand,
+  BetaControlPort,
   BetaControlResult as BetaControlPortResult,
   BetaControlStatus as BetaControlPortStatus,
 } from "@agenttrading/contracts";
-
-export interface BetaControlPort {
-  readonly status: BetaControlStatus;
-  control(command: BetaControlCommand): BetaControlResult;
-}
 
 export interface BetaControlCommandRow {
   command: BetaControlCommand;
@@ -48,44 +46,23 @@ export interface BetaControlTuiModelOptions {
 }
 
 export const BETA_CONTROL_COMMAND_DESCRIPTORS: readonly BetaControlCommandDescriptor[] =
-  [
-    {
-      command: "start",
-      hotkey: "s",
-      label: "Start paper loop",
-      dangerous: false,
-    },
-    {
-      command: "stop",
-      hotkey: "x",
-      label: "Stop paper loop",
-      dangerous: false,
-    },
-    {
-      command: "cancel-all",
-      hotkey: "c",
-      label: "Cancel all paper orders",
-      dangerous: true,
-    },
-    {
-      command: "cash-only",
-      hotkey: "$",
-      label: "Cash-only mode",
-      dangerous: false,
-    },
-    {
-      command: "reduce-only",
-      hotkey: "r",
-      label: "Reduce-only mode",
-      dangerous: false,
-    },
-    {
-      command: "halt",
-      hotkey: "h",
-      label: "Kill switch",
-      dangerous: true,
-    },
-  ];
+  BETA_CONTROL_COMMANDS.map((command) => ({
+    command,
+    hotkey: BETA_CONTROL_HOTKEYS[command],
+    label:
+      command === "start"
+        ? "Start paper loop"
+        : command === "stop"
+          ? "Stop paper loop"
+          : command === "cancel-all"
+            ? "Cancel all paper orders"
+            : command === "cash-only"
+              ? "Cash-only mode"
+              : command === "reduce-only"
+                ? "Reduce-only mode"
+                : "Kill switch",
+    dangerous: command === "cancel-all" || command === "halt",
+  }));
 
 export function commandForHotkey(
   input: string,
@@ -127,15 +104,7 @@ function renderStatus(status: BetaControlStatus): BetaControlStatusRow[] {
 }
 
 function renderCommands(): BetaControlCommandRow[] {
-  return BETA_CONTROL_COMMANDS.map((command) => {
-    const descriptor = BETA_CONTROL_COMMAND_DESCRIPTORS.find(
-      (row) => row.command === command,
-    );
-    if (descriptor === undefined) {
-      throw new Error(`missing descriptor for beta control command ${command}`);
-    }
-    return { ...descriptor };
-  });
+  return [...BETA_CONTROL_COMMAND_DESCRIPTORS];
 }
 
 /**

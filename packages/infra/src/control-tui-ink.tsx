@@ -2,13 +2,13 @@ import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import {
   type BetaControlResult,
+  type BetaControlPort,
 } from "@agenttrading/contracts";
 import {
   BetaControlTuiModel,
   commandForHotkey,
   type BetaControlCommandRow,
   type BetaPaperLoopRunner,
-  type BetaControlPort,
   type BetaControlStatusRow,
 } from "./control-tui.ts";
 

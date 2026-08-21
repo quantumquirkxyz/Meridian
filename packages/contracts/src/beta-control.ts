@@ -64,3 +64,26 @@ export const isBetaControlResult: Validator<BetaControlResult> = isObjectOf({
 export function parseBetaControlCommand(value: unknown): BetaControlCommand {
   return parse(isBetaControlCommand, value, "BetaControlCommand");
 }
+
+/**
+ * Port through which operator UIs control the Beta paper session.
+ * Lives in contracts so the wiring layer can import core to construct
+ * the session while infra imports only this port type.
+ */
+export interface BetaControlPort {
+  readonly status: BetaControlStatus;
+  control(command: BetaControlCommand): BetaControlResult;
+}
+
+/**
+ * Canonical hotkey-to-command mapping. Both the text renderer and the Ink
+ * input handler derive their bindings from this single source.
+ */
+export const BETA_CONTROL_HOTKEYS = {
+  start: "s",
+  stop: "x",
+  "cancel-all": "c",
+  "cash-only": "$",
+  "reduce-only": "r",
+  halt: "h",
+} as const satisfies Record<BetaControlCommand, string>;
