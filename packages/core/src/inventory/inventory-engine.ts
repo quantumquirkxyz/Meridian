@@ -25,9 +25,6 @@
 export const BALANCE_VENUE_TYPES = ["CEX", "WALLET", "DEX"] as const;
 export type BalanceVenueType = (typeof BALANCE_VENUE_TYPES)[number];
 
-export const CAPITAL_STATES = ["FREE", "LOCKED", "EXPOSED"] as const;
-export type CapitalState = (typeof CAPITAL_STATES)[number];
-
 /**
  * A single balance entry. The system maintains an array of these, one
  * per (venue, chain, asset) tuple. Callers update them via `syncBalances`.
@@ -320,6 +317,63 @@ function isStablecoin(
   return stablecoinAssets.includes(asset.toUpperCase());
 }
 
+/**
+ * Compute the total USD exposure for balances matching a predicate.
+ * Used for both venue and chain exposure checks.
+ */
+function computeExposureUsd(
+  balances: readonly BalanceEntry[],
+  matcher: (b: BalanceEntry) => boolean,
+  prices: PriceMap,
+): number {
+  return sumBy(
+    balances.filter(matcher),
+    (b) => (b.available + b.locked + b.exposed) * assetPrice(b.asset, prices),
+  );
+}
+
+/**
+ * Build an exposure map from balances using a key extractor.
+ * Used for venue and chain concentration suggestions.
+ */
+function buildExposureMap(
+  balances: readonly BalanceEntry[],
+  keyFn: (b: BalanceEntry) => string | null,
+  prices: PriceMap,
+): Map<string, number> {
+  const exposureUsd = new Map<string, number>();
+  for (const b of balances) {
+    const key = keyFn(b);
+    if (key === null) continue;
+    const valueUsd = (b.available + b.locked + b.exposed) * assetPrice(b.asset, prices);
+    exposureUsd.set(key, (exposureUsd.get(key) ?? 0) + valueUsd);
+  }
+  return exposureUsd;
+}
+
+/**
+ * Generate rebalance suggestions for items exceeding an exposure limit.
+ * Shared logic for venue and chain concentration checks.
+ */
+function pushExposureSuggestions(
+  suggestions: RebalanceSuggestion[],
+  exposureMap: Map<string, number>,
+  maxExposure: number,
+  label: string,
+): void {
+  for (const [item, exposureUsd] of exposureMap) {
+    if (exposureUsd > maxExposure) {
+      suggestions.push({
+        type: "VENUE_REBALANCE",
+        severity: "CRITICAL",
+        description: `${label} ${item} exposure $${exposureUsd.toFixed(2)} exceeds limit $${maxExposure} USD`,
+        from: item,
+        amountUsd: exposureUsd - maxExposure,
+      });
+    }
+  }
+}
+
 // ── Engine ──────────────────────────────────────────────────────────
 
 /**
@@ -501,20 +555,12 @@ export class InventoryEngine {
   // ── AC3: Rebalance suggestions ─────────────────────────────────
 
   /**
-   * Produce advisory rebalance suggestions based on the current inventory
-   * state. Suggestions are never enforced — the caller decides whether
-   * to act on them.
+   * Produce gas reserve rebalance suggestions.
    */
-  computeRebalanceSuggestions(
-    balances: readonly BalanceEntry[],
-    prices: PriceMap,
+  private suggestGasReserves(
+    suggestions: RebalanceSuggestion[],
     gasReserves: readonly GasReserveEntry[],
-    stablecoinExposure: StablecoinExposure,
-    strategyAllocations: readonly StrategyAllocation[],
-  ): readonly RebalanceSuggestion[] {
-    const suggestions: RebalanceSuggestion[] = [];
-
-    // Gas reserve suggestions
+  ): void {
     for (const reserve of gasReserves) {
       if (!reserve.sufficient) {
         suggestions.push({
@@ -541,8 +587,15 @@ export class InventoryEngine {
         });
       }
     }
+  }
 
-    // Stablecoin exposure suggestions
+  /**
+   * Produce stablecoin rebalance suggestions.
+   */
+  private suggestStablecoinRebalance(
+    suggestions: RebalanceSuggestion[],
+    stablecoinExposure: StablecoinExposure,
+  ): void {
     if (!stablecoinExposure.withinPolicy) {
       const maxRatio = this.policy.maxStablecoinRatio ?? 1;
       const minRatio = this.policy.minStablecoinRatio ?? 0;
@@ -568,8 +621,15 @@ export class InventoryEngine {
         });
       }
     }
+  }
 
-    // Strategy allocation suggestions
+  /**
+   * Produce strategy allocation rebalance suggestions.
+   */
+  private suggestStrategyRebalance(
+    suggestions: RebalanceSuggestion[],
+    strategyAllocations: readonly StrategyAllocation[],
+  ): void {
     for (const alloc of strategyAllocations) {
       if (alloc.utilizationRatio > 0.9) {
         suggestions.push({
@@ -590,54 +650,46 @@ export class InventoryEngine {
         });
       }
     }
+  }
+
+  /**
+   * Produce advisory rebalance suggestions based on the current inventory
+   * state. Suggestions are never enforced — the caller decides whether
+   * to act on them.
+   */
+  computeRebalanceSuggestions(
+    balances: readonly BalanceEntry[],
+    prices: PriceMap,
+    gasReserves: readonly GasReserveEntry[],
+    stablecoinExposure: StablecoinExposure,
+    strategyAllocations: readonly StrategyAllocation[],
+  ): readonly RebalanceSuggestion[] {
+    const suggestions: RebalanceSuggestion[] = [];
+
+    this.suggestGasReserves(suggestions, gasReserves);
+    this.suggestStablecoinRebalance(suggestions, stablecoinExposure);
+    this.suggestStrategyRebalance(suggestions, strategyAllocations);
 
     // Venue concentration suggestions (USD-denominated)
-    const venueExposureUsd = new Map<string, number>();
-    for (const b of balances) {
-      const key = `${b.venueType}:${b.venue}`;
-      const price = assetPrice(b.asset, prices);
-      const valueUsd = (b.available + b.locked + b.exposed) * price;
-      venueExposureUsd.set(key, (venueExposureUsd.get(key) ?? 0) + valueUsd);
-    }
+    const venueExposureUsd = buildExposureMap(
+      balances,
+      (b) => `${b.venueType}:${b.venue}`,
+      prices,
+    );
     const maxVenueExposure = this.policy.maxExposurePerVenueUsd;
     if (maxVenueExposure !== undefined) {
-      for (const [venue, exposureUsd] of venueExposureUsd) {
-        if (exposureUsd > maxVenueExposure) {
-          suggestions.push({
-            type: "VENUE_REBALANCE",
-            severity: "CRITICAL",
-            description: `Venue ${venue} exposure $${exposureUsd.toFixed(2)} exceeds limit $${maxVenueExposure} USD`,
-            from: venue,
-            amountUsd: exposureUsd - maxVenueExposure,
-          });
-        }
-      }
+      pushExposureSuggestions(suggestions, venueExposureUsd, maxVenueExposure, "Venue");
     }
 
     // Chain concentration suggestions (USD-denominated)
-    const chainExposureUsd = new Map<string, number>();
-    for (const b of balances) {
-      if (b.chain === "") continue;
-      const price = assetPrice(b.asset, prices);
-      const valueUsd = (b.available + b.locked + b.exposed) * price;
-      chainExposureUsd.set(
-        b.chain,
-        (chainExposureUsd.get(b.chain) ?? 0) + valueUsd,
-      );
-    }
+    const chainExposureUsd = buildExposureMap(
+      balances,
+      (b) => b.chain === "" ? null : b.chain,
+      prices,
+    );
     const maxChainExposure = this.policy.maxExposurePerChainUsd;
     if (maxChainExposure !== undefined) {
-      for (const [chain, exposureUsd] of chainExposureUsd) {
-        if (exposureUsd > maxChainExposure) {
-          suggestions.push({
-            type: "VENUE_REBALANCE",
-            severity: "CRITICAL",
-            description: `Chain ${chain} exposure $${exposureUsd.toFixed(2)} exceeds limit $${maxChainExposure} USD`,
-            from: chain,
-            amountUsd: exposureUsd - maxChainExposure,
-          });
-        }
-      }
+      pushExposureSuggestions(suggestions, chainExposureUsd, maxChainExposure, "Chain");
     }
 
     return suggestions;
@@ -758,13 +810,10 @@ export class InventoryEngine {
     // Venue exposure check (USD-denominated)
     const maxVenueExposure = this.policy.maxExposurePerVenueUsd;
     if (maxVenueExposure !== undefined) {
-      const venueExposureUsd = sumBy(
-        snapshot.balances.filter(
-          (b) =>
-            b.venue === input.venue &&
-            b.asset.toUpperCase() === input.asset.toUpperCase(),
-        ),
-        (b) => (b.available + b.locked + b.exposed) * assetPrice(b.asset, snapshot.prices),
+      const venueExposureUsd = computeExposureUsd(
+        snapshot.balances,
+        (b) => b.venue === input.venue && b.asset.toUpperCase() === input.asset.toUpperCase(),
+        snapshot.prices,
       );
       if (venueExposureUsd + input.notionalUsd > maxVenueExposure) {
         reasons.push(
@@ -780,13 +829,10 @@ export class InventoryEngine {
       input.chain !== undefined &&
       input.chain !== ""
     ) {
-      const chainExposureUsd = sumBy(
-        snapshot.balances.filter(
-          (b) =>
-            b.chain === input.chain &&
-            b.asset.toUpperCase() === input.asset.toUpperCase(),
-        ),
-        (b) => (b.available + b.locked + b.exposed) * assetPrice(b.asset, snapshot.prices),
+      const chainExposureUsd = computeExposureUsd(
+        snapshot.balances,
+        (b) => b.chain === input.chain && b.asset.toUpperCase() === input.asset.toUpperCase(),
+        snapshot.prices,
       );
       if (chainExposureUsd + input.notionalUsd > maxChainExposure) {
         reasons.push(
