@@ -36,6 +36,7 @@ import {
   type OrderIntent,
   type RiskDecision,
 } from "@agenttrading/contracts";
+import { type FillParams } from "@agenttrading/contracts";
 import { type AuditLog } from "../stategraph/audit-log.ts";
 import {
   KillSwitch,
@@ -50,6 +51,7 @@ import {
 import {
   type PaperOrderSnapshot,
 } from "../execution/paper-execution-engine.ts";
+import { type TradeJournal } from "./trade-journal.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -90,6 +92,8 @@ export interface CanarySessionOptions {
   audit?: AuditLog;
   /** Custom canary config; defaults to DEFAULT_CANARY_CONFIG. */
   config?: CanaryConfig;
+  /** Trade journal for automatic outcome recording. */
+  journal?: TradeJournal;
 }
 
 // ── Session ──────────────────────────────────────────────────────────
@@ -109,6 +113,7 @@ export class CanarySession {
   private readonly config: CanaryConfig;
   private readonly now: () => number;
   private readonly audit?: AuditLog;
+  private readonly journal?: TradeJournal;
   private readonly killSwitch: KillSwitch;
   private readonly execution: LiveExecutionEngine;
 
@@ -140,6 +145,7 @@ export class CanarySession {
     this.config = options.config ?? DEFAULT_CANARY_CONFIG;
     this.now = options.now ?? (() => Date.now());
     this.audit = options.audit;
+    this.journal = options.journal;
     this.killSwitch = new KillSwitch(this.config.killSwitch);
     this.execution = new LiveExecutionEngine(this.config);
   }
@@ -399,6 +405,27 @@ export class CanarySession {
     if (state === "FILLED") {
       this.dailyPnlUsd += pnlUsd;
       this.weeklyPnlUsd += pnlUsd;
+
+      // Auto-record filled trade to journal (AC1).
+      if (this.journal !== undefined) {
+        const intent = record.intent;
+        const exitPrice = intent.price; // Approximate; real exit price from fill data.
+        const fillParams: FillParams = {
+          tradeId: orderId,
+          strategyId: "canary",
+          regime: this.currentMode,
+          venue: record.venue,
+          symbol: record.symbol,
+          side: record.side,
+          entryPrice: intent.price,
+          exitPrice: intent.price + (record.side === "BUY" ? pnlUsd / intent.quantity : -pnlUsd / intent.quantity),
+          filledQuantity: intent.quantity,
+          feesUsd: 0,
+          enteredAtMs: record.submittedAtMs,
+          exitedAtMs: this.now(),
+        };
+        this.journal.recordFill(fillParams);
+      }
     }
 
     this.recordAudit("ORDER_RESOLVED", {

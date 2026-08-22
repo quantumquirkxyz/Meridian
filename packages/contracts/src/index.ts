@@ -28,3 +28,4 @@ export * from "./beta-control.ts";
 export * from "./canary-config.ts";
 export * from "./gamma-control.ts";
 export * from "./regime.ts";
+export * from "./learning-loop.ts";
