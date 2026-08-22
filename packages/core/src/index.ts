@@ -23,3 +23,5 @@ export * from "./beta/paper-trading-session.ts";
 export * from "./gamma/kill-switch.ts";
 export * from "./gamma/live-execution-engine.ts";
 export * from "./gamma/canary-session.ts";
+export * from "./gamma/regime-classifier.ts";
+export * from "./gamma/regime-policy-engine.ts";
