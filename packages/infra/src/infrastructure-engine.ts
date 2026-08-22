@@ -15,6 +15,11 @@
  * on the safety ladder. Modes can only move down, never up (fail
  * closed, RISK.md).
  *
+ * Detect-only semantics: This engine detects rotation and backup
+ * needs but cannot trigger them — rotation and backup creation are
+ * I/O operations handled by the infra layer. The engine produces
+ * signals; the caller remediates.
+ *
  * Usage:
  * ```ts
  * const engine = new InfrastructureEngine(config);
@@ -37,9 +42,7 @@ import type {
   ComponentHealth,
   ConnectorType,
   DegradationResult,
-  ErrorBudgetConfig,
   ErrorBudgetStatus,
-  FailoverConfig,
   InfrastructureConfig,
   InfrastructureStatus,
   SecretRecord,
@@ -65,7 +68,11 @@ const MODE_LADDER: readonly SystemMode[] = [
   "HALT",
 ];
 
-function modeIndex(mode: SystemMode): number {
+/**
+ * Map a SystemMode to its position on the safety ladder.
+ * Higher index = more restrictive.
+ */
+export function modeIndex(mode: SystemMode): number {
   return MODE_LADDER.indexOf(mode);
 }
 
@@ -89,6 +96,10 @@ interface Observation {
 /**
  * InfrastructureEngine: evaluates infrastructure state and produces
  * safe degradation decisions.
+ *
+ * Detect-only: This engine tracks secret rotation state and backup
+ * verification but does not perform I/O operations (actual rotation,
+ * backup creation). It produces signals; callers remEDIATE.
  */
 export class InfrastructureEngine {
   private readonly config: InfrastructureConfig;
@@ -225,28 +236,26 @@ export class InfrastructureEngine {
 
   /**
    * Evaluate circuit breakers: transition open → half-open when cooldown
-   * expires. Returns the list of open breaker component ids.
+   * expires. Returns the list of non-closed breaker component ids
+   * (open or half-open).
    */
   evaluateBreakers(nowMs: number): string[] {
-    const openBreakers: string[] = [];
+    const nonClosed: string[] = [];
 
     for (const breaker of this.breakers.values()) {
       if (breaker.state === "open") {
         const elapsed = nowMs - breaker.openedAtMs;
         if (elapsed >= breaker.cooldownMs) {
           breaker.state = "half-open";
-        } else {
-          openBreakers.push(breaker.componentId);
         }
       }
-      if (breaker.state === "half-open" || breaker.state === "open") {
-        if (!openBreakers.includes(breaker.componentId)) {
-          openBreakers.push(breaker.componentId);
-        }
+
+      if (breaker.state === "open" || breaker.state === "half-open") {
+        nonClosed.push(breaker.componentId);
       }
     }
 
-    return openBreakers;
+    return nonClosed;
   }
 
   /**
@@ -274,6 +283,9 @@ export class InfrastructureEngine {
 
   /**
    * Register a secret for tracking.
+   *
+   * Detect-only: This records the secret's rotation state. Actual key
+   * rotation is an I/O operation performed by the caller.
    */
   recordSecret(secret: SecretRecord): void {
     this.secrets.set(secret.secretId, { ...secret });
@@ -281,6 +293,9 @@ export class InfrastructureEngine {
 
   /**
    * Record a backup.
+   *
+   * Detect-only: This records a backup's verification state. Actual
+   * backup creation is an I/O operation performed by the caller.
    */
   recordBackup(backup: BackupRecord): void {
     // Maintain a sorted list (newest first).
@@ -297,6 +312,9 @@ export class InfrastructureEngine {
   /**
    * Evaluate secrets: check which need rotation or are expired.
    * Returns the count of secrets needing rotation.
+   *
+   * Detect-only: This identifies secrets that need rotation. The
+   * caller must perform the actual rotation (I/O operation).
    */
   evaluateSecrets(nowMs: number): { ok: boolean; needingRotation: number } {
     let needingRotation = 0;
@@ -317,6 +335,9 @@ export class InfrastructureEngine {
 
   /**
    * Evaluate backups: check whether enough verified backups exist.
+   *
+   * Detect-only: This identifies insufficient backup coverage. The
+   * caller must create backups (I/O operation).
    */
   evaluateBackups(): { ok: boolean; count: number } {
     const verified = this.backups.filter((b) => b.verified);
@@ -386,51 +407,43 @@ export class InfrastructureEngine {
     // 2. Evaluate circuit breakers.
     const openBreakers = this.evaluateBreakers(nowMs);
 
-    // 3. Evaluate secrets.
+    // 3. Evaluate secrets and backups (once each, reused below).
     const secrets = this.evaluateSecrets(nowMs);
-
-    // 4. Evaluate backups.
     const backups = this.evaluateBackups();
 
-    // 5. Evaluate error budget.
+    // 4. Evaluate error budget.
     const errorBudget = this.evaluateErrorBudget(nowMs);
 
-    // 6. Determine the most restrictive mode required.
+    // 5. Determine the most restrictive mode required.
     let requiredMode: SystemMode = inputMode;
     let reason: string | undefined;
 
-    // All components healthy → no downgrade.
     if (unhealthyComponents.length > 0) {
-      // Any unhealthy component → at least OBSERVE_ONLY.
       requiredMode = clampDown(requiredMode, "OBSERVE_ONLY");
       reason = `unhealthy components: ${unhealthyComponents.join(", ")}`;
     }
 
-    // Open circuit breakers → at least PAPER_ONLY.
     if (openBreakers.length > 0) {
       requiredMode = clampDown(requiredMode, "PAPER_ONLY");
       reason = `open circuit breakers: ${openBreakers.join(", ")}`;
     }
 
-    // Secrets need rotation or are expired → at least REDUCE_ONLY.
     if (!secrets.ok) {
       requiredMode = clampDown(requiredMode, "REDUCE_ONLY");
       reason = `secrets need rotation: ${secrets.needingRotation}`;
     }
 
-    // No verified backups → at least CANCEL_ONLY.
     if (!backups.ok) {
       requiredMode = clampDown(requiredMode, "CANCEL_ONLY");
       reason = `insufficient verified backups: ${backups.count}/${this.config.minBackupRetention}`;
     }
 
-    // Error budget exhausted → HALT.
     if (errorBudget.budgetExhausted) {
       requiredMode = clampDown(requiredMode, "HALT");
       reason = `error budget exhausted: ${(errorBudget.actualFailureRate * 100).toFixed(1)}% failure rate`;
     }
 
-    // 7. Ensure mode never goes UP (AC4 safety invariant).
+    // 6. Ensure mode never goes UP (AC4 safety invariant).
     const resultingMode = clampDown(requiredMode, inputMode);
 
     return {
@@ -451,13 +464,17 @@ export class InfrastructureEngine {
     this.evaluateHealth(nowMs);
     this.evaluateBreakers(nowMs);
 
+    // Evaluate secrets and backups once, reuse for status and degradation.
+    const secrets = this.evaluateSecrets(nowMs);
+    const backups = this.evaluateBackups();
+
     return {
       components: [...this.components.values()],
       breakers: [...this.breakers.values()],
-      secretsOk: this.evaluateSecrets(nowMs).ok,
-      secretsNeedingRotation: this.evaluateSecrets(nowMs).needingRotation,
-      backupsOk: this.evaluateBackups().ok,
-      backupCount: this.evaluateBackups().count,
+      secretsOk: secrets.ok,
+      secretsNeedingRotation: secrets.needingRotation,
+      backupsOk: backups.ok,
+      backupCount: backups.count,
       errorBudget: this.evaluateErrorBudget(nowMs),
       degradation: this.evaluateDegradation("NORMAL", nowMs),
     };

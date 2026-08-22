@@ -7,9 +7,8 @@ import {
   type ComponentHealth,
   type InfrastructureConfig,
   type SecretRecord,
-  type SystemMode,
 } from "@agenttrading/contracts";
-import { InfrastructureEngine } from "../src/gamma/infrastructure-engine.ts";
+import { InfrastructureEngine, modeIndex } from "../src/infrastructure-engine.ts";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -687,9 +686,4 @@ describe("Engine defaults", () => {
   });
 });
 
-// ── Mode Safety Ladder Helpers ──────────────────────────────────────
 
-function modeIndex(mode: SystemMode): number {
-  const ladder = ["NORMAL", "OBSERVE_ONLY", "SIGNAL_ONLY", "PAPER_ONLY", "REDUCE_ONLY", "CANCEL_ONLY", "CASH_ONLY", "HALT"];
-  return ladder.indexOf(mode);
-}

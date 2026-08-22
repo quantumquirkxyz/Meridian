@@ -269,8 +269,6 @@ export interface InfrastructureConfig {
   healthDefaults: {
     /** Default heartbeat timeout (ms) for components without explicit config. */
     heartbeatTimeoutMs: number;
-    /** How often health is evaluated (ms). */
-    evaluationIntervalMs: number;
   };
   /** Circuit breaker defaults. */
   circuitBreakerDefaults: {
@@ -293,7 +291,6 @@ export const isInfrastructureConfig: Validator<InfrastructureConfig> = isObjectO
   configId: isString,
   healthDefaults: isObjectOf({
     heartbeatTimeoutMs: isNumber,
-    evaluationIntervalMs: isNumber,
   }),
   circuitBreakerDefaults: isObjectOf({
     failureThreshold: isNumber,
@@ -386,7 +383,6 @@ export const DEFAULT_INFRASTRUCTURE_CONFIG: InfrastructureConfig = {
   configId: "infra-default-1",
   healthDefaults: {
     heartbeatTimeoutMs: 30_000,
-    evaluationIntervalMs: 10_000,
   },
   circuitBreakerDefaults: {
     failureThreshold: 5,

@@ -32,4 +32,4 @@ export * from "./gamma/promotion-pipeline.ts";
 export * from "./gamma/learning-engine.ts";
 export * from "./gamma/route-engine.ts";
 export * from "./gamma/systemic-risk-overlay.ts";
-export * from "./gamma/infrastructure-engine.ts";
+
