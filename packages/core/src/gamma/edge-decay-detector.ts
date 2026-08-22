@@ -17,15 +17,13 @@
 import type {
   EdgeDecaySignal,
   LearningLoopConfig,
-  StrategyPerformance,
 } from "@agenttrading/contracts";
 import { DEFAULT_LEARNING_LOOP_CONFIG } from "@agenttrading/contracts";
 import { type TradeJournal } from "./trade-journal.ts";
 import {
-  mean,
-  computeSharpe,
-  computeProfitFactor,
-  computeMaxDrawdown,
+  classifySeverity,
+  worstSeverity,
+  type SeverityThresholds,
 } from "./stats.ts";
 
 // ── Detector ─────────────────────────────────────────────────────────
@@ -95,45 +93,22 @@ export class EdgeDecayDetector {
     const profitFactorDelta = currentPerf.profitFactor - prev.profitFactor;
 
     const reasons: string[] = [];
-    let worstSeverity: "low" | "medium" | "high" | "critical" | null = null;
+    let overallSeverity: "low" | "medium" | "high" | "critical" | null = null;
 
     // Check Sharpe degradation.
     if (sharpeDelta < 0) {
-      if (
-        currentPerf.sharpeRatio <=
-        this.config.decaySharpeCriticalThreshold
-      ) {
+      const sharpeThresholds: SeverityThresholds = {
+        low: this.config.decaySharpeLowThreshold,
+        medium: this.config.decaySharpeMediumThreshold,
+        high: this.config.decaySharpeHighThreshold,
+        critical: this.config.decaySharpeCriticalThreshold,
+      };
+      const sev = classifySeverity(currentPerf.sharpeRatio, sharpeThresholds);
+      if (sev !== null) {
         reasons.push(
-          `Sharpe ${currentPerf.sharpeRatio.toFixed(3)} <= critical threshold ${this.config.decaySharpeCriticalThreshold}`,
+          `Sharpe ${currentPerf.sharpeRatio.toFixed(3)} <= ${sev} threshold ${sharpeThresholds[sev]}`,
         );
-        worstSeverity = "critical";
-      } else if (
-        currentPerf.sharpeRatio <= this.config.decaySharpeHighThreshold
-      ) {
-        reasons.push(
-          `Sharpe ${currentPerf.sharpeRatio.toFixed(3)} <= high threshold ${this.config.decaySharpeHighThreshold}`,
-        );
-        if (worstSeverity === null || worstSeverity === "low" || worstSeverity === "medium") {
-          worstSeverity = "high";
-        }
-      } else if (
-        currentPerf.sharpeRatio <= this.config.decaySharpeMediumThreshold
-      ) {
-        reasons.push(
-          `Sharpe ${currentPerf.sharpeRatio.toFixed(3)} <= medium threshold ${this.config.decaySharpeMediumThreshold}`,
-        );
-        if (worstSeverity === null || worstSeverity === "low") {
-          worstSeverity = "medium";
-        }
-      } else if (
-        currentPerf.sharpeRatio <= this.config.decaySharpeLowThreshold
-      ) {
-        reasons.push(
-          `Sharpe ${currentPerf.sharpeRatio.toFixed(3)} <= low threshold ${this.config.decaySharpeLowThreshold}`,
-        );
-        if (worstSeverity === null) {
-          worstSeverity = "low";
-        }
+        overallSeverity = worstSeverity(overallSeverity, sev);
       }
     }
 
@@ -145,12 +120,7 @@ export class EdgeDecayDetector {
       reasons.push(
         `Win rate ${(currentPerf.winRate * 100).toFixed(1)}% < threshold ${(this.config.decayWinRateThreshold * 100).toFixed(1)}%`,
       );
-      if (
-        worstSeverity === null ||
-        (worstSeverity !== "high" && worstSeverity !== "critical")
-      ) {
-        worstSeverity = "medium";
-      }
+      overallSeverity = worstSeverity(overallSeverity, "medium");
     }
 
     // Check profit factor degradation.
@@ -161,22 +131,17 @@ export class EdgeDecayDetector {
       reasons.push(
         `Profit factor ${currentPerf.profitFactor.toFixed(2)} < threshold ${this.config.decayProfitFactorThreshold}`,
       );
-      if (
-        worstSeverity === null ||
-        (worstSeverity !== "high" && worstSeverity !== "critical")
-      ) {
-        worstSeverity = "medium";
-      }
+      overallSeverity = worstSeverity(overallSeverity, "medium");
     }
 
     // No decay detected.
-    if (reasons.length === 0 || worstSeverity === null) {
+    if (reasons.length === 0 || overallSeverity === null) {
       return null;
     }
 
     // Determine recommendation based on severity.
     let recommendation: EdgeDecaySignal["recommendation"];
-    switch (worstSeverity) {
+    switch (overallSeverity) {
       case "critical":
         recommendation = "demote";
         break;
@@ -194,7 +159,7 @@ export class EdgeDecayDetector {
     return {
       signalId: `decay-${strategyId}-${this.now()}`,
       strategyId,
-      severity: worstSeverity,
+      severity: overallSeverity,
       reason: reasons.join("; "),
       currentSharpe: currentPerf.sharpeRatio,
       previousSharpe: prev.sharpeRatio,
@@ -223,14 +188,14 @@ export class EdgeDecayDetector {
 
   /**
    * Get the previous window performance for a strategy.
-   * This computes the performance over the window of trades immediately
-   * before the current window.
+   * Delegates to TradeJournal.computePerformanceFromEntries to avoid
+   * duplicating metric computation logic (fixes S1).
    */
   private getPreviousWindowPerformance(
     strategyId: string,
     currentWindowSize: number,
     prevWindowSize: number,
-  ): StrategyPerformance | null {
+  ): ReturnType<TradeJournal["computePerformanceFromEntries"]> {
     const allEntries = this.journal.getEntries({ strategyId });
     const filledEntries = allEntries.filter(
       (e) =>
@@ -248,29 +213,11 @@ export class EdgeDecayDetector {
 
     if (prevEntries.length < 2) return null;
 
-    const winCount = prevEntries.filter((e) => e.outcome === "WIN").length;
-    const lossCount = prevEntries.filter((e) => e.outcome === "LOSS").length;
-    const totalPnl = prevEntries.reduce((a, e) => a + e.netPnlUsd, 0);
-    const pnlValues = prevEntries.map((e) => e.netPnlUsd);
-    const durations = prevEntries
-      .filter((e) => e.durationMs !== null)
-      .map((e) => e.durationMs!);
-
-    return {
+    return this.journal.computePerformanceFromEntries(
+      prevEntries,
       strategyId,
-      tradeCount: prevEntries.length,
-      winCount,
-      lossCount,
-      winRate: prevEntries.length > 0 ? winCount / prevEntries.length : 0,
-      totalPnlUsd: totalPnl,
-      avgPnlUsd: totalPnl / prevEntries.length,
-      sharpeRatio: computeSharpe(pnlValues),
-      maxDrawdownUsd: computeMaxDrawdown(pnlValues),
-      profitFactor: computeProfitFactor(pnlValues),
-      avgDurationMs:
-        durations.length > 0 ? mean(durations) : 0,
-      windowStartMs: prevEntries[0].enteredAtMs,
-      windowEndMs: prevEntries[prevEntries.length - 1].enteredAtMs,
-    };
+      prevEntries[0].enteredAtMs,
+      prevEntries[prevEntries.length - 1].enteredAtMs,
+    );
   }
 }

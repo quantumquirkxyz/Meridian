@@ -17,6 +17,7 @@
 
 import type {
   EdgeDecaySignal,
+  FillParams,
   LearningLoopConfig,
   LearningRecommendation,
   PromotionRecord,
@@ -78,21 +79,7 @@ export class LearningEngine {
   /**
    * Convenience: record a filled trade.
    */
-  recordFill(params: {
-    tradeId: string;
-    strategyId: string;
-    regime: string;
-    venue: string;
-    symbol: string;
-    side: "BUY" | "SELL";
-    entryPrice: number;
-    exitPrice: number;
-    filledQuantity: number;
-    feesUsd?: number;
-    enteredAtMs: number;
-    exitedAtMs: number;
-    metadata?: Record<string, unknown>;
-  }): TradeJournalEntry {
+  recordFill(params: FillParams): TradeJournalEntry {
     return this.journal.recordFill(params);
   }
 

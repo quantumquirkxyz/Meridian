@@ -72,7 +72,7 @@ export class PromotionPipeline {
       paper: "pending",
       review: "pending",
       canary: "pending",
-      live: "pending",
+      scale: "pending",
     };
     const stageNotes: Record<PromotionStage, string> = {
       hypothesis: "Created",
@@ -80,7 +80,7 @@ export class PromotionPipeline {
       paper: "",
       review: "",
       canary: "",
-      live: "",
+      scale: "",
     };
 
     const record: PromotionRecord = {
@@ -161,9 +161,9 @@ export class PromotionPipeline {
 
     const next = nextStage(record.currentStage);
     if (next === null) {
-      // Reached live — complete the promotion.
-      record.currentStage = "live";
-      record.stageOutcomes.live = "pass";
+      // Reached scale — complete the promotion.
+      record.currentStage = "scale";
+      record.stageOutcomes.scale = "pass";
       record.active = false;
       record.completedAtMs = this.now();
       record.lastTransitionAtMs = this.now();
@@ -173,8 +173,8 @@ export class PromotionPipeline {
     record.currentStage = next;
     record.lastTransitionAtMs = this.now();
 
-    // If advancing to live, mark as completed.
-    if (next === "live") {
+    // If advancing to scale, mark as completed.
+    if (next === "scale") {
       record.active = false;
       record.completedAtMs = this.now();
     }
@@ -256,9 +256,9 @@ export class PromotionPipeline {
       case "canary":
         return this.evaluateCanaryGate(strategyId, gateData?.performance);
 
-      case "live":
-        // Reaching live is the final stage — always passes.
-        return { passed: true, reason: "promoted to live" };
+      case "scale":
+        // Reaching scale is the final stage — always passes.
+        return { passed: true, reason: "promoted to scale" };
     }
   }
 

@@ -71,7 +71,7 @@ describe("Learning loop contracts", () => {
       "paper",
       "review",
       "canary",
-      "live",
+      "scale",
     ]);
   });
 
@@ -81,7 +81,7 @@ describe("Learning loop contracts", () => {
     expect(stageIndex("paper")).toBe(2);
     expect(stageIndex("review")).toBe(3);
     expect(stageIndex("canary")).toBe(4);
-    expect(stageIndex("live")).toBe(5);
+    expect(stageIndex("scale")).toBe(5);
   });
 
   test("nextStage returns the next stage or null", () => {
@@ -89,8 +89,8 @@ describe("Learning loop contracts", () => {
     expect(nextStage("backtest")).toBe("paper");
     expect(nextStage("paper")).toBe("review");
     expect(nextStage("review")).toBe("canary");
-    expect(nextStage("canary")).toBe("live");
-    expect(nextStage("live")).toBeNull();
+    expect(nextStage("canary")).toBe("scale");
+    expect(nextStage("scale")).toBeNull();
   });
 
 
@@ -682,9 +682,9 @@ describe("PromotionPipeline", () => {
     pipeline.advanceStage(record.promotionId, { humanApproved: true });
     expect(record.currentStage).toBe("canary");
 
-    // canary → live
+    // canary → scale
     pipeline.advanceStage(record.promotionId, { performance: passingPerf });
-    expect(record.currentStage).toBe("live");
+    expect(record.currentStage).toBe("scale");
     expect(record.active).toBe(false);
     expect(record.completedAtMs).not.toBeNull();
   });

@@ -13,6 +13,7 @@
  */
 
 import type {
+  FillParams,
   LearningLoopConfig,
   StrategyPerformance,
   TradeJournalEntry,
@@ -74,21 +75,7 @@ export class TradeJournal {
   /**
    * Convenience: record a filled trade from its components.
    */
-  recordFill(params: {
-    tradeId: string;
-    strategyId: string;
-    regime: string;
-    venue: string;
-    symbol: string;
-    side: "BUY" | "SELL";
-    entryPrice: number;
-    exitPrice: number;
-    filledQuantity: number;
-    feesUsd?: number;
-    enteredAtMs: number;
-    exitedAtMs: number;
-    metadata?: Record<string, unknown>;
-  }): TradeJournalEntry {
+  recordFill(params: FillParams): TradeJournalEntry {
     const notionalUsd = params.filledQuantity * params.entryPrice;
     const pnlUsd =
       params.side === "BUY"
@@ -171,7 +158,7 @@ export class TradeJournal {
         (e.outcome === "WIN" || e.outcome === "LOSS" || e.outcome === "BREAKEVEN"),
     );
 
-    return this.computeMetricsFromEntries(entries, strategyId, windowStart, now);
+    return this.computePerformanceFromEntries(entries, strategyId, windowStart, now);
   }
 
   /**
@@ -190,7 +177,7 @@ export class TradeJournal {
       .slice(-tradeCount);
 
     if (entries.length < 2) return null;
-    return this.computeMetricsFromEntries(
+    return this.computePerformanceFromEntries(
       entries,
       strategyId,
       entries[0].enteredAtMs,
@@ -217,7 +204,7 @@ export class TradeJournal {
         (e.outcome === "WIN" || e.outcome === "LOSS" || e.outcome === "BREAKEVEN"),
     );
 
-    return this.computeMetricsFromEntries(
+    return this.computePerformanceFromEntries(
       entries,
       `regime:${regime}`,
       windowStart,
@@ -226,9 +213,38 @@ export class TradeJournal {
   }
 
   /**
-   * Shared metric computation from pre-filtered entries.
+   * Compute performance for a specific venue.
    */
-  private computeMetricsFromEntries(
+  computeVenuePerformance(
+    venue: string,
+    windowMs: number,
+    nowMs?: number,
+  ): StrategyPerformance | null {
+    const now = nowMs ?? this.now();
+    const windowStart = now - windowMs;
+
+    const entries = this.entries.filter(
+      (e) =>
+        e.venue === venue &&
+        e.enteredAtMs >= windowStart &&
+        e.enteredAtMs <= now &&
+        (e.outcome === "WIN" || e.outcome === "LOSS" || e.outcome === "BREAKEVEN"),
+    );
+
+    return this.computePerformanceFromEntries(
+      entries,
+      `venue:${venue}`,
+      windowStart,
+      now,
+    );
+  }
+
+  /**
+   * Compute performance metrics from pre-filtered entries.
+   * Public so callers (e.g. EdgeDecayDetector) can compute metrics
+   * from a sliced subset without reimplementing the logic.
+   */
+  computePerformanceFromEntries(
     entries: readonly TradeJournalEntry[],
     strategyId: string,
     windowStartMs: number,

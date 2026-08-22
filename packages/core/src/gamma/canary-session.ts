@@ -36,6 +36,7 @@ import {
   type OrderIntent,
   type RiskDecision,
 } from "@agenttrading/contracts";
+import { type FillParams } from "@agenttrading/contracts";
 import { type AuditLog } from "../stategraph/audit-log.ts";
 import {
   KillSwitch,
@@ -409,7 +410,7 @@ export class CanarySession {
       if (this.journal !== undefined) {
         const intent = record.intent;
         const exitPrice = intent.price; // Approximate; real exit price from fill data.
-        this.journal.recordFill({
+        const fillParams: FillParams = {
           tradeId: orderId,
           strategyId: "canary",
           regime: this.currentMode,
@@ -422,7 +423,8 @@ export class CanarySession {
           feesUsd: 0,
           enteredAtMs: record.submittedAtMs,
           exitedAtMs: this.now(),
-        });
+        };
+        this.journal.recordFill(fillParams);
       }
     }
 

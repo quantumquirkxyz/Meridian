@@ -37,7 +37,7 @@ export const PROMOTION_STAGES = [
   "paper",
   "review",
   "canary",
-  "live",
+  "scale",
 ] as const;
 
 export type PromotionStage = (typeof PROMOTION_STAGES)[number];
@@ -70,7 +70,7 @@ export const PROMOTION_OUTCOMES = [
   "pass",
   "fail",
   "pending",
-  "skipped",
+  "skipped", // Used for validation testing only; no pipeline code path produces this.
 ] as const;
 
 export type PromotionOutcome = (typeof PROMOTION_OUTCOMES)[number];
@@ -154,6 +154,29 @@ export function parseTradeJournalEntry(
   value: unknown,
 ): TradeJournalEntry {
   return parse(isTradeJournalEntry, value, "TradeJournalEntry");
+}
+
+// ── Fill Params ──────────────────────────────────────────────────────
+
+/**
+ * FillParams: the subset of fields needed to record a filled trade.
+ * Shared type used by TradeJournal.recordFill, LearningEngine.recordFill,
+ * and CanarySession journal integration (fixes S2: data clump).
+ */
+export interface FillParams {
+  tradeId: string;
+  strategyId: string;
+  regime: string;
+  venue: string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  entryPrice: number;
+  exitPrice: number;
+  filledQuantity: number;
+  feesUsd?: number;
+  enteredAtMs: number;
+  exitedAtMs: number;
+  metadata?: Record<string, unknown>;
 }
 
 // ── Strategy Performance Snapshot ─────────────────────────────────────
@@ -315,7 +338,7 @@ export const isPromotionRecord: Validator<PromotionRecord> = isObjectOf({
     paper: isPromotionOutcome,
     review: isPromotionOutcome,
     canary: isPromotionOutcome,
-    live: isPromotionOutcome,
+    scale: isPromotionOutcome,
   }),
   stageNotes: isObjectOf({
     hypothesis: isString,
@@ -323,7 +346,7 @@ export const isPromotionRecord: Validator<PromotionRecord> = isObjectOf({
     paper: isString,
     review: isString,
     canary: isString,
-    live: isString,
+    scale: isString,
   }),
   createdAtMs: isNumber,
   lastTransitionAtMs: isNumber,
