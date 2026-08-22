@@ -125,7 +125,7 @@ export class PromotionPipeline {
 
     const currentIdx = PROMOTION_STAGES.indexOf(record.currentStage);
     if (currentIdx >= PROMOTION_STAGES.length - 1) {
-      // Already at live — cannot advance further.
+      // Already at scale — cannot advance further.
       return record;
     }
 

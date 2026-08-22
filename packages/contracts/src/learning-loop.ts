@@ -1,11 +1,9 @@
 import {
-  isArrayOf,
   isBoolean,
   isEnumOf,
   isNullable,
   isNumber,
   isObjectOf,
-  isOptional,
   isString,
   parse,
   type Validator,
@@ -16,7 +14,7 @@ import {
  *
  * The learning loop records every trade outcome (journal), detects when
  * a strategy's edge is decaying, and manages a promotion pipeline that
- * prevents any strategy change from reaching live without passing through
+ * prevents any strategy change from reaching scale without passing through
  * backtest → paper → review → canary → scale.
  *
  * Core invariant: learning never mutates production directly. It only
@@ -27,7 +25,7 @@ import {
 
 /**
  * PromotionStage: the ordered stages a strategy or parameter change must
- * pass through before reaching live trading.
+ * pass through before reaching scale.
  *
  * The pipeline is strict: no stage may be skipped.
  */
@@ -54,7 +52,7 @@ export function stageIndex(stage: PromotionStage): number {
 }
 
 /**
- * Return the next stage in the pipeline, or null if already at live.
+ * Return the next stage in the pipeline, or null if already at scale.
  */
 export function nextStage(
   current: PromotionStage,
@@ -161,7 +159,7 @@ export function parseTradeJournalEntry(
 /**
  * FillParams: the subset of fields needed to record a filled trade.
  * Shared type used by TradeJournal.recordFill, LearningEngine.recordFill,
- * and CanarySession journal integration (fixes S2: data clump).
+ * and CanarySession journal integration.
  */
 export interface FillParams {
   tradeId: string;
