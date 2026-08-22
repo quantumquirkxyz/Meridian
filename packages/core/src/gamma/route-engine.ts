@@ -25,7 +25,6 @@ import type {
   MarketEdge,
   MarketGraphSnapshot,
   MarketNode,
-  OpportunityCandidate,
   OverlayEvaluation,
   Route,
   RouteDiscoveryResult,
@@ -221,90 +220,11 @@ export class RouteEngine {
         if (foundPaths.has(key)) continue;
         foundPaths.add(key);
 
-        // Resolve the edges for this path.
-        const pathEdges = resolveEdges(path.edges, snapshot);
-        if (pathEdges.length === 0) continue;
+        const result = this.processPath(path, snapshot, now);
+        if (result === null) continue;
 
-        // Skip trivial single-edge paths (those are raw swaps, not routes).
-        if (pathEdges.length < 1) continue;
-
-        // Classify the route type.
-        const pathNodes = resolveNodes(path.nodes, snapshot);
-        const routeType = classifyRouteType(pathNodes, pathEdges);
-
-        // Compute route metrics from edge weights.
-        const { expectedNetProfitUsd, confidence, maxCapitalUsd, riskConcentration } =
-          aggregateEdgeWeights(pathEdges);
-
-        // Enrich riskConcentration with dimension-prefixed keys from node metadata.
-        // This enables systemic risk overlays to evaluate concentration per
-        // venue, chain, pool, etc.
-        enrichConcentrationFromNodes(pathNodes, riskConcentration);
-
-        // Score the route.
-        const score = computeScore(
-          expectedNetProfitUsd,
-          confidence,
-          maxCapitalUsd,
-          avgConcentration(riskConcentration),
-          pathEdges.length,
-          this.config.maxRouteLength,
-          this.config.scoring,
-        );
-
-        // Determine initial status.
-        // Staleness is measured from the snapshot's creation time.
-        const snapshotAge = now - snapshot.createdAtMs;
-        const isStale = snapshotAge > this.config.stalenessThresholdMs;
-        const allTradable = pathEdges.every((e) => e.tradable);
-
-        let status: RouteStatus;
-        if (!allTradable) {
-          status = "EXPIRED";
-        } else if (isStale) {
-          status = "STALE";
-        } else {
-          status = "LIVE";
-        }
-
-        // Build the route.
-        const id = routeId(path.nodes);
-        const route: Route = {
-          routeId: id,
-          snapshotId: snapshot.snapshotId,
-          routeType,
-          nodes: [...path.nodes],
-          edges: [...path.edges],
-          score,
-          expectedNetProfitUsd,
-          maxCapitalUsd,
-          confidence,
-          status,
-          riskConcentration,
-          createdAtMs: now,
-          expiresAtMs: status === "LIVE" ? now + this.config.routeTtlMs : null,
-          lastUpdatedAtMs: now,
-          invalidationReasons: [],
-        };
-
-        // Apply systemic risk overlays (AC2).
-        const evaluations = this.overlayEngine.evaluateRoute(route);
+        const { route, evaluations } = result;
         overlayEvaluations.push(...evaluations);
-
-        if (evaluations.some((e) => e.blocked)) {
-          route.status = "BLOCKED";
-          route.invalidationReasons = [
-            ...evaluations
-              .filter((e) => e.blocked)
-              .map((e) => `ROUTE_BLOCKED:${e.dimension}`),
-          ];
-        }
-
-        // Apply score threshold.
-        if (route.status === "LIVE" && route.score < 0.1) {
-          route.status = "EXPIRED";
-          route.invalidationReasons.push("ROUTE_SCORE_LOW");
-        }
 
         // Categorize the route.
         switch (route.status) {
@@ -341,6 +261,109 @@ export class RouteEngine {
     };
   }
 
+  // ── Per-path processing (extracted from discover) ─────────────
+
+  /**
+   * Process a single discovered path into a Route with overlays applied.
+   * Returns null when the path should be skipped (empty edges, etc.).
+   */
+  private processPath(
+    path: { nodes: string[]; edges: string[] },
+    snapshot: MarketGraphSnapshot,
+    nowMs: number,
+  ): { route: Route; evaluations: OverlayEvaluation[] } | null {
+    // Resolve the edges for this path.
+    const pathEdges = resolveEdges(path.edges, snapshot);
+    if (pathEdges.length === 0) return null;
+
+    // Classify the route type.
+    const pathNodes = resolveNodes(path.nodes, snapshot);
+    const routeType = classifyRouteType(pathNodes, pathEdges);
+
+    // Compute route metrics from edge weights.
+    const { expectedNetProfitUsd, confidence, maxCapitalUsd, riskConcentration } =
+      aggregateEdgeWeights(pathEdges);
+
+    // Enrich riskConcentration with dimension-prefixed keys from node metadata.
+    enrichConcentrationFromNodes(pathNodes, riskConcentration);
+
+    // Score the route.
+    const score = computeScore(
+      expectedNetProfitUsd,
+      confidence,
+      maxCapitalUsd,
+      avgConcentration(riskConcentration),
+      pathEdges.length,
+      this.config.maxRouteLength,
+      this.config.scoring,
+    );
+
+    // Determine initial status from snapshot age and edge tradability.
+    const snapshotAge = nowMs - snapshot.createdAtMs;
+    const isStale = snapshotAge > this.config.stalenessThresholdMs;
+    const allTradable = pathEdges.every((e) => e.tradable);
+
+    let status: RouteStatus;
+    if (!allTradable) {
+      status = "EXPIRED";
+    } else if (isStale) {
+      status = "STALE";
+    } else {
+      status = "LIVE";
+    }
+
+    // Build the route.
+    const id = routeId(path.nodes);
+    const route: Route = {
+      routeId: id,
+      snapshotId: snapshot.snapshotId,
+      routeType,
+      nodes: [...path.nodes],
+      edges: [...path.edges],
+      score,
+      expectedNetProfitUsd,
+      maxCapitalUsd,
+      confidence,
+      status,
+      riskConcentration,
+      createdAtMs: nowMs,
+      expiresAtMs: status === "LIVE" ? nowMs + this.config.routeTtlMs : null,
+      lastUpdatedAtMs: nowMs,
+      invalidationReasons: [],
+    };
+
+    // Apply systemic risk overlays (AC2).
+    const evaluations = this.overlayEngine.evaluateRoute(route);
+
+    if (evaluations.some((e) => e.blocked)) {
+      route.status = "BLOCKED";
+      route.invalidationReasons = [
+        ...evaluations
+          .filter((e) => e.blocked)
+          .map((e) => `ROUTE_BLOCKED:${e.dimension}`),
+      ];
+    }
+
+    // Apply score threshold.
+    if (route.status === "LIVE" && route.score < 0.1) {
+      route.status = "EXPIRED";
+      route.invalidationReasons.push("ROUTE_SCORE_LOW");
+    }
+
+    return { route, evaluations };
+  }
+
+  // ── Staleness helper ──────────────────────────────────────────
+
+  /**
+   * Check whether a route is stale based on its last update time.
+   * Centralises the staleness policy so it is enforced consistently
+   * across discover(), isRouteValidForInventory(), and sweepInvalidate().
+   */
+  private isRouteStale(route: Route, nowMs: number): boolean {
+    return nowMs - route.lastUpdatedAtMs > this.config.stalenessThresholdMs;
+  }
+
   // ── AC3: Inventory-aware routing ───────────────────────────────
 
   /**
@@ -375,7 +398,7 @@ export class RouteEngine {
     }
 
     // Check staleness.
-    if (now - route.lastUpdatedAtMs > this.config.stalenessThresholdMs) {
+    if (this.isRouteStale(route, now)) {
       route.status = "STALE";
       route.invalidationReasons.push("ROUTE_STALE");
       return { valid: false, reason: "route stale" };
@@ -459,7 +482,7 @@ export class RouteEngine {
       }
 
       // Check staleness.
-      if (now - route.lastUpdatedAtMs > this.config.stalenessThresholdMs) {
+      if (this.isRouteStale(route, now)) {
         this.invalidate(routeId, "ROUTE_STALE", now);
         invalidated.push(route);
         continue;
@@ -745,6 +768,21 @@ function enrichConcentrationFromNodes(
         break;
       default:
         break;
+    }
+
+    // Check for RPC provider in node metadata (any node type).
+    // This enables the RPC concentration overlay to evaluate routes
+    // that depend on the same RPC endpoint.
+    if (node.meta?.["rpcProvider"] !== undefined) {
+      const rpcProvider = String(node.meta["rpcProvider"]);
+      const rpcKey = `RPC:${rpcProvider}`;
+      const rpcConcentration = typeof node.meta["rpcConcentration"] === "number"
+        ? node.meta["rpcConcentration"]
+        : 1 / nodes.length;
+      riskConcentration[rpcKey] = Math.max(
+        riskConcentration[rpcKey] ?? 0,
+        rpcConcentration,
+      );
     }
 
     if (dimension === null) continue;

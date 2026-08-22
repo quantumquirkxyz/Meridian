@@ -1,5 +1,6 @@
 import {
   isArrayOf,
+  isBoolean,
   isEnumOf,
   isInRange,
   isNumber,
@@ -339,6 +340,4 @@ export interface RouteDiscoveryResult {
   snapshotVersion: number;
 }
 
-// ── Boolean import fix ──────────────────────────────────────────────
-// isBoolean is imported from schema but needs to be available for overlay validation
-import { isBoolean } from "./schema.ts";
+
