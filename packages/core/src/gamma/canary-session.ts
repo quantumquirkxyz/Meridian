@@ -36,7 +36,8 @@ import {
   type OrderIntent,
   type RiskDecision,
 } from "@agenttrading/contracts";
-import { type FillParams } from "@agenttrading/contracts";
+import { type FillParams, type AuditAvailability, DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
+import { evaluateAuditStaleness } from "./audit-availability.ts";
 import { type AuditLog } from "../stategraph/audit-log.ts";
 import {
   KillSwitch,
@@ -94,6 +95,8 @@ export interface CanarySessionOptions {
   config?: CanaryConfig;
   /** Trade journal for automatic outcome recording. */
   journal?: TradeJournal;
+  /** Audit availability checker. When provided, audit unavailability blocks trading (AC4). */
+  auditAvailability?: AuditAvailability;
 }
 
 // ── Session ──────────────────────────────────────────────────────────
@@ -114,6 +117,7 @@ export class CanarySession {
   private readonly now: () => number;
   private readonly audit?: AuditLog;
   private readonly journal?: TradeJournal;
+  private readonly auditAvailability: AuditAvailability;
   private readonly killSwitch: KillSwitch;
   private readonly execution: LiveExecutionEngine;
 
@@ -146,6 +150,7 @@ export class CanarySession {
     this.now = options.now ?? (() => Date.now());
     this.audit = options.audit;
     this.journal = options.journal;
+    this.auditAvailability = { ...(options.auditAvailability ?? DEFAULT_AUDIT_AVAILABILITY) };
     this.killSwitch = new KillSwitch(this.config.killSwitch);
     this.execution = new LiveExecutionEngine(this.config);
   }
@@ -233,6 +238,14 @@ export class CanarySession {
         reason: "canary is paused; no orders allowed",
       };
     }
+    // AC4: Audit unavailability blocks trading.
+    const auditBlockingReason = this.getAuditBlockingReason();
+    if (auditBlockingReason !== null) {
+      return {
+        allowed: false,
+        reason: auditBlockingReason,
+      };
+    }
     return this.execution.preCheck(intent, this.buildExecutionState());
   }
 
@@ -265,6 +278,16 @@ export class CanarySession {
         preCheck: {
           allowed: false,
           reason: "canary is paused; no orders allowed",
+        },
+      };
+    }
+    // AC4: Audit unavailability blocks trading.
+    const auditBlockingReason = this.getAuditBlockingReason();
+    if (auditBlockingReason !== null) {
+      return {
+        preCheck: {
+          allowed: false,
+          reason: auditBlockingReason,
         },
       };
     }
@@ -639,6 +662,33 @@ export class CanarySession {
         (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
     }
     this.openOrders = [];
+  }
+
+  // ── AC4: Audit Availability ──────────────────────────────────────
+
+  /**
+   * Check if audit unavailability should block trading.
+   * Returns the blocking reason if audit is unavailable, or null if trading
+   * is allowed.
+   *
+   * AC4: Audit unavailability blocks trading (invariant).
+   * Uses the shared staleness evaluation (S2 fix).
+   */
+  private getAuditBlockingReason(): string | null {
+    const result = evaluateAuditStaleness(this.auditAvailability, this.now());
+    if (result.available) return null;
+    return result.error ?? "audit unavailable";
+  }
+
+  /**
+   * Update the audit availability status. Called by the infra layer
+   * when the audit subsystem state changes.
+   */
+  updateAuditAvailability(availability: AuditAvailability): void {
+    this.auditAvailability.available = availability.available;
+    this.auditAvailability.lastWriteAtMs = availability.lastWriteAtMs;
+    this.auditAvailability.maxStaleMs = availability.maxStaleMs;
+    this.auditAvailability.error = availability.error;
   }
 
   private recordAudit(
