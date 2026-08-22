@@ -25,3 +25,7 @@ export * from "./gamma/live-execution-engine.ts";
 export * from "./gamma/canary-session.ts";
 export * from "./gamma/regime-classifier.ts";
 export * from "./gamma/regime-policy-engine.ts";
+export * from "./gamma/trade-journal.ts";
+export * from "./gamma/edge-decay-detector.ts";
+export * from "./gamma/promotion-pipeline.ts";
+export * from "./gamma/learning-engine.ts";
