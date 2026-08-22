@@ -376,6 +376,111 @@ describe("AuditReconstructor", () => {
       expect(Array.isArray(event.reasonCodes)).toBe(true);
     }
   });
+
+  test("resolveTransitionPhase maps risk-analyst actor to risk_analyst_consulted", () => {
+    const reconstructor = new AuditReconstructor(
+      DEFAULT_AUDIT_AVAILABILITY,
+      () => FIXED_TS,
+    );
+
+    reconstructor.addAuditEvents([
+      makeAuditEvent({
+        eventId: "evt-risk",
+        action: "STATE_TRANSITION",
+        actor: "risk-analyst",
+        data: { tradeId: "trade-1", from: "IDLE", to: "RISK_VALIDATE" },
+      }),
+    ]);
+    reconstructor.addTradeEntry(makeEntry());
+
+    const recon = reconstructor.reconstruct("trade-1");
+    expect(recon).not.toBeNull();
+    expect(recon!.timeline[0].phase).toBe("risk_analyst_consulted");
+  });
+
+  test("resolveTransitionPhase maps bull actor to bull_review", () => {
+    const reconstructor = new AuditReconstructor(
+      DEFAULT_AUDIT_AVAILABILITY,
+      () => FIXED_TS,
+    );
+
+    reconstructor.addAuditEvents([
+      makeAuditEvent({
+        eventId: "evt-bull",
+        action: "STATE_TRANSITION",
+        actor: "bull-agent",
+        data: { tradeId: "trade-1" },
+      }),
+    ]);
+    reconstructor.addTradeEntry(makeEntry());
+
+    const recon = reconstructor.reconstruct("trade-1");
+    expect(recon).not.toBeNull();
+    expect(recon!.timeline[0].phase).toBe("bull_review");
+  });
+
+  test("resolveTransitionPhase maps bear actor to bear_review", () => {
+    const reconstructor = new AuditReconstructor(
+      DEFAULT_AUDIT_AVAILABILITY,
+      () => FIXED_TS,
+    );
+
+    reconstructor.addAuditEvents([
+      makeAuditEvent({
+        eventId: "evt-bear",
+        action: "STATE_TRANSITION",
+        actor: "bear-agent",
+        data: { tradeId: "trade-1" },
+      }),
+    ]);
+    reconstructor.addTradeEntry(makeEntry());
+
+    const recon = reconstructor.reconstruct("trade-1");
+    expect(recon).not.toBeNull();
+    expect(recon!.timeline[0].phase).toBe("bear_review");
+  });
+
+  test("resolveTransitionPhase maps skeptic actor to skeptic_review", () => {
+    const reconstructor = new AuditReconstructor(
+      DEFAULT_AUDIT_AVAILABILITY,
+      () => FIXED_TS,
+    );
+
+    reconstructor.addAuditEvents([
+      makeAuditEvent({
+        eventId: "evt-skeptic",
+        action: "STATE_TRANSITION",
+        actor: "skeptic-agent",
+        data: { tradeId: "trade-1" },
+      }),
+    ]);
+    reconstructor.addTradeEntry(makeEntry());
+
+    const recon = reconstructor.reconstruct("trade-1");
+    expect(recon).not.toBeNull();
+    expect(recon!.timeline[0].phase).toBe("skeptic_review");
+  });
+
+  test("resolveTransitionPhase defaults to signal_generated for unknown actor", () => {
+    const reconstructor = new AuditReconstructor(
+      DEFAULT_AUDIT_AVAILABILITY,
+      () => FIXED_TS,
+    );
+
+    reconstructor.addAuditEvents([
+      makeAuditEvent({
+        eventId: "evt-default",
+        action: "STATE_TRANSITION",
+        actor: "state-graph",
+        data: { tradeId: "trade-1" },
+      }),
+    ]);
+    reconstructor.addTradeEntry(makeEntry());
+
+    const recon = reconstructor.reconstruct("trade-1");
+    expect(recon).not.toBeNull();
+    expect(recon!.timeline[0].phase).toBe("signal_generated");
+  });
 });
 
 // ── ReportGenerator Tests ────────────────────────────────────────────

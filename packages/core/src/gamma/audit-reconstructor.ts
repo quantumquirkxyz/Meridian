@@ -62,16 +62,18 @@ const ACTION_TO_PHASE: Record<string, TimelinePhase> = {
  * (bull/bear/skeptic) timeline phases.
  */
 function resolveTransitionPhase(event: AuditEvent): TimelinePhase {
-  const actor = (event.data?.["actor"] as string)?.toLowerCase() ?? "";
-  const action = (event.data?.["action"] as string)?.toLowerCase() ?? "";
+  // Read actor from the top-level field (AuditEvent.actor), not from data.
+  const actor = event.actor.toLowerCase();
+  // Also check data for secondary signals (e.g. action type).
+  const dataAction = (event.data?.["action"] as string)?.toLowerCase() ?? "";
 
   // SP2: Map deliberative agent debate stages.
-  if (actor.includes("bull") || action.includes("bull")) return "bull_review";
-  if (actor.includes("bear") || action.includes("bear")) return "bear_review";
-  if (actor.includes("skeptic") || action.includes("skeptic")) return "skeptic_review";
+  if (actor.includes("bull") || dataAction.includes("bull")) return "bull_review";
+  if (actor.includes("bear") || dataAction.includes("bear")) return "bear_review";
+  if (actor.includes("skeptic") || dataAction.includes("skeptic")) return "skeptic_review";
 
   // SP1: Map risk analyst consultation.
-  if (actor.includes("risk") || action.includes("risk_analyst")) return "risk_analyst_consulted";
+  if (actor.includes("risk") || dataAction.includes("risk_analyst")) return "risk_analyst_consulted";
 
   return "signal_generated";
 }
@@ -170,15 +172,16 @@ export class AuditReconstructor {
   }
 
   /**
-   * Check if the audit subsystem is available (pure read).
-   * Calls refreshAvailability internally to sync state.
+   * Check if the audit subsystem is available (pure read, no side effects).
    *
    * AC4: Audit unavailability blocks trading. When available returns
    * false, the trading system MUST NOT submit new orders.
+   *
+   * Callers should invoke refreshAvailability() before isAvailable() when
+   * they need the availability clock synced with the latest audit events.
    */
   isAvailable(nowMs?: number): AuditAvailability {
     const now = nowMs ?? this.now();
-    this.refreshAvailability(now);
     const result = evaluateAuditStaleness(this.availability, now);
     return {
       available: result.available,

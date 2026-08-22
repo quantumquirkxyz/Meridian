@@ -200,7 +200,7 @@ export interface ReportEntry {
   /** Whether any incident flags were raised. */
   hasIncidents: boolean;
   /** Reason codes for this trade. */
-  reasonCodes: string[];
+  reasonCodes: AuditReasonCode[];
 }
 
 export const isReportEntry: Validator<ReportEntry> = isObjectOf({
@@ -216,7 +216,7 @@ export const isReportEntry: Validator<ReportEntry> = isObjectOf({
   feesUsd: isNumber,
   outcome: isEnumOf(["WIN", "LOSS", "BREAKEVEN", "CANCELLED", "REJECTED"] as const),
   hasIncidents: isBoolean,
-  reasonCodes: isArrayOf(isString),
+  reasonCodes: isArrayOf(isAuditReasonCode),
 });
 
 // ── Daily/Weekly Report ──────────────────────────────────────────────

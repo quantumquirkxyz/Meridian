@@ -17,6 +17,7 @@
  */
 
 import type {
+  AuditReasonCode,
   TradeJournalEntry,
   TradeReport,
   ReportEntry,
@@ -244,9 +245,9 @@ export class ReportGenerator {
    */
   private extractReasonCodes(
     recon: TradeReconstruction | undefined,
-  ): string[] {
+  ): AuditReasonCode[] {
     if (recon === undefined) return [];
-    const codes = new Set<string>();
+    const codes = new Set<AuditReasonCode>();
     for (const event of recon.timeline) {
       for (const code of event.reasonCodes) {
         codes.add(code);
