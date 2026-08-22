@@ -65,27 +65,6 @@ export class LearningEngine {
     this.promotionPipeline = new PromotionPipeline(this.journal, config, now);
   }
 
-  /**
-   * Convenience constructor when external components are provided.
-   */
-  static fromComponents(
-    journal: TradeJournal,
-    decayDetector: EdgeDecayDetector,
-    promotionPipeline: PromotionPipeline,
-    config: LearningLoopConfig = DEFAULT_LEARNING_LOOP_CONFIG,
-    now?: () => number,
-  ): LearningEngine {
-    const engine = Object.create(LearningEngine.prototype);
-    engine.journal = journal;
-    engine.decayDetector = decayDetector;
-    engine.promotionPipeline = promotionPipeline;
-    engine.config = { ...config };
-    engine.now = now ?? (() => Date.now());
-    engine.recommendations = [];
-    engine.acknowledgedIds = new Set();
-    return engine;
-  }
-
   // ── AC1: Record every outcome ────────────────────────────────
 
   /**
@@ -293,10 +272,10 @@ export class LearningEngine {
     nowMs: number,
   ): LearningRecommendation | null {
     const ageMs = nowMs - promo.createdAtMs;
-    const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const staleThreshold = this.config.promotionStaleThresholdMs;
 
     // Check if the promotion is stale (stuck at a stage for too long).
-    if (ageMs > STALE_THRESHOLD_MS && promo.active) {
+    if (ageMs > staleThreshold && promo.active) {
       return {
         recommendationId: `rec-stale-${promo.promotionId}-${nowMs}`,
         type: "adjust_parameters",

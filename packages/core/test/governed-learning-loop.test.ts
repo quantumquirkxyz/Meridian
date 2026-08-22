@@ -5,7 +5,6 @@ import {
   type TradeJournalEntry,
   PROMOTION_STAGES,
   nextStage,
-  prevStage,
   stageIndex,
 } from "@agenttrading/contracts";
 import { TradeJournal } from "../src/gamma/trade-journal.ts";
@@ -94,14 +93,7 @@ describe("Learning loop contracts", () => {
     expect(nextStage("live")).toBeNull();
   });
 
-  test("prevStage returns the previous stage or null", () => {
-    expect(prevStage("live")).toBe("canary");
-    expect(prevStage("canary")).toBe("review");
-    expect(prevStage("review")).toBe("paper");
-    expect(prevStage("paper")).toBe("backtest");
-    expect(prevStage("backtest")).toBe("hypothesis");
-    expect(prevStage("hypothesis")).toBeNull();
-  });
+
 
   test("default config has sensible values", () => {
     const cfg = DEFAULT_LEARNING_LOOP_CONFIG;
@@ -560,13 +552,38 @@ describe("PromotionPipeline", () => {
   });
 
   test("review gate requires human approval", () => {
-    const cfg = config({ promotionRequireHumanApproval: true });
+    const cfg = config({
+      promotionRequireHumanApproval: true,
+      promotionMinBacktestTrades: 1,
+      promotionBacktestMinWinRate: 0.0,
+      promotionBacktestMinSharpe: 0.0,
+      promotionMinPaperTrades: 1,
+      promotionMinCanaryTrades: 1,
+      promotionCanaryMinWinRate: 0.0,
+    });
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
+    const passingPerf = {
+      strategyId: "alpha",
+      tradeCount: 10,
+      winCount: 6,
+      lossCount: 4,
+      winRate: 0.6,
+      totalPnlUsd: 50,
+      avgPnlUsd: 5,
+      sharpeRatio: 1.0,
+      maxDrawdownUsd: 5,
+      profitFactor: 1.5,
+      avgDurationMs: 30_000,
+      windowStartMs: FIXED_TS,
+      windowEndMs: FIXED_TS + 3_600_000,
+    };
+
     const record = pipeline.createPromotion("alpha", "Test");
-    // Manually set to review stage.
-    record.currentStage = "review";
+    pipeline.advanceStage(record.promotionId); // hypothesis -> backtest
+    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> paper
+    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // paper -> review
 
     // Try to advance without approval.
     const updated = pipeline.advanceStage(record.promotionId);
@@ -576,12 +593,38 @@ describe("PromotionPipeline", () => {
   });
 
   test("review gate passes with human approval", () => {
-    const cfg = config({ promotionRequireHumanApproval: true });
+    const cfg = config({
+      promotionRequireHumanApproval: true,
+      promotionMinBacktestTrades: 1,
+      promotionBacktestMinWinRate: 0.0,
+      promotionBacktestMinSharpe: 0.0,
+      promotionMinPaperTrades: 1,
+      promotionMinCanaryTrades: 1,
+      promotionCanaryMinWinRate: 0.0,
+    });
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
+    const passingPerf = {
+      strategyId: "alpha",
+      tradeCount: 10,
+      winCount: 6,
+      lossCount: 4,
+      winRate: 0.6,
+      totalPnlUsd: 50,
+      avgPnlUsd: 5,
+      sharpeRatio: 1.0,
+      maxDrawdownUsd: 5,
+      profitFactor: 1.5,
+      avgDurationMs: 30_000,
+      windowStartMs: FIXED_TS,
+      windowEndMs: FIXED_TS + 3_600_000,
+    };
+
     const record = pipeline.createPromotion("alpha", "Test");
-    record.currentStage = "review";
+    pipeline.advanceStage(record.promotionId); // hypothesis -> backtest
+    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> paper
+    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // paper -> review
     pipeline.approveReview(record.promotionId, true, "LGTM");
 
     const updated = pipeline.advanceStage(record.promotionId, {

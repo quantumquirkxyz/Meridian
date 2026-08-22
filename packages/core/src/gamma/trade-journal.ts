@@ -18,50 +18,12 @@ import type {
   TradeJournalEntry,
 } from "@agenttrading/contracts";
 import { DEFAULT_LEARNING_LOOP_CONFIG } from "@agenttrading/contracts";
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function mean(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((a, b) => a + b, 0) / values.length;
-}
-
-function stddev(values: number[]): number {
-  if (values.length < 2) return 0;
-  const avg = mean(values);
-  const squaredDiffs = values.map((v) => (v - avg) ** 2);
-  return Math.sqrt(mean(squaredDiffs));
-}
-
-function computeSharpe(pnlValues: number[]): number {
-  if (pnlValues.length < 2) return 0;
-  const avg = mean(pnlValues);
-  const sd = stddev(pnlValues);
-  if (sd === 0) return avg > 0 ? 1.0 : avg < 0 ? -1.0 : 0;
-  return avg / sd;
-}
-
-function computeProfitFactor(pnlValues: number[]): number {
-  const grossProfit = pnlValues.filter((p) => p > 0).reduce((a, b) => a + b, 0);
-  const grossLoss = Math.abs(
-    pnlValues.filter((p) => p < 0).reduce((a, b) => a + b, 0),
-  );
-  if (grossLoss === 0) return grossProfit > 0 ? Infinity : 0;
-  return grossProfit / grossLoss;
-}
-
-function computeMaxDrawdown(pnlValues: number[]): number {
-  let peak = 0;
-  let maxDd = 0;
-  let cumulative = 0;
-  for (const pnl of pnlValues) {
-    cumulative += pnl;
-    if (cumulative > peak) peak = cumulative;
-    const dd = peak - cumulative;
-    if (dd > maxDd) maxDd = dd;
-  }
-  return maxDd;
-}
+import {
+  mean,
+  computeSharpe,
+  computeProfitFactor,
+  computeMaxDrawdown,
+} from "./stats.ts";
 
 // ── Journal ──────────────────────────────────────────────────────────
 
@@ -209,31 +171,7 @@ export class TradeJournal {
         (e.outcome === "WIN" || e.outcome === "LOSS" || e.outcome === "BREAKEVEN"),
     );
 
-    if (entries.length < 2) return null;
-
-    const winCount = entries.filter((e) => e.outcome === "WIN").length;
-    const lossCount = entries.filter((e) => e.outcome === "LOSS").length;
-    const totalPnl = entries.reduce((a, e) => a + e.netPnlUsd, 0);
-    const pnlValues = entries.map((e) => e.netPnlUsd);
-    const durations = entries
-      .filter((e) => e.durationMs !== null)
-      .map((e) => e.durationMs!);
-
-    return {
-      strategyId,
-      tradeCount: entries.length,
-      winCount,
-      lossCount,
-      winRate: entries.length > 0 ? winCount / entries.length : 0,
-      totalPnlUsd: totalPnl,
-      avgPnlUsd: totalPnl / entries.length,
-      sharpeRatio: computeSharpe(pnlValues),
-      maxDrawdownUsd: computeMaxDrawdown(pnlValues),
-      profitFactor: computeProfitFactor(pnlValues),
-      avgDurationMs: durations.length > 0 ? mean(durations) : 0,
-      windowStartMs: windowStart,
-      windowEndMs: now,
-    };
+    return this.computeMetricsFromEntries(entries, strategyId, windowStart, now);
   }
 
   /**
@@ -252,30 +190,12 @@ export class TradeJournal {
       .slice(-tradeCount);
 
     if (entries.length < 2) return null;
-
-    const winCount = entries.filter((e) => e.outcome === "WIN").length;
-    const lossCount = entries.filter((e) => e.outcome === "LOSS").length;
-    const totalPnl = entries.reduce((a, e) => a + e.netPnlUsd, 0);
-    const pnlValues = entries.map((e) => e.netPnlUsd);
-    const durations = entries
-      .filter((e) => e.durationMs !== null)
-      .map((e) => e.durationMs!);
-
-    return {
+    return this.computeMetricsFromEntries(
+      entries,
       strategyId,
-      tradeCount: entries.length,
-      winCount,
-      lossCount,
-      winRate: entries.length > 0 ? winCount / entries.length : 0,
-      totalPnlUsd: totalPnl,
-      avgPnlUsd: totalPnl / entries.length,
-      sharpeRatio: computeSharpe(pnlValues),
-      maxDrawdownUsd: computeMaxDrawdown(pnlValues),
-      profitFactor: computeProfitFactor(pnlValues),
-      avgDurationMs: durations.length > 0 ? mean(durations) : 0,
-      windowStartMs: entries[0].enteredAtMs,
-      windowEndMs: entries[entries.length - 1].enteredAtMs,
-    };
+      entries[0].enteredAtMs,
+      entries[entries.length - 1].enteredAtMs,
+    );
   }
 
   /**
@@ -297,6 +217,23 @@ export class TradeJournal {
         (e.outcome === "WIN" || e.outcome === "LOSS" || e.outcome === "BREAKEVEN"),
     );
 
+    return this.computeMetricsFromEntries(
+      entries,
+      `regime:${regime}`,
+      windowStart,
+      now,
+    );
+  }
+
+  /**
+   * Shared metric computation from pre-filtered entries.
+   */
+  private computeMetricsFromEntries(
+    entries: readonly TradeJournalEntry[],
+    strategyId: string,
+    windowStartMs: number,
+    windowEndMs: number,
+  ): StrategyPerformance | null {
     if (entries.length < 2) return null;
 
     const winCount = entries.filter((e) => e.outcome === "WIN").length;
@@ -308,7 +245,7 @@ export class TradeJournal {
       .map((e) => e.durationMs!);
 
     return {
-      strategyId: `regime:${regime}`,
+      strategyId,
       tradeCount: entries.length,
       winCount,
       lossCount,
@@ -319,8 +256,8 @@ export class TradeJournal {
       maxDrawdownUsd: computeMaxDrawdown(pnlValues),
       profitFactor: computeProfitFactor(pnlValues),
       avgDurationMs: durations.length > 0 ? mean(durations) : 0,
-      windowStartMs: windowStart,
-      windowEndMs: now,
+      windowStartMs,
+      windowEndMs,
     };
   }
 

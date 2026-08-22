@@ -129,6 +129,14 @@ export class PromotionPipeline {
       return record;
     }
 
+    // Guard: all prior stages must have been passed.
+    for (let i = 0; i < currentIdx; i++) {
+      const priorStage = PROMOTION_STAGES[i];
+      if (record.stageOutcomes[priorStage] !== "pass") {
+        return record; // Cannot advance — prior stage not passed.
+      }
+    }
+
     // Evaluate gate criteria for the current stage.
     const gateResult = this.evaluateGate(
       record.currentStage,

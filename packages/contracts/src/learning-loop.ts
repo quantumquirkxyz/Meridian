@@ -64,17 +64,6 @@ export function nextStage(
   return PROMOTION_STAGES[idx + 1];
 }
 
-/**
- * Return the previous stage in the pipeline, or null if at hypothesis.
- */
-export function prevStage(
-  current: PromotionStage,
-): PromotionStage | null {
-  const idx = stageIndex(current);
-  if (idx <= 0) return null;
-  return PROMOTION_STAGES[idx - 1];
-}
-
 // ── Promotion Stage Outcome ───────────────────────────────────────────
 
 export const PROMOTION_OUTCOMES = [
@@ -459,6 +448,9 @@ export interface LearningLoopConfig {
   promotionCanaryMinWinRate: number;
   /** Whether human approval is required at the review stage. */
   promotionRequireHumanApproval: boolean;
+
+  /** How long (ms) a promotion can remain active before being flagged stale. */
+  promotionStaleThresholdMs: number;
 }
 
 export const isLearningLoopConfig: Validator<LearningLoopConfig> =
@@ -482,6 +474,7 @@ export const isLearningLoopConfig: Validator<LearningLoopConfig> =
     promotionBacktestMinSharpe: isNumber,
     promotionCanaryMinWinRate: isNumber,
     promotionRequireHumanApproval: isBoolean,
+    promotionStaleThresholdMs: isNumber,
   });
 
 export function parseLearningLoopConfig(
@@ -513,4 +506,5 @@ export const DEFAULT_LEARNING_LOOP_CONFIG: LearningLoopConfig = {
   promotionBacktestMinSharpe: 0.5,
   promotionCanaryMinWinRate: 0.52,
   promotionRequireHumanApproval: true,
+  promotionStaleThresholdMs: 604_800_000, // 7 days
 };

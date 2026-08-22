@@ -21,6 +21,12 @@ import type {
 } from "@agenttrading/contracts";
 import { DEFAULT_LEARNING_LOOP_CONFIG } from "@agenttrading/contracts";
 import { type TradeJournal } from "./trade-journal.ts";
+import {
+  mean,
+  computeSharpe,
+  computeProfitFactor,
+  computeMaxDrawdown,
+} from "./stats.ts";
 
 // ── Detector ─────────────────────────────────────────────────────────
 
@@ -250,46 +256,6 @@ export class EdgeDecayDetector {
       .filter((e) => e.durationMs !== null)
       .map((e) => e.durationMs!);
 
-    function meanLocal(values: number[]): number {
-      if (values.length === 0) return 0;
-      return values.reduce((a, b) => a + b, 0) / values.length;
-    }
-
-    function stddevLocal(values: number[]): number {
-      if (values.length < 2) return 0;
-      const avg = meanLocal(values);
-      const squaredDiffs = values.map((v) => (v - avg) ** 2);
-      return Math.sqrt(meanLocal(squaredDiffs));
-    }
-
-    function sharpeLocal(pnl: number[]): number {
-      if (pnl.length < 2) return 0;
-      const avg = meanLocal(pnl);
-      const sd = stddevLocal(pnl);
-      if (sd === 0) return avg > 0 ? 1.0 : avg < 0 ? -1.0 : 0;
-      return avg / sd;
-    }
-
-    function pfLocal(pnl: number[]): number {
-      const gp = pnl.filter((p) => p > 0).reduce((a, b) => a + b, 0);
-      const gl = Math.abs(pnl.filter((p) => p < 0).reduce((a, b) => a + b, 0));
-      if (gl === 0) return gp > 0 ? Infinity : 0;
-      return gp / gl;
-    }
-
-    function maxDdLocal(pnl: number[]): number {
-      let peak = 0;
-      let maxDd = 0;
-      let cumulative = 0;
-      for (const p of pnl) {
-        cumulative += p;
-        if (cumulative > peak) peak = cumulative;
-        const dd = peak - cumulative;
-        if (dd > maxDd) maxDd = dd;
-      }
-      return maxDd;
-    }
-
     return {
       strategyId,
       tradeCount: prevEntries.length,
@@ -298,11 +264,11 @@ export class EdgeDecayDetector {
       winRate: prevEntries.length > 0 ? winCount / prevEntries.length : 0,
       totalPnlUsd: totalPnl,
       avgPnlUsd: totalPnl / prevEntries.length,
-      sharpeRatio: sharpeLocal(pnlValues),
-      maxDrawdownUsd: maxDdLocal(pnlValues),
-      profitFactor: pfLocal(pnlValues),
+      sharpeRatio: computeSharpe(pnlValues),
+      maxDrawdownUsd: computeMaxDrawdown(pnlValues),
+      profitFactor: computeProfitFactor(pnlValues),
       avgDurationMs:
-        durations.length > 0 ? meanLocal(durations) : 0,
+        durations.length > 0 ? mean(durations) : 0,
       windowStartMs: prevEntries[0].enteredAtMs,
       windowEndMs: prevEntries[prevEntries.length - 1].enteredAtMs,
     };
