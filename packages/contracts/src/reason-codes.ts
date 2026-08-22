@@ -27,6 +27,26 @@ export const RISK_REASON_CODES = [
 
 export type RiskReasonCode = (typeof RISK_REASON_CODES)[number];
 
+/**
+ * Route-specific reason codes for route invalidation.
+ * These are used by the RouteEngine to explain why a route
+ * was discarded, expired, or blocked.
+ */
+export const ROUTE_REASON_CODES = [
+  "ROUTE_EXPIRED",
+  "ROUTE_STALE",
+  "ROUTE_BLOCKED",
+  "ROUTE_SCORE_LOW",
+  "ROUTE_TOO_LONG",
+  "LIQUIDITY_EVAPORATED",
+  "HIDDEN_CORRELATION",
+] as const;
+
+export type RouteReasonCode = (typeof ROUTE_REASON_CODES)[number];
+
+export const isRouteReasonCode: Validator<RouteReasonCode> =
+  isEnumOf(ROUTE_REASON_CODES);
+
 export const isRiskReasonCode: Validator<RiskReasonCode> =
   isEnumOf(RISK_REASON_CODES);
 

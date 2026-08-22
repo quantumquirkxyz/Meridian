@@ -30,3 +30,5 @@ export * from "./gamma/trade-journal.ts";
 export * from "./gamma/edge-decay-detector.ts";
 export * from "./gamma/promotion-pipeline.ts";
 export * from "./gamma/learning-engine.ts";
+export * from "./gamma/route-engine.ts";
+export * from "./gamma/systemic-risk-overlay.ts";
