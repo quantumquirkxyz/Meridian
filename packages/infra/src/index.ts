@@ -34,6 +34,8 @@ export {
   BetaControlInkTui,
   type BetaControlInkTuiProps,
 } from "./control-tui-ink.tsx";
+export { InfrastructureEngine, modeIndex } from "./infrastructure-engine.ts";
+
 export {
   GAMMA_CONTROL_COMMAND_DESCRIPTORS,
   GammaControlTuiModel,
