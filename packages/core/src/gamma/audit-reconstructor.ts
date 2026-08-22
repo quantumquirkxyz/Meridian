@@ -21,6 +21,7 @@
 
 import type {
   AuditEvent,
+  AuditReasonCode,
   TradeJournalEntry,
   TradeReconstruction,
   TimelineEvent,
@@ -28,6 +29,7 @@ import type {
   AuditAvailability,
 } from "@agenttrading/contracts";
 import { DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
+import { evaluateAuditStaleness } from "./audit-availability.ts";
 
 // ── Phase Mapping ────────────────────────────────────────────────────
 
@@ -35,6 +37,13 @@ import { DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
  * Map audit action strings to timeline phases.
  * This mapping determines how audit events are classified in the
  * trade reconstruction timeline.
+ *
+ * STATE_TRANSITION is mapped dynamically based on the event's actor:
+ *   - actor contains "bull" → bull_review
+ *   - actor contains "bear" → bear_review
+ *   - actor contains "skeptic" → skeptic_review
+ *   - actor contains "risk" → risk_analyst_consulted
+ *   - default → signal_generated
  */
 const ACTION_TO_PHASE: Record<string, TimelinePhase> = {
   OPPORTUNITY_DETECTED: "opportunity_detected",
@@ -46,6 +55,26 @@ const ACTION_TO_PHASE: Record<string, TimelinePhase> = {
   STATE_TRANSITION: "signal_generated",
   OPPORTUNITY_RECORDED: "position_closed",
 };
+
+/**
+ * Resolve the timeline phase for a STATE_TRANSITION event based on
+ * the actor. This enables SP1 (risk_analyst_consulted) and SP2
+ * (bull/bear/skeptic) timeline phases.
+ */
+function resolveTransitionPhase(event: AuditEvent): TimelinePhase {
+  const actor = (event.data?.["actor"] as string)?.toLowerCase() ?? "";
+  const action = (event.data?.["action"] as string)?.toLowerCase() ?? "";
+
+  // SP2: Map deliberative agent debate stages.
+  if (actor.includes("bull") || action.includes("bull")) return "bull_review";
+  if (actor.includes("bear") || action.includes("bear")) return "bear_review";
+  if (actor.includes("skeptic") || action.includes("skeptic")) return "skeptic_review";
+
+  // SP1: Map risk analyst consultation.
+  if (actor.includes("risk") || action.includes("risk_analyst")) return "risk_analyst_consulted";
+
+  return "signal_generated";
+}
 
 /**
  * Extract a trade identifier from audit event data.
@@ -123,16 +152,11 @@ export class AuditReconstructor {
   // ── AC4: Audit Availability ────────────────────────────────────
 
   /**
-   * Check if the audit subsystem is available.
-   * Returns the current availability status.
-   *
-   * AC4: Audit unavailability blocks trading. When available returns
-   * false, the trading system MUST NOT submit new orders.
+   * Refresh the internal availability state from audit events.
+   * Called before evaluation to sync the availability clock with
+   * the latest audit events.
    */
-  isAvailable(nowMs?: number): AuditAvailability {
-    const now = nowMs ?? this.now();
-    const elapsed = now - this.availability.lastWriteAtMs;
-
+  refreshAvailability(nowMs: number): void {
     // If we have never written, check if that's acceptable.
     if (this.availability.lastWriteAtMs === 0 && this.availability.available) {
       // First check — if we have events, we're available.
@@ -143,17 +167,25 @@ export class AuditReconstructor {
         this.availability.error = undefined;
       }
     }
+  }
 
-    // Check staleness.
-    if (
-      this.availability.lastWriteAtMs > 0 &&
-      elapsed > this.availability.maxStaleMs
-    ) {
-      this.availability.available = false;
-      this.availability.error = `audit stale: ${(elapsed / 1000).toFixed(0)}s since last write (max: ${(this.availability.maxStaleMs / 1000).toFixed(0)}s)`;
-    }
-
-    return { ...this.availability };
+  /**
+   * Check if the audit subsystem is available (pure read).
+   * Calls refreshAvailability internally to sync state.
+   *
+   * AC4: Audit unavailability blocks trading. When available returns
+   * false, the trading system MUST NOT submit new orders.
+   */
+  isAvailable(nowMs?: number): AuditAvailability {
+    const now = nowMs ?? this.now();
+    this.refreshAvailability(now);
+    const result = evaluateAuditStaleness(this.availability, now);
+    return {
+      available: result.available,
+      lastWriteAtMs: this.availability.lastWriteAtMs,
+      maxStaleMs: this.availability.maxStaleMs,
+      error: result.error,
+    };
   }
 
   /**
@@ -211,7 +243,9 @@ export class AuditReconstructor {
 
     // Convert audit events to timeline events.
     const timeline: TimelineEvent[] = sortedEvents.map((event) => {
-      const phase = ACTION_TO_PHASE[event.action] ?? "signal_generated";
+      const phase = event.action === "STATE_TRANSITION"
+        ? resolveTransitionPhase(event)
+        : ACTION_TO_PHASE[event.action] ?? "signal_generated";
       return {
         eventId: event.eventId,
         phase,
@@ -222,7 +256,7 @@ export class AuditReconstructor {
           state: event.state,
           ...(event.data ?? {}),
         },
-        reasonCodes: event.reasonCodes ?? [],
+        reasonCodes: (event.reasonCodes ?? []) as AuditReasonCode[],
       };
     });
 

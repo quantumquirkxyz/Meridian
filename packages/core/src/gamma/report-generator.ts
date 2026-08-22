@@ -78,9 +78,7 @@ export class ReportGenerator {
   generateCustomReport(
     periodStartMs: number,
     periodEndMs: number,
-    label: string = "custom",
   ): TradeReport {
-    // Use a unique ID based on the period.
     return this.generateReport(
       "daily" as ReportPeriod, // Use daily as base period type.
       periodStartMs,
@@ -166,10 +164,10 @@ export class ReportGenerator {
     ).length;
 
     // Strategy breakdown.
-    const strategyBreakdown = this.buildBreakdown(entries);
+    const strategyBreakdown = this.buildGroupedBreakdown(entries, (e) => e.strategyId);
 
     // Venue breakdown.
-    const venueBreakdown = this.buildVenueBreakdown(entries);
+    const venueBreakdown = this.buildGroupedBreakdown(entries, (e) => e.venue);
 
     // Total slippage.
     const totalSlippageUsd = entries.reduce(
@@ -203,10 +201,12 @@ export class ReportGenerator {
   }
 
   /**
-   * Build strategy breakdown from entries.
+   * Build a grouped breakdown from entries using the given key extractor.
+   * Single implementation for both strategy and venue breakdowns (S1 fix).
    */
-  private buildBreakdown(
+  private buildGroupedBreakdown(
     entries: readonly TradeJournalEntry[],
+    keyFn: (entry: TradeJournalEntry) => string,
   ): Record<string, { tradeCount: number; netPnlUsd: number; winRate: number }> {
     const breakdown: Record<
       string,
@@ -214,66 +214,22 @@ export class ReportGenerator {
     > = {};
 
     for (const entry of entries) {
-      if (breakdown[entry.strategyId] === undefined) {
-        breakdown[entry.strategyId] = {
-          tradeCount: 0,
-          netPnlUsd: 0,
-          winCount: 0,
-        };
+      const key = keyFn(entry);
+      if (breakdown[key] === undefined) {
+        breakdown[key] = { tradeCount: 0, netPnlUsd: 0, winCount: 0 };
       }
-      const bucket = breakdown[entry.strategyId];
+      const bucket = breakdown[key];
       bucket.tradeCount += 1;
       bucket.netPnlUsd += entry.netPnlUsd;
       if (entry.outcome === "WIN") bucket.winCount += 1;
     }
 
-    // Convert to final format with winRate.
     const result: Record<
       string,
       { tradeCount: number; netPnlUsd: number; winRate: number }
     > = {};
     for (const [id, data] of Object.entries(breakdown)) {
       result[id] = {
-        tradeCount: data.tradeCount,
-        netPnlUsd: data.netPnlUsd,
-        winRate:
-          data.tradeCount > 0 ? data.winCount / data.tradeCount : 0,
-      };
-    }
-    return result;
-  }
-
-  /**
-   * Build venue breakdown from entries.
-   */
-  private buildVenueBreakdown(
-    entries: readonly TradeJournalEntry[],
-  ): Record<string, { tradeCount: number; netPnlUsd: number; winRate: number }> {
-    const breakdown: Record<
-      string,
-      { tradeCount: number; netPnlUsd: number; winCount: number }
-    > = {};
-
-    for (const entry of entries) {
-      if (breakdown[entry.venue] === undefined) {
-        breakdown[entry.venue] = {
-          tradeCount: 0,
-          netPnlUsd: 0,
-          winCount: 0,
-        };
-      }
-      const bucket = breakdown[entry.venue];
-      bucket.tradeCount += 1;
-      bucket.netPnlUsd += entry.netPnlUsd;
-      if (entry.outcome === "WIN") bucket.winCount += 1;
-    }
-
-    const result: Record<
-      string,
-      { tradeCount: number; netPnlUsd: number; winRate: number }
-    > = {};
-    for (const [venue, data] of Object.entries(breakdown)) {
-      result[venue] = {
         tradeCount: data.tradeCount,
         netPnlUsd: data.netPnlUsd,
         winRate:

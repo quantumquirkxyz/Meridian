@@ -37,6 +37,7 @@ import {
   type RiskDecision,
 } from "@agenttrading/contracts";
 import { type FillParams, type AuditAvailability, DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
+import { evaluateAuditStaleness } from "./audit-availability.ts";
 import { type AuditLog } from "../stategraph/audit-log.ts";
 import {
   KillSwitch,
@@ -671,32 +672,12 @@ export class CanarySession {
    * is allowed.
    *
    * AC4: Audit unavailability blocks trading (invariant).
+   * Uses the shared staleness evaluation (S2 fix).
    */
   private getAuditBlockingReason(): string | null {
-    const nowMs = this.now();
-    const elapsed = nowMs - this.auditAvailability.lastWriteAtMs;
-
-    // If we have never written and there are no events, audit is not blocking yet.
-    if (this.auditAvailability.lastWriteAtMs === 0 && this.auditAvailability.available) {
-      return null;
-    }
-
-    // Check staleness.
-    if (
-      this.auditAvailability.lastWriteAtMs > 0 &&
-      elapsed > this.auditAvailability.maxStaleMs
-    ) {
-      return (
-        this.auditAvailability.error ??
-        `audit stale: ${(elapsed / 1000).toFixed(0)}s since last write (max: ${(this.auditAvailability.maxStaleMs / 1000).toFixed(0)}s)`
-      );
-    }
-
-    if (!this.auditAvailability.available) {
-      return this.auditAvailability.error ?? "audit unavailable";
-    }
-
-    return null;
+    const result = evaluateAuditStaleness(this.auditAvailability, this.now());
+    if (result.available) return null;
+    return result.error ?? "audit unavailable";
   }
 
   /**

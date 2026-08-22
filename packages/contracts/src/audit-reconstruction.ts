@@ -26,6 +26,7 @@ import {
   parse,
   type Validator,
 } from "./schema.ts";
+import { isAuditReasonCode, type AuditReasonCode } from "./audit.ts";
 
 // ── Export Format ────────────────────────────────────────────────────
 
@@ -53,6 +54,9 @@ export const TIMELINE_PHASES = [
   "data_quality_evaluated",
   "graph_snapshot",
   "signal_generated",
+  "bull_review",
+  "bear_review",
+  "skeptic_review",
   "risk_analyst_consulted",
   "risk_decision",
   "order_intent_created",
@@ -83,7 +87,7 @@ export interface TimelineEvent {
   /** Structured data for this phase. */
   data: Record<string, unknown>;
   /** Machine-readable reason codes explaining this event. */
-  reasonCodes: string[];
+  reasonCodes: AuditReasonCode[];
 }
 
 export const isTimelineEvent: Validator<TimelineEvent> = isObjectOf({
@@ -91,12 +95,14 @@ export const isTimelineEvent: Validator<TimelineEvent> = isObjectOf({
   phase: isTimelinePhase,
   timestampMs: isNumber,
   data: isObjectOf({}) as Validator<Record<string, unknown>>,
-  reasonCodes: isArrayOf(isString),
+  reasonCodes: isArrayOf(isAuditReasonCode),
 });
 
 export function parseTimelineEvent(value: unknown): TimelineEvent {
   return parse(isTimelineEvent, value, "TimelineEvent");
 }
+
+export { type AuditReasonCode } from "./audit.ts";
 
 // ── Trade Reconstruction ─────────────────────────────────────────────
 
