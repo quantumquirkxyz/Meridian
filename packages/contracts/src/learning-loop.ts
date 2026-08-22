@@ -298,7 +298,7 @@ export function parseEdgeDecaySignal(value: unknown): EdgeDecaySignal {
 /**
  * PromotionRecord: tracks a strategy or parameter change through the
  * promotion pipeline. Each record represents one proposed change and
- * its journey from hypothesis to live (or rejection at any stage).
+ * its journey from hypothesis to scale (or rejection at any stage).
  */
 export interface PromotionRecord {
   /** Unique promotion identifier. */
@@ -317,7 +317,7 @@ export interface PromotionRecord {
   createdAtMs: number;
   /** Timestamp of the last stage transition (Unix ms). */
   lastTransitionAtMs: number;
-  /** Timestamp when the promotion reached live or was rejected (Unix ms). */
+  /** Timestamp when the promotion reached scale or was rejected (Unix ms). */
   completedAtMs: number | null;
   /** Whether this promotion is currently active (in pipeline). */
   active: boolean;
@@ -459,7 +459,7 @@ export interface LearningLoopConfig {
   promotionMinBacktestTrades: number;
   /** Minimum paper trades before promotion to review. */
   promotionMinPaperTrades: number;
-  /** Minimum canary trades before promotion to live. */
+  /** Minimum canary trades before promotion to scale. */
   promotionMinCanaryTrades: number;
   /** Minimum win rate required at backtest stage. */
   promotionBacktestMinWinRate: number;
