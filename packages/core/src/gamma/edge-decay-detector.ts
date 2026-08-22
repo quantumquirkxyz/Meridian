@@ -189,7 +189,7 @@ export class EdgeDecayDetector {
   /**
    * Get the previous window performance for a strategy.
    * Delegates to TradeJournal.computePerformanceFromEntries to avoid
-   * duplicating metric computation logic (fixes S1).
+   * duplicating metric computation logic.
    */
   private getPreviousWindowPerformance(
     strategyId: string,
