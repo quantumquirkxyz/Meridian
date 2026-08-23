@@ -8,16 +8,25 @@ disable-model-invocation: true
 
 Use this skill before any risky state change.
 
+## Operating rule
+
+For trading flows, treat the first admissible phase as `paper` / demo trading only. Do not authorize a live Bybit transition until the paper phase has been exercised end-to-end, observed under realistic conditions, and explicitly judged stable enough to carry forward.
+
 ## Steps
 
 1. Classify the requested action as read, write, delete, network, or external write.
 2. Check the Skill manifest side effects and approval threshold.
-3. Require explicit approval for destructive or irreversible actions.
-4. Record the decision and rollback path.
+3. If the action touches trading execution, require a paper-only first phase:
+   - Bybit demo trading / sandbox / simulation only.
+   - REST and WebSocket connectivity may be validated, but no real capital may be at risk.
+   - Order lifecycle, reconciliation, and risk limits should be exercised in the safe environment first.
+4. Require explicit approval for the live transition and treat it as a separate state change from paper validation.
+5. Require explicit approval for destructive or irreversible actions.
+6. Record the decision, the phase boundary, and the rollback path.
 
 ## Completion criteria
 
 - the action is allowed or blocked with reason
 - the approval requirement is clear
+- the paper-only gate or live-transition gate is explicit
 - rollback is named
-
