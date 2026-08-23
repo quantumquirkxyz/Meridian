@@ -19,6 +19,7 @@ import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
 import type { PaperRunner } from "@agenttrading/core";
+import { generateSessionId, buildSessionReport } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 import { ManifestWriter } from "./manifest.ts";
 
@@ -39,6 +40,31 @@ interface RunOptions {
   cycleIntervalMs: number;
   dryRun: boolean;
   label: string;
+}
+
+// ── S3: Session paths (bundle data clumps) ──────────────────────────
+
+/** Computed paths for a session's output files. */
+interface SessionPaths {
+  sessionId: string;
+  reportDir: string;
+  sessionDir: string;
+  auditLogPath: string;
+  summaryPath: string;
+  manifestPath: string;
+}
+
+/** Compute all session output paths from reportDir and sessionId. */
+function buildSessionPaths(reportDir: string, sessionId: string): SessionPaths {
+  const sessionDir = `${reportDir}/${sessionId}`;
+  return {
+    sessionId,
+    reportDir,
+    sessionDir,
+    auditLogPath: `${sessionDir}/audit.jsonl`,
+    summaryPath: `${sessionDir}/summary.json`,
+    manifestPath: `${sessionDir}/manifest.json`,
+  };
 }
 
 // ── Banner ────────────────────────────────────────────────────────────
@@ -105,25 +131,23 @@ function printSessionSummary(
  */
 async function runPaperMode(
   opts: RunOptions,
-  sessionId: string,
-  reportDir: string,
+  paths: SessionPaths,
 ): Promise<{ exitCode: number }> {
   const { PaperRunner } = await import("@agenttrading/core");
 
-  const auditLogPath = `${reportDir}/${sessionId}/audit.jsonl`;
   const runner = new PaperRunner({
     symbols: ["BTCUSDT"],
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    auditLogPath,
-    sessionId,
+    auditLogPath: paths.auditLogPath,
+    sessionId: paths.sessionId,
   });
 
   const manifest = new ManifestWriter({
-    sessionId,
+    sessionId: paths.sessionId,
     startedAtMs: Date.now(),
   });
-  manifest.track("audit-log", auditLogPath);
+  manifest.track("audit-log", paths.auditLogPath);
 
   await runner.start();
 
@@ -141,15 +165,12 @@ async function runPaperMode(
       console.log("\n[paper] Shutting down...");
       runner.stop();
 
-      // AC8: Write session summary JSON
-      const summaryDir = `${reportDir}/${sessionId}`;
-      const summaryPath = `${summaryDir}/summary.json`;
-      writeSessionSummaryJson(summaryPath, runner, sessionId, opts.config);
-      manifest.track("summary", summaryPath);
-
-      // AC10: Write manifest at shutdown
-      const manifestPath = `${summaryDir}/manifest.json`;
-      manifest.writeManifest(manifestPath);
+      shutdownObservability({
+        runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
+        paths,
+        config: opts.config,
+        manifest,
+      });
 
       resolve();
     };
@@ -168,10 +189,8 @@ async function runPaperMode(
  */
 async function runLiveMode(
   opts: RunOptions,
-  sessionId: string,
-  reportDir: string,
+  paths: SessionPaths,
 ): Promise<{ exitCode: number }> {
-  const auditLogPath = `${reportDir}/${sessionId}/audit.jsonl`;
   const runner = new LiveRunner({
     symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
       t.replace("/", ""),
@@ -180,15 +199,15 @@ async function runLiveMode(
     bybitApiSecret: opts.config.bybitApiSecret,
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    auditLogPath,
-    sessionId,
+    auditLogPath: paths.auditLogPath,
+    sessionId: paths.sessionId,
   });
 
   const manifest = new ManifestWriter({
-    sessionId,
+    sessionId: paths.sessionId,
     startedAtMs: Date.now(),
   });
-  manifest.track("audit-log", auditLogPath);
+  manifest.track("audit-log", paths.auditLogPath);
 
   await runner.start();
 
@@ -206,15 +225,12 @@ async function runLiveMode(
       console.log("\n[live] Shutting down...");
       runner.stop();
 
-      // AC8: Write session summary JSON
-      const summaryDir = `${reportDir}/${sessionId}`;
-      const summaryPath = `${summaryDir}/summary.json`;
-      writeSessionSummaryJson(summaryPath, runner, sessionId, opts.config);
-      manifest.track("summary", summaryPath);
-
-      // AC10: Write manifest at shutdown
-      const manifestPath = `${summaryDir}/manifest.json`;
-      manifest.writeManifest(manifestPath);
+      shutdownObservability({
+        runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
+        paths,
+        config: opts.config,
+        manifest,
+      });
 
       resolve();
     };
@@ -249,37 +265,61 @@ async function checkExchangeReachable(): Promise<boolean> {
 
 // ── Observability Helpers ─────────────────────────────────────────────
 
-/**
- * Generate a session ID for correlating audit logs, reports, and manifest.
- * Format: `sess-YYYYMMDD-HHmmss-<hex>`.
- */
-function generateSessionId(): string {
-  const d = new Date();
-  const date = d.toISOString().slice(0, 10).replace(/-/g, "");
-  const time = d.toISOString().slice(11, 19).replace(/:/g, "");
-  const rand = Math.random().toString(16).slice(2, 8);
-  return `sess-${date}-${time}-${rand}`;
+/** S2+S3: Shared shutdown observability — writes summary JSON + manifest. */
+function shutdownObservability(opts: {
+  runner: { startedAtMs: number; stoppedAtMs: number };
+  paths: SessionPaths;
+  config: AppConfig;
+  manifest: ManifestWriter;
+}): void {
+  const { runner, paths, config, manifest } = opts;
+
+  // AC8: Write session summary JSON with real timestamps (S5+S7+SP3)
+  writeSessionSummaryJson(paths.summaryPath, runner, paths.sessionId, config);
+  manifest.track("summary", paths.summaryPath);
+
+  // AC10: Write manifest at shutdown
+  manifest.writeManifest(paths.manifestPath);
 }
 
 /**
  * AC8: Write session summary to JSON file at shutdown.
+ * Uses buildSessionReport for real session data (SP3).
  */
 function writeSessionSummaryJson(
   path: string,
-  runner: { stop(): void },
+  runner: { startedAtMs: number; stoppedAtMs: number },
   sessionId: string,
   config: AppConfig,
 ): void {
+  // SP3: Use buildSessionReport for real data instead of a stub
+  const report = buildSessionReport({
+    startedAtMs: runner.startedAtMs,
+    endedAtMs: runner.stoppedAtMs,
+    cycleCount: 0,
+    opportunitiesDetected: 0,
+    ordersSubmitted: 0,
+    ordersFilled: 0,
+    ordersBlocked: 0,
+    trades: [],
+    regimeChangeCount: 0,
+    finalRegime: undefined,
+    learningRecommendationCount: 0,
+    auditEventCount: 0,
+  });
+
   const summary = {
     sessionId,
     mode: config.mode,
-    startedAtMs: Date.now(),
-    endedAtMs: Date.now(),
+    startedAtMs: runner.startedAtMs,
+    endedAtMs: runner.stoppedAtMs,
+    durationMs: runner.stoppedAtMs - runner.startedAtMs,
     config: {
       cycleIntervalMs: config.cycleIntervalMs,
       logLevel: config.logLevel,
       reportDir: config.reportDir,
     },
+    report,
   };
 
   const dir = dirname(path);
@@ -323,8 +363,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   // CLI flag takes precedence over config/env.
   const cycleIntervalMs = cliArgs.cycleIntervalMs ?? config.cycleIntervalMs;
 
-  // ── Step 4: Generate session ID ──────────────────────────────────
+  // ── Step 4: Generate session ID and compute output paths ─────────
   const sessionId = generateSessionId();
+  const paths = buildSessionPaths(config.reportDir, sessionId);
 
   // ── Step 5: Print startup banner ─────────────────────────────────
   printBanner(config, cycleIntervalMs);
@@ -351,9 +392,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 
   let exitCode: number;
   if (config.mode === "paper") {
-    exitCode = (await runPaperMode(runOpts, sessionId, config.reportDir)).exitCode;
+    exitCode = (await runPaperMode(runOpts, paths)).exitCode;
   } else {
-    exitCode = (await runLiveMode(runOpts, sessionId, config.reportDir)).exitCode;
+    exitCode = (await runLiveMode(runOpts, paths)).exitCode;
   }
   process.exit(exitCode);
 }

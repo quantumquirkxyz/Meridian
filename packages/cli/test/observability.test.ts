@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PaperAuditLogger } from "@agenttrading/core";
+import { PaperAuditLogger, generateSessionId } from "@agenttrading/core";
 import { StatusDisplay, type CycleStatusInput, type KillSwitchTriggerInput } from "../src/status-display.ts";
 import { ManifestWriter, type ManifestData } from "../src/manifest.ts";
 
@@ -369,5 +369,35 @@ describe("ManifestWriter", () => {
       expect(typeof file.sizeBytes).toBe("number");
       expect(typeof file.writtenAtMs).toBe("number");
     }
+  });
+});
+
+// ── generateSessionId Tests ──────────────────────────────────────────
+
+describe("generateSessionId", () => {
+  test("produces sess-YYYYMMDD-HHmmss-<hex> format", () => {
+    const id = generateSessionId(1700000000000);
+    expect(id).toMatch(/^sess-\d{8}-\d{6}-[0-9a-f]{6}$/);
+  });
+
+  test("uses provided timestamp", () => {
+    // 2023-11-14T22:13:20.000Z
+    const id = generateSessionId(1700000000000);
+    expect(id).toContain("20231114");
+    expect(id).toContain("221320");
+  });
+
+  test("uses Date.now() when no timestamp provided", () => {
+    const id = generateSessionId();
+    expect(id).toMatch(/^sess-/);
+  });
+
+  test("generates unique IDs on successive calls", () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      ids.add(generateSessionId());
+    }
+    // With random suffix, collisions should be extremely rare
+    expect(ids.size).toBe(100);
   });
 });

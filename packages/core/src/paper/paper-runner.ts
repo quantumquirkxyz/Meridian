@@ -29,6 +29,44 @@ import { buildSessionReport, printSessionReport, type PaperTradeRecord } from ".
 import { computeSlippageBps } from "../utils/slippage.ts";
 import type { MarketState } from "../utils/market-state.ts";
 
+/** Minimal status display interface for injection into runners. */
+export interface StatusDisplayLike {
+  printCycleStatus(status: {
+    mode: string;
+    cycleCount: number;
+    regime: string | undefined;
+    regimeConfidence: number | undefined;
+    pnlUsd: number;
+    openOrders: number;
+    killSwitchActive: boolean;
+    submitted: number;
+    blocked: number;
+    totalTrades: number;
+  }): void;
+  printRegimeChange(change: {
+    fromRegime: string | undefined;
+    toRegime: string;
+    confidence: number;
+    timestampMs: number;
+  }): void;
+  printOrderEvent(event: {
+    orderId: string;
+    event: "submitted" | "accepted" | "filled" | "rejected" | "cancelled";
+    symbol: string;
+    side: "BUY" | "SELL";
+    quantity: number;
+    fillPrice?: number;
+    reason?: string;
+    feesUsd?: number;
+  }): void;
+  printKillSwitchTrigger(trigger: {
+    trigger: string;
+    reason: string;
+    threshold?: number;
+    limit?: number;
+  }): void;
+}
+
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface PaperRunnerConfig {
@@ -52,6 +90,8 @@ export interface PaperRunnerConfig {
   nowMs?: () => number;
   /** Custom WebSocket factory (for testing). */
   wsFactory?: (url: string) => WebSocketLike;
+  /** Optional status display for real-time cycle output. */
+  statusDisplay?: StatusDisplayLike;
 }
 
 export interface PaperRunnerEvents {
@@ -94,7 +134,7 @@ const WS_OPEN = 1;
  *   4. On shutdown: close WS, flush audit log, print session report
  */
 export class PaperRunner {
-  private readonly config: Omit<Required<PaperRunnerConfig>, "sessionId"> & { sessionId?: string };
+  private readonly config: Omit<Required<PaperRunnerConfig>, "sessionId" | "statusDisplay"> & { sessionId?: string; statusDisplay?: StatusDisplayLike };
   private readonly nowMs: () => number;
   private readonly wsFactory: (url: string) => WebSocketLike;
 
@@ -124,7 +164,7 @@ export class PaperRunner {
   private regimeChangeCount = 0;
   private lastRegime: string | undefined;
   private learningRecommendationCount = 0;
-  private startedAtMs = 0;
+  private _startedAtMs = 0;
   private events: PaperRunnerEvents = {};
 
   constructor(config: PaperRunnerConfig) {
@@ -142,6 +182,7 @@ export class PaperRunner {
       nowMs: this.nowMs,
       wsFactory: this.wsFactory,
       sessionId: config.sessionId,
+      statusDisplay: config.statusDisplay,
     };
 
     // Initialize subsystems
@@ -169,11 +210,16 @@ export class PaperRunner {
     return this.auditLogger.sessionId;
   }
 
+  /** Session start timestamp (Unix ms). 0 if not started. */
+  get startedAtMs(): number {
+    return this._startedAtMs;
+  }
+
   /** Start the paper runner: connect WS, start cycle loop. */
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    this.startedAtMs = this.nowMs();
+    this._startedAtMs = this.nowMs();
 
     this.session.start();
     this.auditLogger.record("SESSION_STARTED", {
@@ -220,7 +266,7 @@ export class PaperRunner {
     // Record session end
     const endedAtMs = this.nowMs();
     this.auditLogger.record("SESSION_ENDED", {
-      durationMs: endedAtMs - this.startedAtMs,
+      durationMs: endedAtMs - this._startedAtMs,
       cycleCount: this.cycleCount,
       ordersSubmitted: this.ordersSubmitted,
       ordersFilled: this.ordersFilled,
@@ -230,7 +276,7 @@ export class PaperRunner {
 
     // Build and print session report (AC8)
     const report = buildSessionReport({
-      startedAtMs: this.startedAtMs,
+      startedAtMs: this._startedAtMs,
       endedAtMs,
       cycleCount: this.cycleCount,
       opportunitiesDetected: this.opportunitiesDetected,
@@ -646,6 +692,20 @@ export class PaperRunner {
       regime: result.regimeClassification?.regime,
       submitted: result.submittedCount,
       blocked: result.blockedCount,
+    });
+
+    // AC3: Display cycle status via StatusDisplay if wired
+    this.config.statusDisplay?.printCycleStatus({
+      mode: "paper",
+      cycleCount: this.cycleCount,
+      regime: result.regimeClassification?.regime,
+      regimeConfidence: result.regimeClassification?.confidence,
+      pnlUsd: 0,
+      openOrders: 0,
+      killSwitchActive: false,
+      submitted: result.submittedCount,
+      blocked: result.blockedCount,
+      totalTrades: this.trades.length,
     });
 
     console.log(

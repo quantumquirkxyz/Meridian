@@ -40,13 +40,13 @@ export interface PaperAuditLoggerOptions {
 export class PaperAuditLogger {
   private readonly filePath: string;
   private readonly nowMs: () => number;
-  private readonly _sessionId: string;
+  private readonly sessionIdValue: string;
   private eventCount = 0;
 
   constructor(options: PaperAuditLoggerOptions) {
     this.filePath = options.filePath;
     this.nowMs = options.nowMs ?? (() => Date.now());
-    this._sessionId = options.sessionId ?? generateSessionId(this.nowMs());
+    this.sessionIdValue = options.sessionId ?? generateSessionId(this.nowMs());
 
     // Ensure the directory exists and create the file.
     const dir = dirname(this.filePath);
@@ -65,7 +65,7 @@ export class PaperAuditLogger {
 
   /** The session identifier for this logger instance. */
   get sessionId(): string {
-    return this._sessionId;
+    return this.sessionIdValue;
   }
 
   /**
@@ -76,7 +76,7 @@ export class PaperAuditLogger {
       timestampMs: this.nowMs(),
       type,
       data,
-      sessionId: this._sessionId,
+      sessionId: this.sessionIdValue,
     };
 
     const line = JSON.stringify(event);
@@ -96,11 +96,11 @@ export class PaperAuditLogger {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Generate a deterministic session ID from a timestamp and random suffix.
+ * Generate a session ID from a timestamp and random suffix.
  * Format: `sess-YYYYMMDD-HHmmss-<hex>`.
  */
-function generateSessionId(nowMs: number): string {
-  const d = new Date(nowMs);
+export function generateSessionId(nowMs?: number): string {
+  const d = new Date(nowMs ?? Date.now());
   const date = d.toISOString().slice(0, 10).replace(/-/g, "");
   const time = d.toISOString().slice(11, 19).replace(/:/g, "");
   const rand = Math.random().toString(16).slice(2, 8);
