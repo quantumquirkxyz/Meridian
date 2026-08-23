@@ -548,8 +548,6 @@ export class GammaSession {
     };
   }
 
-  // ── Audit Integration ─────────────────────────────────────────────
-
   // ── Helpers ──────────────────────────────────────────────────────
 
   /** Shared error-return shape for runCycle early exits (S4). */

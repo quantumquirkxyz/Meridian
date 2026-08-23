@@ -3,7 +3,6 @@ import {
   DEFAULT_CANARY_CONFIG,
   type ApprovedRiskDecision,
   type CanaryConfig,
-  type GammaControlCommand,
   type OrderIntent,
 } from "@agenttrading/contracts";
 import { type RegimeClassifierInput } from "../src/gamma/regime-classifier.ts";
