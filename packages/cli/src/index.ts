@@ -16,6 +16,7 @@
 import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
+import type { PaperRunner } from "@agenttrading/core";
 
 // ── Re-exports (keep backward-compatible library API) ─────────────────
 
@@ -88,97 +89,26 @@ function printSessionSummary(
   console.log();
 }
 
-// ── Synthetic cycle input ─────────────────────────────────────────────
-
-/** Generate synthetic GammaCycleInput for the cycle loop. */
-function syntheticCycleInput() {
-  return {
-    regime: {
-      realizedVolatility: 0.5,
-      spreadBps: 10,
-      liquidityUsd: 50_000,
-      gasPriceUsd: 5,
-      cumulativePnlUsd: 0,
-      maxDrawdownUsd: 0,
-      rpcHealthy: true,
-      cexHealthy: true,
-      directionalStreak: 0,
-      reversalCount: 0,
-      nowMs: Date.now(),
-    },
-    market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
-    intents: [],
-    riskDecisions: [],
-  };
-}
-
-// ── Mode Dispatch (S1: shared helper) ─────────────────────────────────
+// ── Mode Dispatch ─────────────────────────────────────────────────────
 
 /**
- * Run a trading session (paper or live). Creates a GammaSession, starts
- * it, and runs cycles at the configured interval.
- *
- * SP1: Dry-run runs the full cycle but skips order submission.
- * SP3: Mid-run errors are caught and the session summary is still printed.
+ * Run paper mode using PaperRunner. Connects to Bybit public WS,
+ * feeds market data into GammaSession, simulates fills, and produces
+ * audit trail + session report. No API keys required.
  */
-async function runSession(opts: RunOptions): Promise<{ exitCode: number }> {
-  const { config, cycleIntervalMs, dryRun, label } = opts;
-  const startTimeMs = Date.now();
+async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
+  const { PaperRunner } = await import("@agenttrading/core");
 
-  const { GammaSession } = await import("@agenttrading/core");
-  const session = new GammaSession({
-    canaryConfig: config.canaryConfig,
-    learningCycleInterval: 10,
+  const runner = new PaperRunner({
+    symbols: ["BTCUSDT"],
+    cycleIntervalMs: opts.cycleIntervalMs,
+    canaryConfig: opts.config.canaryConfig,
+    auditLogPath: `./reports/paper-session-${Date.now()}.jsonl`,
   });
 
-  session.start();
+  await runner.start();
 
-  console.log(`[${label}] Session started. Cycle interval: ${cycleIntervalMs}ms`);
-  if (dryRun) {
-    console.log(`[${label}] DRY-RUN mode active — order submission will be skipped.`);
-  }
-  console.log(`[${label}] Press Ctrl+C to stop.\n`);
-
-  // SP3: resolveRef lets the shutdown handler resolve the outer Promise
-  // even if the setInterval callback throws.
-  let resolveWait!: () => void;
-  const waitPromise = new Promise<void>((resolve) => {
-    resolveWait = resolve;
-  });
-
-  // Start the cycle loop
-  let cycleCount = 0;
-  const timer = setInterval(() => {
-    cycleCount++;
-
-    try {
-      // SP1: Always run the full cycle — dry-run only suppresses
-      // order submission, not regime classification / learning / routes.
-      const result = session.runCycle(syntheticCycleInput());
-
-      if (dryRun) {
-        // SP1: Log what the cycle did, but note submission is skipped.
-        console.log(
-          `[${label}] Cycle ${cycleCount} (dry-run): regime=${result.regimeClassification?.regime ?? "unknown"} submitted=${result.submittedCount} blocked=${result.blockedCount} — submission skipped`,
-        );
-      } else {
-        console.log(
-          `[${label}] Cycle ${cycleCount}: regime=${result.regimeClassification?.regime ?? "unknown"} submitted=${result.submittedCount} blocked=${result.blockedCount}`,
-        );
-      }
-    } catch (err) {
-      // SP3: Catch mid-run errors, print summary, and shut down.
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`\n[${label}] Cycle ${cycleCount} failed: ${message}`);
-      clearInterval(timer);
-      session.stop();
-      printSessionSummary(startTimeMs, config, `cycle error: ${message}`, false);
-      console.log(`[${label}] Session ended due to error. Goodbye.`);
-      resolveWait();
-    }
-  }, cycleIntervalMs);
-
-  // Wait for shutdown signal
+  // Graceful shutdown (AC11)
   await new Promise<void>((resolve) => {
     let shutdownDone = false;
 
@@ -186,29 +116,86 @@ async function runSession(opts: RunOptions): Promise<{ exitCode: number }> {
       if (shutdownDone) return;
       shutdownDone = true;
 
-      clearInterval(timer);
       process.removeListener("SIGINT", shutdown);
       process.removeListener("SIGTERM", shutdown);
 
-      console.log(`\n[${label}] Shutting down...`);
-
-      // Flush and stop the session
-      session.stop();
-
-      // Print session summary
-      printSessionSummary(startTimeMs, config, "SIGINT/SIGTERM", true);
-
-      console.log(`[${label}] Session ended. Goodbye.`);
+      console.log("\n[paper] Shutting down...");
+      runner.stop();
       resolve();
     };
 
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
+  });
 
-    // Also resolve when the wait promise resolves (from SP3 error handler)
-    waitPromise.then(() => {
-      if (!shutdownDone) shutdown();
-    });
+  return { exitCode: 0 };
+}
+
+/**
+ * Run live mode. Placeholder — requires Bybit REST + WS connectors.
+ */
+async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
+  console.log("[live] Live mode is not yet fully operational.");
+  console.log("[live] For live trading, ensure Bybit REST and WebSocket connectors are wired.\n");
+
+  // Fallback to synthetic cycle for now
+  const { GammaSession } = await import("@agenttrading/core");
+  const session = new GammaSession({
+    canaryConfig: opts.config.canaryConfig,
+    learningCycleInterval: 10,
+  });
+
+  session.start();
+  console.log(`[live] Session started. Cycle interval: ${opts.cycleIntervalMs}ms`);
+  console.log("[live] Press Ctrl+C to stop.\n");
+
+  const startTimeMs = Date.now();
+  let cycleCount = 0;
+
+  await new Promise<void>((resolve) => {
+    let shutdownDone = false;
+    const timer = setInterval(() => {
+      cycleCount++;
+      try {
+        const result = session.runCycle({
+          regime: {
+            realizedVolatility: 0.5, spreadBps: 10, liquidityUsd: 50_000,
+            gasPriceUsd: 5, cumulativePnlUsd: 0, maxDrawdownUsd: 0,
+            rpcHealthy: true, cexHealthy: true, directionalStreak: 0,
+            reversalCount: 0, nowMs: Date.now(),
+          },
+          market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+          intents: [], riskDecisions: [],
+        });
+        console.log(
+          `[live] Cycle ${cycleCount}: regime=${result.regimeClassification?.regime ?? "unknown"} submitted=${result.submittedCount} blocked=${result.blockedCount}`,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`\n[live] Cycle ${cycleCount} failed: ${message}`);
+        clearInterval(timer);
+        session.stop();
+        printSessionSummary(startTimeMs, opts.config, `cycle error: ${message}`, false);
+        console.log("[live] Session ended due to error. Goodbye.");
+        if (!shutdownDone) { shutdownDone = true; resolve(); }
+      }
+    }, opts.cycleIntervalMs);
+
+    const shutdown = () => {
+      if (shutdownDone) return;
+      shutdownDone = true;
+      clearInterval(timer);
+      process.removeListener("SIGINT", shutdown);
+      process.removeListener("SIGTERM", shutdown);
+      console.log("\n[live] Shutting down...");
+      session.stop();
+      printSessionSummary(startTimeMs, opts.config, "SIGINT/SIGTERM", true);
+      console.log("[live] Session ended. Goodbye.");
+      resolve();
+    };
+
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
   });
 
   return { exitCode: 0 };
@@ -290,12 +277,12 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     label: config.mode,
   };
 
-  if (config.mode === "live") {
-    console.log("[live] Live mode is not yet fully operational.");
-    console.log("[live] For live trading, ensure Bybit REST and WebSocket connectors are wired.\n");
+  let exitCode: number;
+  if (config.mode === "paper") {
+    exitCode = (await runPaperMode(runOpts)).exitCode;
+  } else {
+    exitCode = (await runLiveMode(runOpts)).exitCode;
   }
-
-  const { exitCode } = await runSession(runOpts);
   process.exit(exitCode);
 }
 
