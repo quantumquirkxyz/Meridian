@@ -8,6 +8,12 @@
 
 import { parseArgs } from "node:util";
 
+// S4: Read version from package.json instead of hardcoding.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { version: CLI_VERSION } = require("../../../package.json") as {
+  version: string;
+};
+
 /** Valid system mode. */
 export type Mode = "paper" | "live";
 
@@ -91,9 +97,9 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
     process.exit(0);
   }
 
-  // Handle --version
+  // Handle --version (S4: reads from package.json)
   if (parsed.values.version) {
-    console.log("0.1.0");
+    console.log(CLI_VERSION);
     process.exit(0);
   }
 
