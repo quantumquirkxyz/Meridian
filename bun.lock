@@ -19,6 +19,17 @@
         "@types/bun": "^1.3.14",
       },
     },
+    "packages/cli": {
+      "name": "@agenttrading/cli",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agenttrading/contracts": "workspace:*",
+        "@agenttrading/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+      },
+    },
     "packages/connectors": {
       "name": "@agenttrading/connectors",
       "version": "0.1.0",
@@ -95,6 +106,8 @@
   },
   "packages": {
     "@agenttrading/agents": ["@agenttrading/agents@workspace:packages/agents"],
+
+    "@agenttrading/cli": ["@agenttrading/cli@workspace:packages/cli"],
 
     "@agenttrading/connectors": ["@agenttrading/connectors@workspace:packages/connectors"],
 
