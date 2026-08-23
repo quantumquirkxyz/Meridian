@@ -46,7 +46,7 @@ export interface ConfigError {
 }
 
 /** Result of config loading — either valid config or list of errors. */
-export type ConfigResult =
+export type LoadConfigResult =
   | { ok: true; config: AppConfig }
   | { ok: false; errors: ConfigError[] };
 
@@ -55,6 +55,9 @@ export type ConfigResult =
 const DEFAULT_CYCLE_INTERVAL_MS = 5_000;
 const DEFAULT_LOG_LEVEL = "info";
 const DEFAULT_REPORT_DIR = "./reports";
+
+const VALID_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = (typeof VALID_LOG_LEVELS)[number];
 
 // ── Loading ──────────────────────────────────────────────────────────
 
@@ -71,7 +74,7 @@ export async function loadConfig(
     configPath?: string;
     env?: Record<string, string | undefined>;
   },
-): Promise<ConfigResult> {
+): Promise<LoadConfigResult> {
   const env = overrides?.env ?? (Bun.env as Record<string, string | undefined>);
   const configPath = overrides?.configPath ?? env.CONFIG_PATH;
 
@@ -92,7 +95,8 @@ export async function loadConfig(
     errors,
   );
 
-  const logLevel = env.LOG_LEVEL ?? DEFAULT_LOG_LEVEL;
+  const rawLogLevel = env.LOG_LEVEL ?? DEFAULT_LOG_LEVEL;
+  const logLevel = parseLogLevel(rawLogLevel, errors);
   const reportDir = env.REPORT_DIR ?? DEFAULT_REPORT_DIR;
 
   // ── Validate API keys based on mode ───────────────────────────────
@@ -114,7 +118,7 @@ export async function loadConfig(
     }
   }
 
-  // ── Early return if validation failed ─────────────────────────────
+  // ── Early return if validation failed (pre-config) ───────────────
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -127,6 +131,19 @@ export async function loadConfig(
       return { ok: false, errors: loadResult.errors };
     }
     canaryConfig = mergeCanaryConfig(DEFAULT_CANARY_CONFIG, loadResult.config);
+  }
+
+  // ── Validate canary config for live mode ──────────────────────────
+  if (mode === "live" && !canaryConfig.apiKeys.withdrawalsDisabled) {
+    errors.push({
+      field: "WITHDRAWALS_DISABLED",
+      message: "Live mode requires withdrawals to be disabled on API keys.",
+    });
+  }
+
+  // ── Early return if post-config validation failed ─────────────────
+  if (errors.length > 0) {
+    return { ok: false, errors };
   }
 
   return {
@@ -149,6 +166,18 @@ export async function loadConfig(
 function parseMode(raw: string): Mode | undefined {
   if (raw === "paper" || raw === "live") return raw;
   return undefined;
+}
+
+function parseLogLevel(raw: string, errors: ConfigError[]): string {
+  if (raw === "") return DEFAULT_LOG_LEVEL;
+  if ((VALID_LOG_LEVELS as readonly string[]).includes(raw)) {
+    return raw;
+  }
+  errors.push({
+    field: "LOG_LEVEL",
+    message: `Invalid log level "${raw}". Must be one of: ${VALID_LOG_LEVELS.join(", ")}.`,
+  });
+  return DEFAULT_LOG_LEVEL;
 }
 
 function parsePositiveInt(

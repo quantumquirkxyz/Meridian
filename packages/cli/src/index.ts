@@ -6,4 +6,4 @@
  */
 
 export { loadConfig, formatConfigErrors } from "./config.ts";
-export type { AppConfig, Mode, ConfigResult, ConfigError } from "./config.ts";
+export type { AppConfig, Mode, LoadConfigResult, ConfigError, LogLevel } from "./config.ts";

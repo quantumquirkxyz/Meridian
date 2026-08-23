@@ -6,7 +6,6 @@ import {
   loadConfig,
   formatConfigErrors,
   type ConfigError,
-  type AppConfig,
 } from "../src/config.ts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
@@ -31,6 +30,19 @@ function cleanTmpDir(filePath: string): void {
     rmSync(join(filePath, ".."), { recursive: true, force: true });
   } catch {
     // ignore cleanup errors in tests
+  }
+}
+
+/** Create a temp JSON config file, run the test callback, then clean up. */
+async function withTmpJsonFile(
+  content: object,
+  fn: (filePath: string) => Promise<void>,
+): Promise<void> {
+  const filePath = tmpJsonFile(content);
+  try {
+    await fn(filePath);
+  } finally {
+    cleanTmpDir(filePath);
   }
 }
 
@@ -224,83 +236,71 @@ describe("loadConfig", () => {
 
 describe("JSON config override", () => {
   test("--config overrides canary capital limits", async () => {
-    const filePath = tmpJsonFile({
-      ...DEFAULT_CANARY_CONFIG,
-      capitalLimits: {
-        maxCapitalUsd: 500,
-        maxRiskPerTradeUsd: 25,
-        maxDailyLossUsd: 50,
-        maxWeeklyLossUsd: 150,
+    await withTmpJsonFile(
+      {
+        ...DEFAULT_CANARY_CONFIG,
+        capitalLimits: {
+          maxCapitalUsd: 500,
+          maxRiskPerTradeUsd: 25,
+          maxDailyLossUsd: 50,
+          maxWeeklyLossUsd: 150,
+        },
       },
-    });
+      async (filePath) => {
+        const result = await loadConfig({ env: env(), configPath: filePath });
 
-    try {
-      const result = await loadConfig({
-        env: env(),
-        configPath: filePath,
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.config.canaryConfig.capitalLimits.maxCapitalUsd).toBe(500);
-        expect(result.config.canaryConfig.capitalLimits.maxRiskPerTradeUsd).toBe(25);
-        // Shallow merge: entire capitalLimits object is replaced, so all fields come from override
-        expect(result.config.canaryConfig.capitalLimits.maxDailyLossUsd).toBe(50);
-      }
-    } finally {
-      cleanTmpDir(filePath);
-    }
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.config.canaryConfig.capitalLimits.maxCapitalUsd).toBe(500);
+          expect(result.config.canaryConfig.capitalLimits.maxRiskPerTradeUsd).toBe(25);
+          // Shallow merge: entire capitalLimits object is replaced, so all fields come from override
+          expect(result.config.canaryConfig.capitalLimits.maxDailyLossUsd).toBe(50);
+        }
+      },
+    );
   });
 
   test("--config overrides exposure limits", async () => {
-    const filePath = tmpJsonFile({
-      ...DEFAULT_CANARY_CONFIG,
-      exposureLimits: {
-        maxExposurePerTokenUsd: 100,
-        maxExposurePerVenueUsd: 250,
-        maxExposurePerChainUsd: 250,
+    await withTmpJsonFile(
+      {
+        ...DEFAULT_CANARY_CONFIG,
+        exposureLimits: {
+          maxExposurePerTokenUsd: 100,
+          maxExposurePerVenueUsd: 250,
+          maxExposurePerChainUsd: 250,
+        },
       },
-    });
+      async (filePath) => {
+        const result = await loadConfig({ env: env(), configPath: filePath });
 
-    try {
-      const result = await loadConfig({
-        env: env(),
-        configPath: filePath,
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.config.canaryConfig.exposureLimits.maxExposurePerTokenUsd).toBe(100);
-      }
-    } finally {
-      cleanTmpDir(filePath);
-    }
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.config.canaryConfig.exposureLimits.maxExposurePerTokenUsd).toBe(100);
+        }
+      },
+    );
   });
 
   test("--config overrides scope", async () => {
-    const filePath = tmpJsonFile({
-      ...DEFAULT_CANARY_CONFIG,
-      scope: {
-        allowedStrategyIds: ["alpha-strategy"],
-        allowedVenues: ["bybit"],
-        allowedChains: ["ethereum"],
-        allowedTokens: ["BTC", "ETH"],
+    await withTmpJsonFile(
+      {
+        ...DEFAULT_CANARY_CONFIG,
+        scope: {
+          allowedStrategyIds: ["alpha-strategy"],
+          allowedVenues: ["bybit"],
+          allowedChains: ["ethereum"],
+          allowedTokens: ["BTC", "ETH"],
+        },
       },
-    });
+      async (filePath) => {
+        const result = await loadConfig({ env: env(), configPath: filePath });
 
-    try {
-      const result = await loadConfig({
-        env: env(),
-        configPath: filePath,
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.config.canaryConfig.scope.allowedTokens).toEqual(["BTC", "ETH"]);
-      }
-    } finally {
-      cleanTmpDir(filePath);
-    }
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.config.canaryConfig.scope.allowedTokens).toEqual(["BTC", "ETH"]);
+        }
+      },
+    );
   });
 
   test("non-existent config file returns error", async () => {
@@ -340,25 +340,110 @@ describe("JSON config override", () => {
   });
 
   test("invalid canary config fields return error", async () => {
-    const filePath = tmpJsonFile({
-      configId: 123, // should be string
-      name: "test",
+    await withTmpJsonFile(
+      { configId: 123, name: "test" },
+      async (filePath) => {
+        const result = await loadConfig({ env: env(), configPath: filePath });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          const err = result.errors.find((e) => e.field === "CONFIG_PATH");
+          expect(err).toBeDefined();
+          expect(err!.message).toContain("Invalid canary config");
+        }
+      },
+    );
+  });
+});
+
+describe("live mode safety checks", () => {
+  test("live mode fails when withdrawalsDisabled is false in config", async () => {
+    await withTmpJsonFile(
+      {
+        ...DEFAULT_CANARY_CONFIG,
+        apiKeys: {
+          readApiKey: { keyId: "k", secretRef: "s" },
+          tradingApiKey: { keyId: "k", secretRef: "s" },
+          withdrawalsDisabled: false,
+        },
+      },
+      async (filePath) => {
+        const result = await loadConfig({
+          env: env({
+            MODE: "live",
+            BYBIT_API_KEY: "test-key",
+            BYBIT_API_SECRET: "test-secret",
+          }),
+          configPath: filePath,
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          const err = result.errors.find((e) => e.field === "WITHDRAWALS_DISABLED");
+          expect(err).toBeDefined();
+          expect(err!.message).toContain("withdrawals");
+        }
+      },
+    );
+  });
+
+  test("live mode succeeds when withdrawalsDisabled is true in config", async () => {
+    await withTmpJsonFile(
+      {
+        ...DEFAULT_CANARY_CONFIG,
+        apiKeys: {
+          readApiKey: { keyId: "k", secretRef: "s" },
+          tradingApiKey: { keyId: "k", secretRef: "s" },
+          withdrawalsDisabled: true,
+        },
+      },
+      async (filePath) => {
+        const result = await loadConfig({
+          env: env({
+            MODE: "live",
+            BYBIT_API_KEY: "test-key",
+            BYBIT_API_SECRET: "test-secret",
+          }),
+          configPath: filePath,
+        });
+
+        expect(result.ok).toBe(true);
+      },
+    );
+  });
+});
+
+describe("LOG_LEVEL validation", () => {
+  test("valid log levels are accepted", async () => {
+    for (const level of ["debug", "info", "warn", "error"]) {
+      const result = await loadConfig({ env: env({ LOG_LEVEL: level }) });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.config.logLevel).toBe(level);
+      }
+    }
+  });
+
+  test("invalid log level reports error", async () => {
+    const result = await loadConfig({
+      env: env({ LOG_LEVEL: "debg" }),
     });
 
-    try {
-      const result = await loadConfig({
-        env: env(),
-        configPath: filePath,
-      });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const err = result.errors.find((e) => e.field === "LOG_LEVEL");
+      expect(err).toBeDefined();
+      expect(err!.message).toContain("Invalid log level");
+      expect(err!.message).toContain("debug");
+    }
+  });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        const err = result.errors.find((e) => e.field === "CONFIG_PATH");
-        expect(err).toBeDefined();
-        expect(err!.message).toContain("Invalid canary config");
-      }
-    } finally {
-      cleanTmpDir(filePath);
+  test("empty log level falls back to default", async () => {
+    const result = await loadConfig({ env: env({ LOG_LEVEL: "" }) });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.logLevel).toBe("info");
     }
   });
 });
