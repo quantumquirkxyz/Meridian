@@ -8,8 +8,7 @@
 
 import { parseArgs } from "node:util";
 
-// S4: Read version from package.json instead of hardcoding.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// Read version from package.json instead of hardcoding.
 const { version: CLI_VERSION } = require("../../../package.json") as {
   version: string;
 };

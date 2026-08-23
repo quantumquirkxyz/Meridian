@@ -71,6 +71,7 @@ function printSessionSummary(
   startTimeMs: number,
   config: AppConfig,
   reason: string,
+  completed: boolean,
 ): void {
   const elapsedMs = Date.now() - startTimeMs;
   const elapsedSec = (elapsedMs / 1000).toFixed(1);
@@ -82,7 +83,7 @@ function printSessionSummary(
   console.log(`║  Mode:          ${config.mode.padEnd(40)}║`);
   console.log(`║  Duration:      ${elapsedSec}s${" ".repeat(Math.max(0, 42 - elapsedSec.length))}║`);
   console.log(`║  Stop Reason:   ${reason.padEnd(40)}║`);
-  console.log(`║  Completed:     ${"yes".padEnd(40)}║`);
+  console.log(`║  Completed:     ${(completed ? "yes" : "no").padEnd(40)}║`);
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log();
 }
@@ -171,7 +172,7 @@ async function runSession(opts: RunOptions): Promise<{ exitCode: number }> {
       console.error(`\n[${label}] Cycle ${cycleCount} failed: ${message}`);
       clearInterval(timer);
       session.stop();
-      printSessionSummary(startTimeMs, config, `cycle error: ${message}`);
+      printSessionSummary(startTimeMs, config, `cycle error: ${message}`, false);
       console.log(`[${label}] Session ended due to error. Goodbye.`);
       resolveWait();
     }
@@ -179,8 +180,15 @@ async function runSession(opts: RunOptions): Promise<{ exitCode: number }> {
 
   // Wait for shutdown signal
   await new Promise<void>((resolve) => {
+    let shutdownDone = false;
+
     const shutdown = () => {
+      if (shutdownDone) return;
+      shutdownDone = true;
+
       clearInterval(timer);
+      process.removeListener("SIGINT", shutdown);
+      process.removeListener("SIGTERM", shutdown);
 
       console.log(`\n[${label}] Shutting down...`);
 
@@ -188,7 +196,7 @@ async function runSession(opts: RunOptions): Promise<{ exitCode: number }> {
       session.stop();
 
       // Print session summary
-      printSessionSummary(startTimeMs, config, "SIGINT/SIGTERM");
+      printSessionSummary(startTimeMs, config, "SIGINT/SIGTERM", true);
 
       console.log(`[${label}] Session ended. Goodbye.`);
       resolve();
@@ -198,7 +206,9 @@ async function runSession(opts: RunOptions): Promise<{ exitCode: number }> {
     process.on("SIGTERM", shutdown);
 
     // Also resolve when the wait promise resolves (from SP3 error handler)
-    waitPromise.then(resolve);
+    waitPromise.then(() => {
+      if (!shutdownDone) shutdown();
+    });
   });
 
   return { exitCode: 0 };
