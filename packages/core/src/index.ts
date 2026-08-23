@@ -37,4 +37,7 @@ export * from "./gamma/report-generator.ts";
 export * from "./gamma/audit-exporter.ts";
 export * from "./gamma/audit-availability.ts";
 export * from "./gamma/gamma-session.ts";
+export * from "./paper/paper-runner.ts";
+export * from "./paper/audit-logger.ts";
+export * from "./paper/session-report.ts";
 
