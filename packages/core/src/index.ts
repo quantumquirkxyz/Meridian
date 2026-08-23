@@ -40,4 +40,6 @@ export * from "./gamma/gamma-session.ts";
 export * from "./paper/paper-runner.ts";
 export * from "./paper/audit-logger.ts";
 export * from "./paper/session-report.ts";
+export * from "./utils/slippage.ts";
+export * from "./utils/market-state.ts";
 

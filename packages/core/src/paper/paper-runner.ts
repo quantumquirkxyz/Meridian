@@ -26,16 +26,10 @@ import { PaperExecutionEngine, type PaperMarketSnapshot } from "../execution/pap
 import { RegimeClassifier, type RegimeClassifierInput } from "../gamma/regime-classifier.ts";
 import { PaperAuditLogger } from "./audit-logger.ts";
 import { buildSessionReport, printSessionReport, type PaperTradeRecord } from "./session-report.ts";
+import { computeSlippageBps } from "../utils/slippage.ts";
+import type { MarketState } from "../utils/market-state.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
-
-/** S2: Bundled market state from WS data. */
-interface MarketState {
-  bid: number;
-  ask: number;
-  mid: number;
-  liquidityUsd: number;
-}
 
 export interface PaperRunnerConfig {
   /** Symbols to subscribe to on Bybit public WS (e.g. ["BTCUSDT", "ETHUSDT"]). */
@@ -84,22 +78,6 @@ const BYBIT_PUBLIC_WS_URL = "wss://stream.bybit.com/v5/public/linear";
 const WS_OPEN = 1;
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-/**
- * SP1: Compute slippage in basis points from order size and liquidity depth.
- * Larger orders relative to available liquidity incur higher slippage.
- */
-function computeSlippageBps(
-  orderSizeUsd: number,
-  liquidityUsd: number,
-  baseSlippageBps: number,
-): number {
-  if (liquidityUsd <= 0) return baseSlippageBps;
-  const impactRatio = orderSizeUsd / liquidityUsd;
-  // Linear impact: 1% of liquidity = 10bps additional slippage
-  const impactBps = Math.floor(impactRatio * 1000);
-  return baseSlippageBps + impactBps;
-}
 
 // ── PaperRunner ──────────────────────────────────────────────────────
 

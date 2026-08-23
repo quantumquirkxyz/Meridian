@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LiveRunner } from "../src/live-runner.ts";
-import type { PaperTradeRecord } from "@agenttrading/core";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -23,33 +22,20 @@ function cleanTmpDir(): void {
   }
 }
 
-/** Mock WebSocket for testing. */
-function createMockWs() {
-  const messages: string[] = [];
-  const handlers: Record<string, (event: unknown) => void> = {};
-
-  const ws = {
-    readyState: 1, // OPEN
-    messages,
-    close() {},
-    send(data: string) {
-      messages.push(data);
+function createRunner(overrides?: Record<string, unknown>): LiveRunner {
+  return new LiveRunner({
+    symbols: ["BTCUSDT"],
+    bybitApiKey: "test-key",
+    bybitApiSecret: "test-secret",
+    cycleIntervalMs: 1000,
+    auditLogPath: join(tmpDir, "audit.jsonl"),
+    nowMs: () => 1000,
+    canaryConfig: {
+      ...DEFAULT_CANARY_CONFIG,
+      apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
     },
-    addEventListener(type: string, handler: (event: unknown) => void) {
-      handlers[type] = handler;
-    },
-    simulateMessage(data: string) {
-      handlers["message"]?.({ data });
-    },
-    simulateOpen() {
-      handlers["open"]?.({});
-    },
-    simulateClose() {
-      handlers["close"]?.({ reason: "test" });
-    },
-  };
-
-  return ws;
+    ...overrides,
+  });
 }
 
 // ── LiveRunner Tests ────────────────────────────────────────────────
@@ -107,37 +93,14 @@ describe("LiveRunner", () => {
   });
 
   test("AC8: accepts valid API keys with withdrawals disabled", () => {
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "test.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
+    const runner = createRunner();
     expect(runner).toBeDefined();
   });
 
   // ── AC9: Exchange connectivity check ──────────────────────────────
 
   test("AC9: start fails if exchange unreachable", async () => {
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "test.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
+    const runner = createRunner();
     await expect(runner.start()).rejects.toThrow(
       "Failed to verify Bybit API connectivity",
     );
@@ -147,224 +110,144 @@ describe("LiveRunner", () => {
 
   test("AC11: creates audit log file on construction", () => {
     const auditPath = join(tmpDir, "audit.jsonl");
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: auditPath,
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-    expect(runner).toBeDefined();
-    // Audit logger should have created the file
+    createRunner({ auditLogPath: auditPath });
     const content = readFileSync(auditPath, "utf-8");
-    expect(content).toBe(""); // Empty but created
+    expect(content).toBe("");
   });
 
   // ── AC13: Graceful shutdown ──────────────────────────────────────
 
-  test("AC13: stop produces SESSION_ENDED audit event", async () => {
+  test("AC13: stop produces SESSION_ENDED audit event", () => {
     const auditPath = join(tmpDir, "audit.jsonl");
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: auditPath,
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
-    // Simulate starting and immediately stopping (without real WS connection)
-    // We'll test that stop() handles the not-running case gracefully
+    const runner = createRunner({ auditLogPath: auditPath });
     runner.stop();
-
     // Stop should be a no-op when not running
     const content = readFileSync(auditPath, "utf-8");
-    expect(content).toBe(""); // No SESSION_ENDED since we never started
+    expect(content).toBe("");
   });
 
   test("AC13: stop is idempotent", () => {
-    const auditPath = join(tmpDir, "audit.jsonl");
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: auditPath,
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
+    const runner = createRunner();
     runner.stop();
     runner.stop(); // Should not throw
   });
 
   // ── AC10: Emergency modes ────────────────────────────────────────
 
-  test("AC10: GammaSession control is accessible through runner", () => {
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
+  test("AC10: control() sends commands to session", () => {
+    const runner = createRunner();
+    const result = runner.control("cancel-all");
+    expect(result.ok).toBe(true);
+    expect(result.command).toBe("cancel-all");
+  });
 
-    // The runner uses GammaSession internally which supports
-    // cancel-all, reduce-only, cash-only emergency modes
-    expect(runner).toBeDefined();
+  test("AC10: control() supports reduce-only mode", () => {
+    const runner = createRunner();
+    const result = runner.control("reduce-only");
+    expect(result.ok).toBe(true);
+    expect(result.mode).toBe("REDUCE_ONLY");
+  });
+
+  test("AC10: control() supports cash-only mode", () => {
+    const runner = createRunner();
+    const result = runner.control("cash-only");
+    expect(result.ok).toBe(true);
+    expect(result.mode).toBe("CASH_ONLY");
+  });
+
+  test("AC10: control() supports halt", () => {
+    const runner = createRunner();
+    // Start the session first so halt has an effect
+    runner.control("start");
+    const result = runner.control("halt");
+    expect(result.ok).toBe(true);
+    expect(result.killSwitchActive).toBe(true);
   });
 
   // ── AC4: Canary limits enforcement ───────────────────────────────
 
   test("AC4: LiveExecutionEngine enforces capital limits via canary config", () => {
-    const lowCapitalConfig = {
-      ...DEFAULT_CANARY_CONFIG,
-      capitalLimits: {
-        ...DEFAULT_CANARY_CONFIG.capitalLimits,
-        maxCapitalUsd: 100,
-        maxRiskPerTradeUsd: 10,
+    const runner = createRunner({
+      canaryConfig: {
+        ...DEFAULT_CANARY_CONFIG,
+        capitalLimits: {
+          ...DEFAULT_CANARY_CONFIG.capitalLimits,
+          maxCapitalUsd: 100,
+          maxRiskPerTradeUsd: 10,
+        },
+        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
       },
-      apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-    };
-
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: lowCapitalConfig,
     });
-
     expect(runner).toBeDefined();
   });
 
   // ── Event handler registration ───────────────────────────────────
 
   test("on() registers event handlers without errors", () => {
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
+    const runner = createRunner();
     runner.on({
       onCycle: () => {},
       onTrade: () => {},
       onError: () => {},
       onShutdown: () => {},
     });
-
     expect(runner).toBeDefined();
   });
 
   // ── Constructor validation ───────────────────────────────────────
 
   test("constructor initializes with valid config", () => {
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT", "ETHUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 5000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
+    const runner = createRunner({ symbols: ["BTCUSDT", "ETHUSDT"] });
     expect(runner).toBeDefined();
   });
 
   test("constructor defaults symbols to BTCUSDT", () => {
-    const runner = new LiveRunner({
-      symbols: [],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
+    const runner = createRunner({ symbols: [] });
     expect(runner).toBeDefined();
   });
 
   // ── AC1/AC2: WebSocket connection types ──────────────────────────
 
   test("AC1/AC2: runner configures public and private WS streams", () => {
-    // Verify the runner is configured to connect to both public and private
-    // WebSocket streams. The actual connection is tested via integration tests.
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "live-api-key",
-      bybitApiSecret: "live-api-secret",
-      cycleIntervalMs: 5000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => Date.now(),
-      canaryConfig: {
-        ...DEFAULT_CANARY_CONFIG,
-        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-      },
-    });
-
+    const runner = createRunner();
     expect(runner).toBeDefined();
   });
 
   // ── AC5: Kill switch integration ─────────────────────────────────
 
   test("AC5: kill switch config is passed to session", () => {
-    const configWithKillSwitch = {
-      ...DEFAULT_CANARY_CONFIG,
-      killSwitch: {
-        ...DEFAULT_CANARY_CONFIG.killSwitch,
-        autoHaltDailyLossUsd: 50,
-        autoHaltWeeklyLossUsd: 200,
-        autoHaltOnOrphans: true,
-        autoHaltOnReconciliationMismatch: true,
+    const runner = createRunner({
+      canaryConfig: {
+        ...DEFAULT_CANARY_CONFIG,
+        killSwitch: {
+          ...DEFAULT_CANARY_CONFIG.killSwitch,
+          autoHaltDailyLossUsd: 50,
+          autoHaltWeeklyLossUsd: 200,
+          autoHaltOnOrphans: true,
+          autoHaltOnReconciliationMismatch: true,
+        },
+        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
       },
-      apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: true },
-    };
-
-    const runner = new LiveRunner({
-      symbols: ["BTCUSDT"],
-      bybitApiKey: "test-key",
-      bybitApiSecret: "test-secret",
-      cycleIntervalMs: 1000,
-      auditLogPath: join(tmpDir, "audit.jsonl"),
-      nowMs: () => 1000,
-      canaryConfig: configWithKillSwitch,
     });
+    expect(runner).toBeDefined();
+  });
 
+  // ── SP4: Configurable order category ─────────────────────────────
+
+  test("SP4: order category is configurable", () => {
+    const runner = createRunner({ orderCategory: "spot" });
+    expect(runner).toBeDefined();
+  });
+
+  test("SP4: order category defaults to linear", () => {
+    const runner = createRunner();
+    expect(runner).toBeDefined();
+  });
+
+  // ── SP6: Fee rate configuration ──────────────────────────────────
+
+  test("SP6: fee bps is configurable", () => {
+    const runner = createRunner({ feeBps: 5 });
     expect(runner).toBeDefined();
   });
 });

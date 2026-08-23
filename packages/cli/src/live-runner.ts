@@ -22,16 +22,22 @@
  *   AC13: Graceful shutdown: cancel open orders, close WS, flush logs, print summary
  */
 
-import type { CanaryConfig, OrderIntent, OrderUpdate } from "@agenttrading/contracts";
+import type {
+  CanaryConfig,
+  GammaControlCommand,
+  OrderIntent,
+  OrderUpdate,
+} from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import {
   GammaSession,
-  type GammaCycleInput,
+  PaperAuditLogger,
+  buildSessionReport,
+  printSessionReport,
+  ReconciliationEngine,
+  computeSlippageBps,
 } from "@agenttrading/core";
-import { PaperAuditLogger } from "@agenttrading/core";
-import { buildSessionReport, printSessionReport } from "@agenttrading/core";
-import type { PaperTradeRecord } from "@agenttrading/core";
-import { ReconciliationEngine } from "@agenttrading/core";
+import type { PaperTradeRecord, MarketState } from "@agenttrading/core";
 import {
   BybitRESTClient,
   BybitWebSocketClient,
@@ -55,6 +61,10 @@ export interface LiveRunnerConfig {
   auditLogPath?: string;
   /** Reconciliation interval in ms (default: 30_000). */
   reconciliationIntervalMs?: number;
+  /** Order category for Bybit REST API (default: "linear"). */
+  orderCategory?: "spot" | "linear" | "inverse" | "option";
+  /** Fee rate in basis points (default: 2). */
+  feeBps?: number;
   /** Injectable clock for testing. */
   nowMs?: () => number;
 }
@@ -78,7 +88,8 @@ export interface LiveRunnerEvents {
 const DEFAULT_AUDIT_LOG_PATH = "./reports/live-session.jsonl";
 const DEFAULT_SYMBOLS = ["BTCUSDT"];
 const DEFAULT_RECONCILIATION_INTERVAL_MS = 30_000;
-const WS_OPEN = 1;
+const DEFAULT_ORDER_CATEGORY = "linear" as const;
+const DEFAULT_FEE_BPS = 2;
 
 // ── LiveRunner ──────────────────────────────────────────────────────
 
@@ -105,6 +116,8 @@ export class LiveRunner {
       | "bybitApiSecret"
       | "cycleIntervalMs"
       | "reconciliationIntervalMs"
+      | "orderCategory"
+      | "feeBps"
     >
   > & {
     canaryConfig: CanaryConfig;
@@ -128,16 +141,12 @@ export class LiveRunner {
   private cycleTimer: ReturnType<typeof setInterval> | null = null;
   private reconciliationTimer: ReturnType<typeof setInterval> | null = null;
 
-  // Market state (updated from public WS)
-  private marketBid = 0;
-  private marketAsk = 0;
-  private marketMid = 0;
-  private marketLiquidityUsd = 10_000;
+  // S2: Bundled market state (updated from WS)
+  private market: MarketState = { bid: 0, ask: 0, mid: 0, liquidityUsd: 10_000 };
   private priceHistory: number[] = [];
 
-  // Order tracking
+  // Order tracking — maps exchange orderId → OrderIntent
   private pendingOrders: Map<string, OrderIntent> = new Map();
-  private filledOrderIds: Set<string> = new Set();
 
   // Tracking
   private trades: PaperTradeRecord[] = [];
@@ -150,7 +159,6 @@ export class LiveRunner {
   private learningRecommendationCount = 0;
   private startedAtMs = 0;
   private events: LiveRunnerEvents = {};
-  private lastReconciledAtMs = 0;
 
   constructor(config: LiveRunnerConfig) {
     this.nowMs = config.nowMs ?? (() => Date.now());
@@ -164,6 +172,8 @@ export class LiveRunner {
       auditLogPath: config.auditLogPath ?? DEFAULT_AUDIT_LOG_PATH,
       reconciliationIntervalMs:
         config.reconciliationIntervalMs ?? DEFAULT_RECONCILIATION_INTERVAL_MS,
+      orderCategory: config.orderCategory ?? DEFAULT_ORDER_CATEGORY,
+      feeBps: config.feeBps ?? DEFAULT_FEE_BPS,
       nowMs: this.nowMs,
     };
 
@@ -200,10 +210,12 @@ export class LiveRunner {
     // Wire WS events (AC1, AC2)
     const wsEvents: BybitWSClientEvents = {
       onMarketData: (snapshot) => {
-        this.marketBid = snapshot.bid ?? 0;
-        this.marketAsk = snapshot.ask ?? 0;
-        this.marketMid = snapshot.mid ?? 0;
-        this.marketLiquidityUsd = snapshot.depth;
+        this.market = {
+          bid: snapshot.bid ?? 0,
+          ask: snapshot.ask ?? 0,
+          mid: snapshot.mid ?? 0,
+          liquidityUsd: snapshot.depth,
+        };
       },
       onOrderUpdate: (update) => {
         this.handleOrderUpdate(update);
@@ -224,12 +236,20 @@ export class LiveRunner {
     this.events = { ...this.events, ...events };
   }
 
+  /**
+   * SP2: Send a control command to the canary session.
+   * Enables emergency modes (cancel-all, reduce-only, cash-only) from
+   * the CLI or external callers.
+   *
+   * AC10: Emergency modes reachable from GammaControlStatus.
+   */
+  control(command: GammaControlCommand) {
+    return this.session.control(command);
+  }
+
   /** Start the live runner: validate, connect WS, reconcile, start cycles. */
   async start(): Promise<void> {
     if (this.running) return;
-
-    // AC8: Verify API keys are present and non-empty
-    this.validateConfig();
 
     this.running = true;
     this.startedAtMs = this.nowMs();
@@ -250,7 +270,9 @@ export class LiveRunner {
     console.log(`[live] Verifying Bybit API connectivity...`);
     try {
       const accountInfo = await this.restClient.getAccountInfo();
-      console.log(`[live] Bybit API reachable. Account type: ${accountInfo.list?.[0]?.accountType ?? "unknown"}`);
+      console.log(
+        `[live] Bybit API reachable. Account type: ${accountInfo.list?.[0]?.accountType ?? "unknown"}`,
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[live] ERROR: Bybit API connectivity check failed: ${msg}`);
@@ -388,12 +410,13 @@ export class LiveRunner {
 
     // AC6: Record as FILLED only when confirmed via WebSocket
     if (update.status === "FILLED") {
-      this.filledOrderIds.add(orderId);
-
       const intent = this.pendingOrders.get(orderId);
       const fillPrice = update.averagePrice ?? update.price ?? 0;
       const fillQuantity = update.cumulativeFilledQty;
       const notionalUsd = fillQuantity * fillPrice;
+
+      // SP6: Compute fees from configured fee rate
+      const feesUsd = notionalUsd * (this.config.feeBps / 10_000);
 
       const trade: PaperTradeRecord = {
         orderId,
@@ -402,10 +425,10 @@ export class LiveRunner {
         fillPrice,
         fillQuantity,
         notionalUsd,
-        feesUsd: 0, // Fees computed from exchange
-        slippageBps: this.computeSlippageBps(
+        feesUsd,
+        slippageBps: computeSlippageBps(
           notionalUsd,
-          this.marketLiquidityUsd,
+          this.market.liquidityUsd,
           10,
         ),
         filledAtMs: update.timestampMs,
@@ -431,7 +454,7 @@ export class LiveRunner {
       this.pendingOrders.delete(orderId);
 
       console.log(
-        `[live] FILL confirmed: ${update.symbol} ${update.side} ${fillQuantity} @ $${fillPrice.toFixed(2)}`,
+        `[live] FILL confirmed: ${update.symbol} ${update.side} ${fillQuantity} @ $${fillPrice.toFixed(2)} (fees: $${feesUsd.toFixed(4)})`,
       );
     } else if (
       update.status === "CANCELLED" ||
@@ -462,25 +485,34 @@ export class LiveRunner {
         }),
       );
 
-      // Get exchange open orders
-      const exchangeOpenOrders = await this.restClient.getOpenOrders({
-        category: "linear",
-        symbol: this.config.symbols[0],
-      });
+      // SP3: Reconcile all configured symbols, not just the first
+      const externalOrders: Array<{
+        orderId: string;
+        status: "OPEN" | "CLOSED" | "CANCELLED";
+        quantity: number;
+        filledQuantity: number;
+      }> = [];
 
-      const externalOrders = (exchangeOpenOrders.list ?? []).map(
-        (order: { orderId: string; qty: string; cumExecQty: string; orderStatus: string }) => ({
-          orderId: order.orderId,
-          status:
-            order.orderStatus === "Filled"
-              ? ("CLOSED" as const)
-              : order.orderStatus === "Cancelled"
-                ? ("CANCELLED" as const)
-                : ("OPEN" as const),
-          quantity: parseFloat(order.qty),
-          filledQuantity: parseFloat(order.cumExecQty),
-        }),
-      );
+      for (const symbol of this.config.symbols) {
+        const exchangeOpenOrders = await this.restClient.getOpenOrders({
+          category: this.config.orderCategory,
+          symbol,
+        });
+
+        for (const order of exchangeOpenOrders.list ?? []) {
+          externalOrders.push({
+            orderId: order.orderId,
+            status:
+              order.orderStatus === "Filled"
+                ? "CLOSED"
+                : order.orderStatus === "Cancelled"
+                  ? "CANCELLED"
+                  : "OPEN",
+            quantity: parseFloat(order.qty),
+            filledQuantity: parseFloat(order.cumExecQty),
+          });
+        }
+      }
 
       // Run reconciliation
       const report = this.reconciliationEngine.reconcile({
@@ -498,8 +530,6 @@ export class LiveRunner {
         },
         reconciledAtMs: this.nowMs(),
       });
-
-      this.lastReconciledAtMs = this.nowMs();
 
       // Notify session of reconciliation status
       this.session.setReconciliationStatus(report.unresolved);
@@ -533,12 +563,13 @@ export class LiveRunner {
     for (const [orderId, intent] of this.pendingOrders) {
       this.restClient
         .cancelOrder({
-          category: "linear",
+          category: this.config.orderCategory,
           symbol: intent.symbol,
           orderId,
         })
         .catch((cancelErr: unknown) => {
-          const msg = cancelErr instanceof Error ? cancelErr.message : String(cancelErr);
+          const msg =
+            cancelErr instanceof Error ? cancelErr.message : String(cancelErr);
           console.error(`[live] Failed to cancel order ${orderId}: ${msg}`);
         });
 
@@ -557,8 +588,8 @@ export class LiveRunner {
     this.cycleCount++;
 
     // Track price history for volatility
-    if (this.marketMid > 0) {
-      this.priceHistory.push(this.marketMid);
+    if (this.market.mid > 0) {
+      this.priceHistory.push(this.market.mid);
       if (this.priceHistory.length > 100) {
         this.priceHistory = this.priceHistory.slice(-100);
       }
@@ -586,25 +617,60 @@ export class LiveRunner {
     const result = this.session.runCycle({
       regime: regimeInput,
       market: {
-        bid: this.marketBid,
-        ask: this.marketAsk,
-        mid: this.marketMid,
-        liquidityUsd: this.marketLiquidityUsd,
+        bid: this.market.bid,
+        ask: this.market.ask,
+        mid: this.market.mid,
+        liquidityUsd: this.market.liquidityUsd,
       },
       intents,
       riskDecisions,
     });
 
+    // S5+SP5: Detect and audit regime changes
+    if (
+      result.regimeClassification !== undefined &&
+      result.regimeClassification.regime !== this.lastRegime
+    ) {
+      this.regimeChangeCount++;
+      this.lastRegime = result.regimeClassification.regime;
+      this.auditLogger.record("REGIME_CHANGED", {
+        cycleCount: this.cycleCount,
+        regime: result.regimeClassification.regime,
+        confidence: result.regimeClassification.confidence,
+      });
+    }
+
     this.ordersSubmitted += result.submittedCount;
     this.ordersBlocked += result.blockedCount;
     this.learningRecommendationCount += result.learningRecommendations.length;
 
-    // AC3: Place orders via REST for submitted intents
+    // S6: Track which intents were actually submitted via the session.
+    // The session's runCycle returns submittedCount; we place orders for
+    // the first N intents that were submitted (matching the session's
+    // evaluation order).
+    const submittedIntents: OrderIntent[] = [];
+    let regimeBlocked = 0;
     for (let i = 0; i < intents.length; i++) {
-      const intent = intents[i];
       if (i < result.submittedCount) {
-        await this.placeOrder(intent);
+        submittedIntents.push(intents[i]);
+      } else if (i < result.submittedCount + result.regimeBlockedCount) {
+        regimeBlocked++;
       }
+    }
+
+    // AC3: Place orders via REST for submitted intents
+    for (const intent of submittedIntents) {
+      await this.placeOrder(intent);
+    }
+
+    // SP1: Post-order kill switch check
+    const postStatus = this.session.status;
+    if (postStatus.killSwitchActive) {
+      console.log(`[live] Kill switch activated after order placement.`);
+      this.auditLogger.record("KILL_SWITCH_POST_ORDER", {
+        cycleCount: this.cycleCount,
+        trigger: postStatus.autoKillTrigger,
+      });
     }
 
     // Audit cycle completion (AC11)
@@ -643,7 +709,7 @@ export class LiveRunner {
 
     try {
       const result = await this.restClient.placeOrder({
-        category: "linear",
+        category: this.config.orderCategory,
         symbol: intent.symbol,
         side: intent.side === "BUY" ? "Buy" : "Sell",
         orderType: "Limit",
@@ -681,14 +747,14 @@ export class LiveRunner {
     intents: OrderIntent[];
     riskDecisions: import("@agenttrading/contracts").RiskDecision[];
   } {
-    if (this.marketMid <= 0 || this.cycleCount % 5 !== 0) {
+    if (this.market.mid <= 0 || this.cycleCount % 5 !== 0) {
       return { intents: [], riskDecisions: [] };
     }
 
     const side: "BUY" | "SELL" =
       this.cycleCount % 10 === 0 ? "BUY" : "SELL";
     const quantity = 0.001;
-    const price = this.marketMid;
+    const price = this.market.mid;
 
     const intent: OrderIntent = {
       idempotencyKey: `live-${this.cycleCount}-${this.nowMs()}`,
@@ -727,8 +793,8 @@ export class LiveRunner {
 
   private deriveRegimeInput(): import("@agenttrading/core").RegimeClassifierInput {
     const spreadBps =
-      this.marketBid > 0 && this.marketAsk > 0
-        ? ((this.marketAsk - this.marketBid) / this.marketMid) * 10_000
+      this.market.bid > 0 && this.market.ask > 0
+        ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
         : 10;
 
     const realizedVolatility = this.computeRealizedVolatility();
@@ -736,7 +802,7 @@ export class LiveRunner {
     return {
       realizedVolatility,
       spreadBps,
-      liquidityUsd: this.marketLiquidityUsd,
+      liquidityUsd: this.market.liquidityUsd,
       gasPriceUsd: 5,
       cumulativePnlUsd: 0,
       maxDrawdownUsd: 0,
@@ -781,16 +847,5 @@ export class LiveRunner {
     }
 
     return streak;
-  }
-
-  private computeSlippageBps(
-    orderSizeUsd: number,
-    liquidityUsd: number,
-    baseSlippageBps: number,
-  ): number {
-    if (liquidityUsd <= 0) return baseSlippageBps;
-    const impactRatio = orderSizeUsd / liquidityUsd;
-    const impactBps = Math.floor(impactRatio * 1000);
-    return baseSlippageBps + impactBps;
   }
 }
