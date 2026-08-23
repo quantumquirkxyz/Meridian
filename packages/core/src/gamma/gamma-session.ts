@@ -1,0 +1,582 @@
+/**
+ * GammaSession: the top-level integration that wires all Gamma subsystems
+ * together for a go-live canary session (issue #40).
+ *
+ * Acceptance criteria:
+ *   AC1: All Gamma subsystems integrate and run together.
+ *   AC2: A go-live canary session completes within hard limits.
+ *   AC3: Every decision/outcome is auditable; failures degrade safely.
+ *   AC4: Gamma exit criterion met: live with bounded capital, preserves
+ *        limits, adapts, learns governed, auditable, scales only with
+ *        evidence.
+ *
+ * The session is deterministic — no LLM, no I/O. It orchestrates:
+ *   - CanarySession: bounded capital, per-trade/day/venue limits,
+ *     kill switch, emergency modes.
+ *   - RegimeClassifier + RegimePolicyEngine: market regime adaptation
+ *     that adjusts permissions without increasing them.
+ *   - LearningEngine: governed learning loop (journal, edge decay,
+ *     promotion pipeline).
+ *   - AuditReconstructor + ReportGenerator: end-to-end audit trail,
+ *     daily/weekly reports, TXT/JSON/CSV export.
+ *   - RouteEngine + SystemicRiskOverlay: route discovery with risk overlays.
+ *
+ * Usage:
+ * ```ts
+ * const session = new GammaSession({ config: myConfig });
+ * session.start();
+ *
+ * // Each tick: classify regime → discover routes → submit orders → record fills
+ * const result = session.runCycle({
+ *   regime: { realizedVolatility: 0.3, ... },
+ *   market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+ *   intents: [orderIntent1, ...],
+ *   riskDecisions: [riskDecision1, ...],
+ * });
+ *
+ * // End of session
+ * session.stop();
+ * const summary = session.getSessionSummary();
+ * ```
+ */
+
+import type {
+  CanaryConfig,
+  GammaControlCommand,
+  LearningRecommendation,
+  MarketGraphSnapshot,
+  OrderIntent,
+  RegimeClassification,
+  RegimePolicy,
+  RiskDecision,
+  TradeReconstruction,
+  TradeReport,
+} from "@agenttrading/contracts";
+import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
+import { DEFAULT_REGIME_THRESHOLDS, type RegimeClassifierInput } from "./regime-classifier.ts";
+import { RegimeClassifier } from "./regime-classifier.ts";
+import { RegimePolicyEngine } from "./regime-policy-engine.ts";
+import { CanarySession, type CanarySessionOptions } from "./canary-session.ts";
+import { LearningEngine } from "./learning-engine.ts";
+import { AuditReconstructor } from "./audit-reconstructor.ts";
+import { ReportGenerator } from "./report-generator.ts";
+import { AuditExporter } from "./audit-exporter.ts";
+import type { AuditLog } from "../stategraph/audit-log.ts";
+import type { TradeJournal } from "./trade-journal.ts";
+
+// ── Types ────────────────────────────────────────────────────────────
+
+/**
+ * Input for a single GammaSession cycle.
+ */
+export interface GammaCycleInput {
+  /** Market signals for regime classification. */
+  regime: RegimeClassifierInput;
+  /** Market snapshot for order execution. */
+  market: { bid: number; ask: number; mid: number; liquidityUsd: number };
+  /** Order intents to evaluate in this cycle. */
+  intents: OrderIntent[];
+  /** Risk decisions for the intents (parallel array). */
+  riskDecisions: RiskDecision[];
+}
+
+/**
+ * Result of a single GammaSession cycle.
+ */
+export interface GammaCycleResult {
+  /** Whether the cycle ran successfully. */
+  ok: boolean;
+  /** Error message if the cycle failed. */
+  error?: string;
+  /** Regime classification for this cycle. */
+  regimeClassification?: RegimeClassification;
+  /** Active regime policy after evaluation. */
+  regimePolicy?: RegimePolicy;
+  /** Whether the regime changed in this cycle. */
+  regimeChanged: boolean;
+  /** Whether regime change was blocked (permissions increase). */
+  regimeChangeBlocked: boolean;
+  /** Block reason if regime change was blocked. */
+  regimeChangeBlockReason?: string;
+  /** Emergency action triggered by regime change, if any. */
+  emergencyAction?: string;
+  /** Orders submitted in this cycle. */
+  submittedCount: number;
+  /** Orders blocked by canary limits. */
+  blockedCount: number;
+  /** Orders blocked by regime policy. */
+  regimeBlockedCount: number;
+  /** Learning recommendations from this cycle (if learning cycle ran). */
+  learningRecommendations: LearningRecommendation[];
+  /** Whether a learning cycle ran in this cycle. */
+  learningCycleRan: boolean;
+}
+
+/**
+ * The complete session summary produced at session end.
+ */
+export interface GammaSessionSummary {
+  /** Whether the session completed normally. */
+  completedNormally: boolean;
+  /** Final canary status. */
+  canaryStatus: {
+    running: boolean;
+    mode: string;
+    killSwitchActive: boolean;
+    capitalDeployedUsd: number;
+    capitalRemainingUsd: number;
+    dailyPnlUsd: number;
+    weeklyPnlUsd: number;
+    orphanOrderCount: number;
+    reconciliationUnresolved: boolean;
+  };
+  /** Final regime classification. */
+  regimeClassification?: RegimeClassification;
+  /** Regime change history. */
+  regimeChangeHistory: readonly unknown[];
+  /** Per-regime performance records. */
+  regimePerformance: Record<string, unknown>;
+  /** Trade journal entry count. */
+  journalEntryCount: number;
+  /** Daily trade report. */
+  dailyReport?: TradeReport;
+  /** Weekly trade report. */
+  weeklyReport?: TradeReport;
+  /** All trade reconstructions. */
+  reconstructions: Map<string, TradeReconstruction>;
+  /** Exported reports in all formats. */
+  exportedReports: {
+    dailyJson?: string;
+    dailyCsv?: string;
+    dailyTxt?: string;
+  };
+  /** Learning recommendations from the session. */
+  learningRecommendations: LearningRecommendation[];
+  /** Audit event count. */
+  auditEventCount: number;
+}
+
+// ── Session Options ──────────────────────────────────────────────────
+
+export interface GammaSessionOptions {
+  /** Injectable clock; defaults to Date.now. */
+  now?: () => number;
+  /** Custom canary config; defaults to DEFAULT_CANARY_CONFIG. */
+  canaryConfig?: CanaryConfig;
+  /** Learning cycle interval (cycles). Defaults to 10. */
+  learningCycleInterval?: number;
+}
+
+// ── GammaSession ─────────────────────────────────────────────────────
+
+/**
+ * GammaSession: the top-level integration that wires all Gamma subsystems
+ * together for a go-live canary session.
+ */
+export class GammaSession {
+  private readonly now: () => number;
+  private readonly learningCycleInterval: number;
+  private cycleCount = 0;
+
+  // Core subsystems
+  private readonly canarySession: CanarySession;
+  private readonly regimeClassifier: RegimeClassifier;
+  private readonly regimePolicyEngine: RegimePolicyEngine;
+  private readonly learningEngine: LearningEngine;
+  private readonly auditReconstructor: AuditReconstructor;
+  private readonly reportGenerator: ReportGenerator | null = null;
+  private readonly auditExporter: AuditExporter;
+
+  // State
+  private running = false;
+  private lastRegimeClassification: RegimeClassification | null = null;
+  private allRecommendations: LearningRecommendation[] = [];
+  private cycleResults: GammaCycleResult[] = [];
+  private totalSubmittedCount = 0;
+  private totalBlockedCount = 0;
+  private totalRegimeBlockedCount = 0;
+
+  constructor(options: GammaSessionOptions = {}) {
+    this.now = options.now ?? (() => Date.now());
+    this.learningCycleInterval = options.learningCycleInterval ?? 10;
+
+    // Initialize subsystems (order matters: learningEngine must exist before
+    // canarySession so its journal can be shared).
+    this.regimeClassifier = new RegimeClassifier();
+    this.regimePolicyEngine = new RegimePolicyEngine({ now: this.now });
+    this.learningEngine = new LearningEngine(undefined, this.now);
+    this.canarySession = new CanarySession({
+      now: this.now,
+      config: options.canaryConfig ?? DEFAULT_CANARY_CONFIG,
+      journal: this.learningEngine.journal,
+    });
+    this.auditReconstructor = new AuditReconstructor(undefined, this.now);
+    this.auditExporter = new AuditExporter();
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────
+
+  /** Start the Gamma session. */
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    this.canarySession.control("start");
+  }
+
+  /** Stop the Gamma session and cancel open orders. */
+  stop(): void {
+    if (!this.running) return;
+    this.running = false;
+    this.canarySession.control("stop");
+    this.regimePolicyEngine.finalize();
+  }
+
+  /** Process a control command (delegates to CanarySession). */
+  control(command: GammaControlCommand) {
+    return this.canarySession.control(command);
+  }
+
+  /** Run a single integration cycle. */
+  runCycle(input: GammaCycleInput): GammaCycleResult {
+    if (!this.running) {
+      return {
+        ok: false,
+        error: "session is not running",
+        regimeChanged: false,
+        regimeChangeBlocked: false,
+        submittedCount: 0,
+        blockedCount: 0,
+        regimeBlockedCount: 0,
+        learningRecommendations: [],
+        learningCycleRan: false,
+      };
+    }
+
+    // Check if kill switch is active.
+    const status = this.canarySession.status;
+    if (status.killSwitchActive) {
+      return {
+        ok: false,
+        error: "kill switch is active",
+        regimeChanged: false,
+        regimeChangeBlocked: false,
+        submittedCount: 0,
+        blockedCount: 0,
+        regimeBlockedCount: 0,
+        learningRecommendations: [],
+        learningCycleRan: false,
+      };
+    }
+
+    // Step 1: Classify regime.
+    const regimeClassification = this.regimeClassifier.classify(input.regime);
+    const regimeResult = this.regimePolicyEngine.evaluate(regimeClassification);
+    this.lastRegimeClassification = regimeClassification;
+
+    // Step 2: Handle regime emergency actions.
+    if (regimeResult.changed) {
+      const emergencyAction = regimeResult.policy.emergencyAction;
+      if (emergencyAction === "halt") {
+        this.canarySession.control("halt");
+      } else if (emergencyAction === "cancel_all") {
+        this.canarySession.control("cancel-all");
+      } else if (emergencyAction === "reduce_only") {
+        this.canarySession.control("reduce-only");
+      } else if (emergencyAction === "cash_only") {
+        this.canarySession.control("cash-only");
+      }
+    }
+
+    // Step 3: Evaluate intents against regime policy and canary limits.
+    let submittedCount = 0;
+    let blockedCount = 0;
+    let regimeBlockedCount = 0;
+
+    for (let i = 0; i < input.intents.length; i++) {
+      const intent = input.intents[i];
+      const riskDecision = input.riskDecisions[i];
+
+      // AC3: Regime policy blocks trading when regime doesn't allow it.
+      if (!regimeResult.policy.tradingEnabled) {
+        regimeBlockedCount++;
+        this.recordAudit("REGIME_BLOCKED_ORDER", {
+          intentId: intent.idempotencyKey,
+          regime: regimeClassification.regime,
+          reason: "trading disabled by regime policy",
+        });
+        continue;
+      }
+
+      // AC3: Strategy check is deferred — OrderIntent does not carry
+      // strategyId (per ARCHITECTURE.md). The canary config's scope
+      // and the regime policy's enabledStrategies are checked at the
+      // opportunity/agent level, not at the order level.
+
+      // AC2: Canary pre-check + submit.
+      const { preCheck, execution } = this.canarySession.submitOrder(
+        intent,
+        riskDecision,
+        input.market,
+      );
+
+      if (preCheck.allowed) {
+        submittedCount++;
+
+        // Record audit event for the submission.
+        this.recordAudit("GAMMA_ORDER_SUBMITTED", {
+          orderId: intent.idempotencyKey,
+          symbol: intent.symbol,
+          venue: intent.venue,
+          regime: regimeClassification.regime,
+          executionState: execution?.state ?? "PENDING",
+        });
+      } else {
+        blockedCount++;
+        this.recordAudit("GAMMA_ORDER_BLOCKED", {
+          intentId: intent.idempotencyKey,
+          reason: preCheck.reason,
+          blockReason: preCheck.blockReason,
+        });
+      }
+    }
+
+    this.totalSubmittedCount += submittedCount;
+    this.totalBlockedCount += blockedCount;
+    this.totalRegimeBlockedCount += regimeBlockedCount;
+
+    // Step 4: Run learning cycle periodically.
+    let learningRecommendations: LearningRecommendation[] = [];
+    let learningCycleRan = false;
+    this.cycleCount++;
+
+    if (this.cycleCount % this.learningCycleInterval === 0) {
+      learningRecommendations = this.learningEngine.runCycle();
+      this.allRecommendations.push(...learningRecommendations);
+      learningCycleRan = true;
+    }
+
+    // Record audit for the full cycle.
+    this.recordAudit("GAMMA_CYCLE_COMPLETE", {
+      cycleNumber: this.cycleCount,
+      regime: regimeClassification.regime,
+      regimeConfidence: regimeClassification.confidence,
+      regimeChanged: regimeResult.changed,
+      submittedCount,
+      blockedCount,
+      regimeBlockedCount,
+      learningCycleRan,
+    });
+
+    const result: GammaCycleResult = {
+      ok: true,
+      regimeClassification,
+      regimePolicy: regimeResult.policy,
+      regimeChanged: regimeResult.changed,
+      regimeChangeBlocked: regimeResult.blocked,
+      regimeChangeBlockReason: regimeResult.blockReason,
+      emergencyAction: regimeResult.changed
+        ? regimeResult.policy.emergencyAction
+        : undefined,
+      submittedCount,
+      blockedCount,
+      regimeBlockedCount,
+      learningRecommendations,
+      learningCycleRan,
+    };
+
+    this.cycleResults.push(result);
+    return result;
+  }
+
+  /**
+   * Notify the session that an order has been resolved externally.
+   * Delegates to CanarySession and records in the learning engine.
+   */
+  notifyOrderResolved(
+    orderId: string,
+    state: "FILLED" | "CANCELLED" | "REJECTED",
+    pnlUsd: number = 0,
+  ): void {
+    this.canarySession.notifyOrderResolved(orderId, state, pnlUsd);
+
+    // Record regime performance.
+    if (state === "FILLED") {
+      this.regimePolicyEngine.recordTrade(pnlUsd);
+    }
+
+    // Record audit event.
+    this.recordAudit("GAMMA_ORDER_RESOLVED", {
+      orderId,
+      state,
+      pnlUsd,
+    });
+  }
+
+  /**
+   * Poll the execution engine and return order events.
+   */
+  pollExecution() {
+    return this.canarySession.pollExecution();
+  }
+
+  /**
+   * Set reconciliation status. Delegates to CanarySession.
+   */
+  setReconciliationStatus(unresolved: boolean): void {
+    this.canarySession.setReconciliationStatus(unresolved);
+  }
+
+  /**
+   * Get the current canary status.
+   */
+  get status() {
+    return this.canarySession.status;
+  }
+
+  /**
+   * Whether the session is running.
+   */
+  get isRunning(): boolean {
+    return this.running;
+  }
+
+  /**
+   * Get the learning engine (for direct access to journal and recommendations).
+   */
+  get learning(): LearningEngine {
+    return this.learningEngine;
+  }
+
+  /**
+   * Get the audit reconstructor.
+   */
+  get reconstructor(): AuditReconstructor {
+    return this.auditReconstructor;
+  }
+
+  /**
+   * Get the last regime classification.
+   */
+  get regimeClassification(): RegimeClassification | null {
+    return this.lastRegimeClassification;
+  }
+
+  /**
+   * Get the current regime policy.
+   */
+  get regimePolicy(): RegimePolicy {
+    return this.regimePolicyEngine.policy;
+  }
+
+  /**
+   * Get the trade journal from the learning engine.
+   */
+  get journal(): TradeJournal {
+    return this.learningEngine.journal;
+  }
+
+  // ── Session Summary ──────────────────────────────────────────────
+
+  /**
+   * Produce a complete session summary with audit trail, reports,
+   * reconstructions, and exports.
+   *
+   * AC1: All subsystems integrated — summary includes data from every subsystem.
+   * AC2: Session completes within hard limits — summary reports capital and limits.
+   * AC3: Every decision auditable — summary includes audit event count and reconstructions.
+   * AC4: Gamma exit criterion — summary reports bounded capital, preserved limits, etc.
+   */
+  getSessionSummary(): GammaSessionSummary {
+    // Build audit reconstructions from journal entries and audit events.
+    // (In a real system, audit events would come from the AuditLog.
+    //  Here we feed them from the reconstructor's stored events.)
+    const reconstructions = this.auditReconstructor.reconstructAll();
+
+    // Generate reports.
+    const journalEntries = this.learningEngine.journal.getEntries();
+    const reportGenerator = new ReportGenerator(
+      journalEntries,
+      reconstructions,
+      this.now,
+    );
+    const dailyReport = reportGenerator.generateDailyReport(this.now());
+    const weeklyReport = reportGenerator.generateWeeklyReport(this.now());
+
+    // Export reports.
+    const dailyJson = this.auditExporter.exportReport(dailyReport, {
+      format: "json",
+      includeEntries: true,
+      includeReasonCodes: true,
+      includeTimeline: false,
+    });
+    const dailyCsv = this.auditExporter.exportReport(dailyReport, {
+      format: "csv",
+      includeEntries: true,
+      includeReasonCodes: true,
+      includeTimeline: false,
+    });
+    const dailyTxt = this.auditExporter.exportReport(dailyReport, {
+      format: "txt",
+      includeEntries: true,
+      includeReasonCodes: true,
+      includeTimeline: false,
+    });
+
+    const status = this.canarySession.status;
+
+    return {
+      completedNormally: this.running === false && !status.killSwitchActive,
+      canaryStatus: {
+        running: status.running,
+        mode: status.mode,
+        killSwitchActive: status.killSwitchActive,
+        capitalDeployedUsd: status.capitalDeployedUsd,
+        capitalRemainingUsd: status.capitalRemainingUsd,
+        dailyPnlUsd: status.dailyPnlUsd,
+        weeklyPnlUsd: status.weeklyPnlUsd,
+        orphanOrderCount: status.orphanOrderCount,
+        reconciliationUnresolved: status.reconciliationUnresolved,
+      },
+      regimeClassification: this.lastRegimeClassification ?? undefined,
+      regimeChangeHistory: this.regimePolicyEngine.history,
+      regimePerformance: this.regimePolicyEngine.performanceTracker.getAll(),
+      journalEntryCount: journalEntries.length,
+      dailyReport,
+      weeklyReport,
+      reconstructions,
+      exportedReports: { dailyJson, dailyCsv, dailyTxt },
+      learningRecommendations: this.allRecommendations,
+      auditEventCount: this.auditReconstructor.auditEventCount,
+    };
+  }
+
+  // ── Audit Integration ─────────────────────────────────────────────
+
+  /**
+   * Record an audit event in the reconstructor.
+   * In a real system, this would flow through the AuditLog.
+   */
+  private recordAudit(
+    eventType: string,
+    data: Record<string, unknown>,
+  ): void {
+    this.auditReconstructor.addAuditEvent({
+      eventId: `gamma-${eventType}-${this.now()}`,
+      sequence: this.cycleCount,
+      timestampMs: this.now(),
+      action: "STATE_TRANSITION",
+      actor: "gamma-session",
+      state: this.canarySession.status.killSwitchActive
+        ? "HALT"
+        : this.running
+          ? "EXECUTE_ORDER"
+          : "IDLE",
+      data: {
+        eventType,
+        cycleNumber: this.cycleCount,
+        ...data,
+      },
+      reasonCodes: ["TRANSITION_ALLOWED"],
+    });
+  }
+}
