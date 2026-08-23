@@ -73,8 +73,6 @@ interface WebSocketLike {
 
 const DEFAULT_PUBLIC_WS_URL = "wss://stream.bybit.com/v5/public/linear";
 const DEFAULT_PRIVATE_WS_URL = "wss://stream.bybit.com/v5/private";
-const DEFAULT_TESTNET_PUBLIC_WS_URL = "wss://stream-testnet.bybit.com/v5/public/linear";
-const DEFAULT_TESTNET_PRIVATE_WS_URL = "wss://stream-testnet.bybit.com/v5/private";
 const PING_INTERVAL_MS = 20_000;
 const WS_OPEN = 1;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -537,44 +535,30 @@ function mapBybitSide(side: string): OrderUpdateSide {
   return side === "Buy" ? "BUY" : "SELL";
 }
 
+const BYBIT_ORDER_TYPE_MAP: Record<string, OrderUpdateType> = {
+  Market: "MARKET",
+  Limit: "LIMIT",
+  StopLimit: "STOP_LIMIT",
+  StopMarket: "STOP_MARKET",
+  TakeProfitLimit: "TAKE_PROFIT_LIMIT",
+  TakeProfitMarket: "TAKE_PROFIT_MARKET",
+  TrailingStopMarket: "TRAILING_STOP_MARKET",
+};
+
+const BYBIT_ORDER_STATUS_MAP: Record<string, OrderUpdateStatus> = {
+  New: "NEW",
+  PartiallyFilled: "PARTIALLY_FILLED",
+  Filled: "FILLED",
+  Cancelled: "CANCELLED",
+  Rejected: "REJECTED",
+  Deactivated: "CANCELLED",
+  Untriggered: "UNTRIGGERED",
+};
+
 function mapBybitOrderType(type: string): OrderUpdateType {
-  switch (type) {
-    case "Market":
-      return "MARKET";
-    case "Limit":
-      return "LIMIT";
-    case "StopLimit":
-      return "STOP_LIMIT";
-    case "StopMarket":
-      return "STOP_MARKET";
-    case "TakeProfitLimit":
-      return "TAKE_PROFIT_LIMIT";
-    case "TakeProfitMarket":
-      return "TAKE_PROFIT_MARKET";
-    case "TrailingStopMarket":
-      return "TRAILING_STOP_MARKET";
-    default:
-      return "LIMIT";
-  }
+  return BYBIT_ORDER_TYPE_MAP[type] ?? "LIMIT";
 }
 
 function mapBybitOrderStatus(status: string): OrderUpdateStatus {
-  switch (status) {
-    case "New":
-      return "NEW";
-    case "PartiallyFilled":
-      return "PARTIALLY_FILLED";
-    case "Filled":
-      return "FILLED";
-    case "Cancelled":
-      return "CANCELLED";
-    case "Rejected":
-      return "REJECTED";
-    case "Deactivated":
-      return "CANCELLED"; // Deactivated maps to cancelled
-    case "Untriggered":
-      return "UNTRIGGERED";
-    default:
-      return "NEW";
-  }
+  return BYBIT_ORDER_STATUS_MAP[status] ?? "NEW";
 }

@@ -18,8 +18,8 @@ import {
   type BybitCancelOrderResult,
   type BybitCoinBalance,
   type BybitOpenOrdersResult,
+  type BybitOrderSide,
   type BybitPlaceOrderResult,
-  type BybitSide,
   type BybitTimeInForce,
   type BybitWalletBalanceResult,
 } from "./bybit-types.ts";
@@ -46,7 +46,7 @@ export interface BybitRESTClientConfig {
 export interface PlaceOrderInput {
   category: "spot" | "linear" | "inverse" | "option";
   symbol: string;
-  side: BybitSide;
+  side: BybitOrderSide;
   orderType: "Market" | "Limit";
   qty: string;
   price?: string;
@@ -91,7 +91,6 @@ interface RateLimitState {
 // ── Constants ────────────────────────────────────────────────────────
 
 const DEFAULT_BASE_URL = "https://api.bybit.com";
-const TESTNET_BASE_URL = "https://api-testnet.bybit.com";
 const DEFAULT_RECV_WINDOW = 5_000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_INITIAL_BACKOFF_MS = 1_000;
@@ -145,7 +144,8 @@ export class BybitRESTClient {
     if (input.stopLoss !== undefined) params.stopLoss = input.stopLoss;
     if (input.takeProfit !== undefined) params.takeProfit = input.takeProfit;
 
-    const result = await this.privatePost<BybitPlaceOrderResult>(
+    const result = await this.privateRequest<BybitPlaceOrderResult>(
+      "POST",
       "/v5/order/create",
       params,
     );
@@ -164,7 +164,8 @@ export class BybitRESTClient {
     if (input.orderId !== undefined) params.orderId = input.orderId;
     if (input.orderLinkId !== undefined) params.orderLinkId = input.orderLinkId;
 
-    const result = await this.privatePost<BybitCancelOrderResult>(
+    const result = await this.privateRequest<BybitCancelOrderResult>(
+      "POST",
       "/v5/order/cancel",
       params,
     );
@@ -186,7 +187,8 @@ export class BybitRESTClient {
     if (input.limit !== undefined) params.limit = String(input.limit);
     if (input.cursor !== undefined) params.cursor = input.cursor;
 
-    const result = await this.privateGet<BybitOpenOrdersResult>(
+    const result = await this.privateRequest<BybitOpenOrdersResult>(
+      "GET",
       "/v5/order/realtime",
       params,
     );
@@ -198,7 +200,8 @@ export class BybitRESTClient {
    * GET /v5/account/wallet-balance
    */
   async getAccountInfo(): Promise<BybitWalletBalanceResult> {
-    const result = await this.privateGet<BybitWalletBalanceResult>(
+    const result = await this.privateRequest<BybitWalletBalanceResult>(
+      "GET",
       "/v5/account/wallet-balance",
       { accountType: "unified" },
     );
@@ -223,14 +226,13 @@ export class BybitRESTClient {
 
   // ── Internal HTTP methods ───────────────────────────────────────
 
-  private async privateGet<T>(endpoint: string, params: Record<string, string>): Promise<T> {
-    const queryString = new URLSearchParams(params).toString();
-    return this.requestWithRetry<T>("GET", endpoint, queryString);
-  }
-
-  private async privatePost<T>(endpoint: string, params: Record<string, string>): Promise<T> {
-    const body = new URLSearchParams(params).toString();
-    return this.requestWithRetry<T>("POST", endpoint, body);
+  private async privateRequest<T>(
+    method: "GET" | "POST",
+    endpoint: string,
+    params: Record<string, string>,
+  ): Promise<T> {
+    const payload = new URLSearchParams(params).toString();
+    return this.requestWithRetry<T>(method, endpoint, payload);
   }
 
   private async requestWithRetry<T>(

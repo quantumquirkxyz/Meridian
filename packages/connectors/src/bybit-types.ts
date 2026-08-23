@@ -52,7 +52,6 @@ export interface BybitWalletBalanceResult {
 // ── Orders ──────────────────────────────────────────────────────────
 
 export type BybitOrderSide = "Buy" | "Sell";
-export type BybitSide = "Buy" | "Sell";
 export type BybitTimeInForce = "GTC" | "IOC" | "FOK" | "PostOnly";
 export type BybitOrderType = "Market" | "Limit";
 export type BybitOrderStatus =

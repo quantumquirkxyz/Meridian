@@ -126,7 +126,7 @@ const isOrderUpdateStatus: Validator<OrderUpdateStatus> = isEnumOf(ORDER_UPDATE_
 const isOrderUpdateSide: Validator<OrderUpdateSide> = isEnumOf(ORDER_UPDATE_SIDES);
 const isOrderUpdateType: Validator<OrderUpdateType> = isEnumOf(ORDER_UPDATE_TYPES);
 
-export const isNullableNumber: Validator<number | null> = isNullable(isNumber);
+const isNullableNumber: Validator<number | null> = isNullable(isNumber);
 
 export const isOrderUpdate: Validator<OrderUpdate> = isObjectOf({
   orderId: isString,
