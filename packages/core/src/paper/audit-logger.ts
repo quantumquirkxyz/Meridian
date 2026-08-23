@@ -17,6 +17,8 @@ export interface PaperAuditEvent {
   type: string;
   /** Event payload. */
   data: Record<string, unknown>;
+  /** Session identifier for correlating events across a run. */
+  sessionId: string;
 }
 
 /**
@@ -27,6 +29,8 @@ export interface PaperAuditLoggerOptions {
   filePath: string;
   /** Injectable clock; defaults to Date.now. */
   nowMs?: () => number;
+  /** Session identifier written to every event. Generated if omitted. */
+  sessionId?: string;
 }
 
 /**
@@ -36,11 +40,13 @@ export interface PaperAuditLoggerOptions {
 export class PaperAuditLogger {
   private readonly filePath: string;
   private readonly nowMs: () => number;
+  private readonly _sessionId: string;
   private eventCount = 0;
 
   constructor(options: PaperAuditLoggerOptions) {
     this.filePath = options.filePath;
     this.nowMs = options.nowMs ?? (() => Date.now());
+    this._sessionId = options.sessionId ?? generateSessionId(this.nowMs());
 
     // Ensure the directory exists and create the file.
     const dir = dirname(this.filePath);
@@ -57,6 +63,11 @@ export class PaperAuditLogger {
     return this.eventCount;
   }
 
+  /** The session identifier for this logger instance. */
+  get sessionId(): string {
+    return this._sessionId;
+  }
+
   /**
    * Record an audit event. Appends a single JSONL line to the file.
    */
@@ -65,6 +76,7 @@ export class PaperAuditLogger {
       timestampMs: this.nowMs(),
       type,
       data,
+      sessionId: this._sessionId,
     };
 
     const line = JSON.stringify(event);
@@ -79,4 +91,18 @@ export class PaperAuditLogger {
   flush(): void {
     // Synchronous writes — nothing to flush.
   }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Generate a deterministic session ID from a timestamp and random suffix.
+ * Format: `sess-YYYYMMDD-HHmmss-<hex>`.
+ */
+function generateSessionId(nowMs: number): string {
+  const d = new Date(nowMs);
+  const date = d.toISOString().slice(0, 10).replace(/-/g, "");
+  const time = d.toISOString().slice(11, 19).replace(/:/g, "");
+  const rand = Math.random().toString(16).slice(2, 8);
+  return `sess-${date}-${time}-${rand}`;
 }

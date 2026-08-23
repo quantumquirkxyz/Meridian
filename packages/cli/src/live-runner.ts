@@ -59,6 +59,8 @@ export interface LiveRunnerConfig {
   canaryConfig?: CanaryConfig;
   /** Path for the JSONL audit log file. */
   auditLogPath?: string;
+  /** Session identifier for audit log correlation. Generated if omitted. */
+  sessionId?: string;
   /** Reconciliation interval in ms (default: 30_000). */
   reconciliationIntervalMs?: number;
   /** Order category for Bybit REST API (default: "linear"). */
@@ -190,6 +192,7 @@ export class LiveRunner {
     this.auditLogger = new PaperAuditLogger({
       filePath: this.config.auditLogPath,
       nowMs: this.nowMs,
+      sessionId: config.sessionId,
     });
 
     this.reconciliationEngine = new ReconciliationEngine();
@@ -234,6 +237,11 @@ export class LiveRunner {
   /** Register event handlers. Must be called before start(). */
   on(events: LiveRunnerEvents): void {
     this.events = { ...this.events, ...events };
+  }
+
+  /** Session identifier from the audit logger. */
+  get sessionId(): string {
+    return this.auditLogger.sessionId;
   }
 
   /**

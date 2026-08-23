@@ -46,6 +46,8 @@ export interface PaperRunnerConfig {
   canaryConfig?: CanaryConfig;
   /** Path for the JSONL audit log file. */
   auditLogPath?: string;
+  /** Session identifier for audit log correlation. Generated if omitted. */
+  sessionId?: string;
   /** Injectable clock for testing. */
   nowMs?: () => number;
   /** Custom WebSocket factory (for testing). */
@@ -92,7 +94,7 @@ const WS_OPEN = 1;
  *   4. On shutdown: close WS, flush audit log, print session report
  */
 export class PaperRunner {
-  private readonly config: Required<PaperRunnerConfig>;
+  private readonly config: Omit<Required<PaperRunnerConfig>, "sessionId"> & { sessionId?: string };
   private readonly nowMs: () => number;
   private readonly wsFactory: (url: string) => WebSocketLike;
 
@@ -139,6 +141,7 @@ export class PaperRunner {
       auditLogPath: config.auditLogPath ?? DEFAULT_AUDIT_LOG_PATH,
       nowMs: this.nowMs,
       wsFactory: this.wsFactory,
+      sessionId: config.sessionId,
     };
 
     // Initialize subsystems
@@ -152,12 +155,18 @@ export class PaperRunner {
     this.auditLogger = new PaperAuditLogger({
       filePath: this.config.auditLogPath,
       nowMs: this.nowMs,
+      sessionId: config.sessionId,
     });
   }
 
   /** Register event handlers. Must be called before start(). */
   on(events: PaperRunnerEvents): void {
     this.events = { ...this.events, ...events };
+  }
+
+  /** Session identifier from the audit logger. */
+  get sessionId(): string {
+    return this.auditLogger.sessionId;
   }
 
   /** Start the paper runner: connect WS, start cycle loop. */

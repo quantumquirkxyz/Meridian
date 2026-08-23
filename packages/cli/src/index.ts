@@ -13,11 +13,14 @@
  *   --cycle-interval <ms>      Override cycle frequency
  */
 
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
 import type { PaperRunner } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
+import { ManifestWriter } from "./manifest.ts";
 
 // ── Re-exports (keep backward-compatible library API) ─────────────────
 
@@ -25,6 +28,8 @@ export { loadConfig, formatConfigErrors } from "./config.ts";
 export type { AppConfig, Mode, LoadConfigResult, ConfigError, LogLevel } from "./config.ts";
 export { parseCliArgs, type CliArgs, type CliArgsError, type ParseCliArgsResult } from "./args.ts";
 export { LiveRunner, type LiveRunnerConfig, type LiveRunnerEvents } from "./live-runner.ts";
+export { ManifestWriter, type ManifestData, type ManifestEntry } from "./manifest.ts";
+export { StatusDisplay, type CycleStatusInput, type RegimeChangeInput, type OrderEventInput, type KillSwitchTriggerInput } from "./status-display.ts";
 
 // ── RunOptions (S3: bundle data clumps) ───────────────────────────────
 
@@ -98,15 +103,27 @@ function printSessionSummary(
  * feeds market data into GammaSession, simulates fills, and produces
  * audit trail + session report. No API keys required.
  */
-async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
+async function runPaperMode(
+  opts: RunOptions,
+  sessionId: string,
+  reportDir: string,
+): Promise<{ exitCode: number }> {
   const { PaperRunner } = await import("@agenttrading/core");
 
+  const auditLogPath = `${reportDir}/${sessionId}/audit.jsonl`;
   const runner = new PaperRunner({
     symbols: ["BTCUSDT"],
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    auditLogPath: `./reports/paper-session-${Date.now()}.jsonl`,
+    auditLogPath,
+    sessionId,
   });
+
+  const manifest = new ManifestWriter({
+    sessionId,
+    startedAtMs: Date.now(),
+  });
+  manifest.track("audit-log", auditLogPath);
 
   await runner.start();
 
@@ -123,6 +140,17 @@ async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
 
       console.log("\n[paper] Shutting down...");
       runner.stop();
+
+      // AC8: Write session summary JSON
+      const summaryDir = `${reportDir}/${sessionId}`;
+      const summaryPath = `${summaryDir}/summary.json`;
+      writeSessionSummaryJson(summaryPath, runner, sessionId, opts.config);
+      manifest.track("summary", summaryPath);
+
+      // AC10: Write manifest at shutdown
+      const manifestPath = `${summaryDir}/manifest.json`;
+      manifest.writeManifest(manifestPath);
+
       resolve();
     };
 
@@ -138,7 +166,12 @@ async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
  * places real orders through LiveExecutionEngine with canary limits,
  * confirms fills via WS, reconciles, and produces full audit trail.
  */
-async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
+async function runLiveMode(
+  opts: RunOptions,
+  sessionId: string,
+  reportDir: string,
+): Promise<{ exitCode: number }> {
+  const auditLogPath = `${reportDir}/${sessionId}/audit.jsonl`;
   const runner = new LiveRunner({
     symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
       t.replace("/", ""),
@@ -147,8 +180,15 @@ async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
     bybitApiSecret: opts.config.bybitApiSecret,
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    auditLogPath: `./reports/live-session-${Date.now()}.jsonl`,
+    auditLogPath,
+    sessionId,
   });
+
+  const manifest = new ManifestWriter({
+    sessionId,
+    startedAtMs: Date.now(),
+  });
+  manifest.track("audit-log", auditLogPath);
 
   await runner.start();
 
@@ -165,6 +205,17 @@ async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
 
       console.log("\n[live] Shutting down...");
       runner.stop();
+
+      // AC8: Write session summary JSON
+      const summaryDir = `${reportDir}/${sessionId}`;
+      const summaryPath = `${summaryDir}/summary.json`;
+      writeSessionSummaryJson(summaryPath, runner, sessionId, opts.config);
+      manifest.track("summary", summaryPath);
+
+      // AC10: Write manifest at shutdown
+      const manifestPath = `${summaryDir}/manifest.json`;
+      manifest.writeManifest(manifestPath);
+
       resolve();
     };
 
@@ -194,6 +245,50 @@ async function checkExchangeReachable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── Observability Helpers ─────────────────────────────────────────────
+
+/**
+ * Generate a session ID for correlating audit logs, reports, and manifest.
+ * Format: `sess-YYYYMMDD-HHmmss-<hex>`.
+ */
+function generateSessionId(): string {
+  const d = new Date();
+  const date = d.toISOString().slice(0, 10).replace(/-/g, "");
+  const time = d.toISOString().slice(11, 19).replace(/:/g, "");
+  const rand = Math.random().toString(16).slice(2, 8);
+  return `sess-${date}-${time}-${rand}`;
+}
+
+/**
+ * AC8: Write session summary to JSON file at shutdown.
+ */
+function writeSessionSummaryJson(
+  path: string,
+  runner: { stop(): void },
+  sessionId: string,
+  config: AppConfig,
+): void {
+  const summary = {
+    sessionId,
+    mode: config.mode,
+    startedAtMs: Date.now(),
+    endedAtMs: Date.now(),
+    config: {
+      cycleIntervalMs: config.cycleIntervalMs,
+      logLevel: config.logLevel,
+      reportDir: config.reportDir,
+    },
+  };
+
+  const dir = dirname(path);
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    // Directory may already exist.
+  }
+  writeFileSync(path, JSON.stringify(summary, null, 2) + "\n", "utf-8");
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
@@ -228,10 +323,13 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   // CLI flag takes precedence over config/env.
   const cycleIntervalMs = cliArgs.cycleIntervalMs ?? config.cycleIntervalMs;
 
-  // ── Step 4: Print startup banner ─────────────────────────────────
+  // ── Step 4: Generate session ID ──────────────────────────────────
+  const sessionId = generateSessionId();
+
+  // ── Step 5: Print startup banner ─────────────────────────────────
   printBanner(config, cycleIntervalMs);
 
-  // ── Step 5: Exchange connectivity check (SP2) ───────────────────
+  // ── Step 6: Exchange connectivity check (SP2) ───────────────────
   if (config.mode === "live") {
     console.log("[live] Checking exchange connectivity...");
     const reachable = await checkExchangeReachable();
@@ -243,7 +341,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     console.log("[live] Exchange reachable.\n");
   }
 
-  // ── Step 6: Dispatch to mode ─────────────────────────────────────
+  // ── Step 7: Dispatch to mode ─────────────────────────────────────
   const runOpts: RunOptions = {
     config,
     cycleIntervalMs,
@@ -253,9 +351,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 
   let exitCode: number;
   if (config.mode === "paper") {
-    exitCode = (await runPaperMode(runOpts)).exitCode;
+    exitCode = (await runPaperMode(runOpts, sessionId, config.reportDir)).exitCode;
   } else {
-    exitCode = (await runLiveMode(runOpts)).exitCode;
+    exitCode = (await runLiveMode(runOpts, sessionId, config.reportDir)).exitCode;
   }
   process.exit(exitCode);
 }
