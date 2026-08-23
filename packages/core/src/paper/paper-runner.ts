@@ -19,15 +19,23 @@
  *   AC11: Graceful shutdown: close WS, flush logs, print summary
  */
 
-import type { CanaryConfig, MarketDataSnapshot, OrderIntent } from "@agenttrading/contracts";
+import type { CanaryConfig, OrderIntent } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import { GammaSession, type GammaCycleInput } from "../gamma/gamma-session.ts";
-import { PaperExecutionEngine, type PaperMarketSnapshot, type PaperOrderSnapshot } from "../execution/paper-execution-engine.ts";
+import { PaperExecutionEngine, type PaperMarketSnapshot } from "../execution/paper-execution-engine.ts";
 import { RegimeClassifier, type RegimeClassifierInput } from "../gamma/regime-classifier.ts";
 import { PaperAuditLogger } from "./audit-logger.ts";
 import { buildSessionReport, printSessionReport, type PaperTradeRecord } from "./session-report.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
+
+/** S2: Bundled market state from WS data. */
+interface MarketState {
+  bid: number;
+  ask: number;
+  mid: number;
+  liquidityUsd: number;
+}
 
 export interface PaperRunnerConfig {
   /** Symbols to subscribe to on Bybit public WS (e.g. ["BTCUSDT", "ETHUSDT"]). */
@@ -75,6 +83,24 @@ const DEFAULT_SYMBOLS = ["BTCUSDT"];
 const BYBIT_PUBLIC_WS_URL = "wss://stream.bybit.com/v5/public/linear";
 const WS_OPEN = 1;
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * SP1: Compute slippage in basis points from order size and liquidity depth.
+ * Larger orders relative to available liquidity incur higher slippage.
+ */
+function computeSlippageBps(
+  orderSizeUsd: number,
+  liquidityUsd: number,
+  baseSlippageBps: number,
+): number {
+  if (liquidityUsd <= 0) return baseSlippageBps;
+  const impactRatio = orderSizeUsd / liquidityUsd;
+  // Linear impact: 1% of liquidity = 10bps additional slippage
+  const impactBps = Math.floor(impactRatio * 1000);
+  return baseSlippageBps + impactBps;
+}
+
 // ── PaperRunner ──────────────────────────────────────────────────────
 
 /**
@@ -105,12 +131,9 @@ export class PaperRunner {
   private ws: WebSocketLike | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
 
-  // Market state (updated from WS)
-  private lastMarketSnapshot: MarketDataSnapshot | null = null;
-  private lastBid: number | null = null;
-  private lastAsk: number | null = null;
-  private lastMid: number | null = null;
-  private lastLiquidityUsd: number = 10_000;
+  // S2: Bundled market state (updated from WS)
+  private market: MarketState = { bid: 0, ask: 0, mid: 0, liquidityUsd: 10_000 };
+  private priceHistory: number[] = [];
 
   // Tracking
   private trades: PaperTradeRecord[] = [];
@@ -235,6 +258,7 @@ export class PaperRunner {
     });
     printSessionReport(report);
 
+    // S3: Wire onShutdown callback
     this.events.onShutdown?.();
     console.log("[paper] Session ended. Goodbye.");
   }
@@ -288,6 +312,7 @@ export class PaperRunner {
           this.handleWSMessage(raw);
         });
 
+        // S3: Wire onError callback
         this.ws.addEventListener("error", (event: unknown) => {
           const msg = typeof event === "object" && event !== null && "message" in event
             ? String((event as { message: unknown }).message)
@@ -336,19 +361,14 @@ export class PaperRunner {
     if (topic.startsWith("orderbook.") && typeof parsed.data === "object" && parsed.data !== null) {
       const data = parsed.data as { s?: string; b?: Array<{ price: string; size: string }>; a?: Array<{ price: string; size: string }> };
       if (data.b && data.a && data.b.length > 0 && data.a.length > 0) {
-        this.lastBid = parseFloat(data.b[0].price);
-        this.lastAsk = parseFloat(data.a[0].price);
-        this.lastMid = (this.lastBid + this.lastAsk) / 2;
-
-        // Calculate liquidity depth from orderbook
-        let totalDepth = 0;
-        for (const level of data.b) {
-          totalDepth += parseFloat(level.size) * parseFloat(level.price);
-        }
-        for (const level of data.a) {
-          totalDepth += parseFloat(level.size) * parseFloat(level.price);
-        }
-        this.lastLiquidityUsd = totalDepth;
+        const bid = parseFloat(data.b[0].price);
+        const ask = parseFloat(data.a[0].price);
+        this.market = {
+          bid,
+          ask,
+          mid: (bid + ask) / 2,
+          liquidityUsd: this.computeLiquidityDepth(data.b, data.a),
+        };
       }
     }
 
@@ -358,138 +378,104 @@ export class PaperRunner {
         if (typeof trade === "object" && trade !== null && "p" in trade) {
           const t = trade as { p: string; s: string };
           const price = parseFloat(t.p);
-          this.lastBid = price;
-          this.lastAsk = price;
-          this.lastMid = price;
+          this.market = { ...this.market, bid: price, ask: price, mid: price };
         }
       }
     }
   }
 
-  // ── Cycle Loop (AC5, AC6) ─────────────────────────────────────────
+  private computeLiquidityDepth(
+    bids: Array<{ price: string; size: string }>,
+    asks: Array<{ price: string; size: string }>,
+  ): number {
+    let totalDepth = 0;
+    for (const level of bids) {
+      totalDepth += parseFloat(level.size) * parseFloat(level.price);
+    }
+    for (const level of asks) {
+      totalDepth += parseFloat(level.size) * parseFloat(level.price);
+    }
+    return totalDepth;
+  }
 
-  private runCycle(): void {
-    if (!this.running) return;
-    this.cycleCount++;
+  // ── S4: Extracted helpers ────────────────────────────────────────
 
-    // AC6: Classify regime
-    const regimeInput: RegimeClassifierInput = {
-      realizedVolatility: 0.5, // TODO(wire-up): derive from market data
-      spreadBps: this.lastBid && this.lastAsk
-        ? ((this.lastAsk - this.lastBid) / this.lastMid!) * 10_000
-        : 10,
-      liquidityUsd: this.lastLiquidityUsd,
-      gasPriceUsd: 5,
-      cumulativePnlUsd: 0,
-      maxDrawdownUsd: 0,
-      rpcHealthy: true,
-      cexHealthy: true,
-      directionalStreak: 0,
-      reversalCount: 0,
-      nowMs: this.nowMs(),
+  /** S4: Extract synthetic opportunity creation from runCycle. */
+  private createSyntheticOpportunity(): { intent: OrderIntent; riskDecision: import("@agenttrading/contracts").ApprovedRiskDecision } | null {
+    if (this.market.mid <= 0 || this.cycleCount % 5 !== 0) return null;
+
+    const side: "BUY" | "SELL" = this.cycleCount % 10 === 0 ? "BUY" : "SELL";
+    const quantity = 0.001;
+    const price = this.market.mid;
+    const orderSizeUsd = quantity * price;
+
+    // SP1: Compute slippage dynamically from order size / liquidity
+    const slippageBps = computeSlippageBps(orderSizeUsd, this.market.liquidityUsd, this.config.slippageBps);
+
+    const intent: OrderIntent = {
+      idempotencyKey: `paper-${this.cycleCount}`,
+      opportunityId: `opp-${this.cycleCount}`,
+      venue: "bybit",
+      symbol: this.config.symbols[0] ?? "BTCUSDT",
+      side,
+      quantity,
+      price,
+      quoteCurrency: "USDT",
+      createdAtMs: this.nowMs(),
+      expiresAtMs: this.nowMs() + 60_000,
+      limits: { maxSlippageBps: slippageBps },
     };
 
-    const regimeClassification = this.regimeClassifier.classify(regimeInput);
-    if (regimeClassification.regime !== this.lastRegime) {
-      this.regimeChangeCount++;
-      this.lastRegime = regimeClassification.regime;
-      this.auditLogger.record("REGIME_CHANGED", {
-        cycleCount: this.cycleCount,
-        regime: regimeClassification.regime,
-        confidence: regimeClassification.confidence,
-      });
-    }
-
-    // Build market snapshot for GammaSession
-    const market: GammaCycleInput["market"] = {
-      bid: this.lastBid ?? 0,
-      ask: this.lastAsk ?? 0,
-      mid: this.lastMid ?? 0,
-      liquidityUsd: this.lastLiquidityUsd,
+    const riskDecision: import("@agenttrading/contracts").ApprovedRiskDecision = {
+      decision: "APPROVE",
+      orderIntentIdempotencyKey: intent.idempotencyKey,
+      evaluatedAtMs: this.nowMs(),
+      approvedSize: quantity,
+      approvedLimits: { maxSlippageBps: slippageBps },
+      expiresAtMs: this.nowMs() + 60_000,
     };
 
-    // AC9: Demo opportunity detection → intent → fill
-    // In a real system, opportunities come from the OpportunityScanner.
-    // For the paper runner demo, we generate synthetic opportunities
-    // every cycle when we have market data.
-    const intents: OrderIntent[] = [];
-    const riskDecisions: import("@agenttrading/contracts").RiskDecision[] = [];
-
-    if (this.lastMid !== null && this.lastMid > 0 && this.cycleCount % 5 === 0) {
-      // Generate a synthetic opportunity every 5 cycles
-      const opportunityId = `opp-${this.cycleCount}`;
-      const side: "BUY" | "SELL" = this.cycleCount % 10 === 0 ? "BUY" : "SELL";
-      const quantity = 0.001;
-      const price = this.lastMid;
-
-      const intent: OrderIntent = {
-        idempotencyKey: `paper-${this.cycleCount}`,
-        opportunityId,
-        venue: "bybit",
-        symbol: this.config.symbols[0] ?? "BTCUSDT",
-        side,
-        quantity,
-        price,
-        quoteCurrency: "USDT",
-        createdAtMs: this.nowMs(),
-        expiresAtMs: this.nowMs() + 60_000,
-        limits: { maxSlippageBps: this.config.slippageBps },
-      };
-
-      const riskDecision: import("@agenttrading/contracts").ApprovedRiskDecision = {
-        decision: "APPROVE",
-        orderIntentIdempotencyKey: intent.idempotencyKey,
-        evaluatedAtMs: this.nowMs(),
-        approvedSize: quantity,
-        approvedLimits: { maxSlippageBps: this.config.slippageBps },
-        expiresAtMs: this.nowMs() + 60_000,
-      };
-
-      intents.push(intent);
-      riskDecisions.push(riskDecision);
-      this.opportunitiesDetected++;
-
-      this.auditLogger.record("OPPORTUNITY_DETECTED", {
-        cycleCount: this.cycleCount,
-        opportunityId,
-        symbol: intent.symbol,
-        side,
-        price,
-      });
-    }
-
-    // Run GammaSession cycle
-    const result = this.session.runCycle({
-      regime: regimeInput,
-      market,
-      intents,
-      riskDecisions,
+    this.opportunitiesDetected++;
+    this.auditLogger.record("OPPORTUNITY_DETECTED", {
+      cycleCount: this.cycleCount,
+      opportunityId: intent.opportunityId,
+      symbol: intent.symbol,
+      side,
+      price,
+      slippageBps,
     });
 
-    this.ordersSubmitted += result.submittedCount;
-    this.ordersBlocked += result.blockedCount;
-    this.learningRecommendationCount += result.learningRecommendations.length;
+    return { intent, riskDecision };
+  }
 
-    // AC3, AC4: Simulate fills via PaperExecutionEngine
+  /** S4: Extract fill simulation from runCycle. */
+  private simulateFills(
+    intents: OrderIntent[],
+    riskDecisions: import("@agenttrading/contracts").RiskDecision[],
+    submittedCount: number,
+  ): void {
     for (let i = 0; i < intents.length; i++) {
       const intent = intents[i];
       const riskDecision = riskDecisions[i];
 
-      if (result.submittedCount > 0 || riskDecision.decision === "APPROVE") {
+      if (submittedCount > 0 || riskDecision.decision === "APPROVE") {
         const paperMarket: PaperMarketSnapshot = {
-          bid: market.bid,
-          ask: market.ask,
-          mid: market.mid,
-          liquidityUsd: market.liquidityUsd,
+          bid: this.market.bid,
+          ask: this.market.ask,
+          mid: this.market.mid,
+          liquidityUsd: this.market.liquidityUsd,
         };
 
-        const paperSnapshot = this.executionEngine.submit({
+        // SP1: Use the intent's slippage (already computed dynamically)
+        const slippageBps = intent.limits.maxSlippageBps ?? this.config.slippageBps;
+
+        this.executionEngine.submit({
           intent,
           riskDecision,
           market: paperMarket,
           submittedAtMs: this.nowMs(),
           fillDelayMs: this.config.fillDelayMs,
-          slippageBps: this.config.slippageBps,
+          slippageBps,
           feeBps: this.config.feeBps,
         });
 
@@ -516,7 +502,7 @@ export class PaperRunner {
                 fillQuantity: snapshot.filledQuantity,
                 notionalUsd: snapshot.filledQuantity * (snapshot.averageFillPrice ?? intent.price),
                 feesUsd: snapshot.totalFeesUsd,
-                slippageBps: this.config.slippageBps,
+                slippageBps,
                 filledAtMs: snapshot.filledAtMs ?? this.nowMs(),
               };
               this.trades.push(trade);
@@ -536,6 +522,127 @@ export class PaperRunner {
         }
       }
     }
+  }
+
+  /** S4: Extract regime input derivation from runCycle. */
+  private deriveRegimeInput(): RegimeClassifierInput {
+    // SP2: Derive regime inputs from actual market data
+    const spreadBps = this.market.bid > 0 && this.market.ask > 0
+      ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
+      : 10;
+
+    // SP2: Derive realized volatility from price history
+    const realizedVolatility = this.computeRealizedVolatility();
+
+    return {
+      realizedVolatility,
+      spreadBps,
+      liquidityUsd: this.market.liquidityUsd,
+      gasPriceUsd: 5,
+      cumulativePnlUsd: 0,
+      maxDrawdownUsd: 0,
+      rpcHealthy: true,
+      cexHealthy: true,
+      directionalStreak: this.computeDirectionalStreak(),
+      reversalCount: 0,
+      nowMs: this.nowMs(),
+    };
+  }
+
+  /** SP2: Compute realized volatility from recent price history. */
+  private computeRealizedVolatility(): number {
+    if (this.priceHistory.length < 2) return 0.5;
+
+    const returns: number[] = [];
+    for (let i = 1; i < this.priceHistory.length; i++) {
+      const r = (this.priceHistory[i] - this.priceHistory[i - 1]) / this.priceHistory[i - 1];
+      returns.push(r);
+    }
+
+    const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+    const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+    return Math.sqrt(variance) * Math.sqrt(365 * 24 * 60); // Annualize (rough)
+  }
+
+  /** SP2: Compute directional streak from price history. */
+  private computeDirectionalStreak(): number {
+    if (this.priceHistory.length < 2) return 0;
+
+    let streak = 0;
+    const last = this.priceHistory[this.priceHistory.length - 1];
+    const prev = this.priceHistory[this.priceHistory.length - 2];
+    const direction = last > prev ? 1 : -1;
+
+    for (let i = this.priceHistory.length - 2; i > 0; i--) {
+      const dir = this.priceHistory[i] > this.priceHistory[i - 1] ? 1 : -1;
+      if (dir === direction) streak++;
+      else break;
+    }
+
+    return streak;
+  }
+
+  // ── Cycle Loop (AC5, AC6) ─────────────────────────────────────────
+
+  private runCycle(): void {
+    if (!this.running) return;
+    this.cycleCount++;
+
+    // Track price history for volatility/streak computation
+    if (this.market.mid > 0) {
+      this.priceHistory.push(this.market.mid);
+      if (this.priceHistory.length > 100) {
+        this.priceHistory = this.priceHistory.slice(-100);
+      }
+    }
+
+    // S4: Extracted regime input derivation
+    const regimeInput = this.deriveRegimeInput();
+
+    // AC6: Classify regime
+    const regimeClassification = this.regimeClassifier.classify(regimeInput);
+    if (regimeClassification.regime !== this.lastRegime) {
+      this.regimeChangeCount++;
+      this.lastRegime = regimeClassification.regime;
+      this.auditLogger.record("REGIME_CHANGED", {
+        cycleCount: this.cycleCount,
+        regime: regimeClassification.regime,
+        confidence: regimeClassification.confidence,
+      });
+    }
+
+    // Build market snapshot for GammaSession
+    const gammaMarket: GammaCycleInput["market"] = {
+      bid: this.market.bid,
+      ask: this.market.ask,
+      mid: this.market.mid,
+      liquidityUsd: this.market.liquidityUsd,
+    };
+
+    // S4: Extracted opportunity creation
+    const intents: OrderIntent[] = [];
+    const riskDecisions: import("@agenttrading/contracts").RiskDecision[] = [];
+
+    const opportunity = this.createSyntheticOpportunity();
+    if (opportunity) {
+      intents.push(opportunity.intent);
+      riskDecisions.push(opportunity.riskDecision);
+    }
+
+    // Run GammaSession cycle
+    const result = this.session.runCycle({
+      regime: regimeInput,
+      market: gammaMarket,
+      intents,
+      riskDecisions,
+    });
+
+    this.ordersSubmitted += result.submittedCount;
+    this.ordersBlocked += result.blockedCount;
+    this.learningRecommendationCount += result.learningRecommendations.length;
+
+    // S4: Extracted fill simulation
+    this.simulateFills(intents, riskDecisions, result.submittedCount);
 
     // Log cycle completion (AC7)
     this.auditLogger.record("CYCLE_COMPLETE", {
