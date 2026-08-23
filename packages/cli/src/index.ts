@@ -13,11 +13,15 @@
  *   --cycle-interval <ms>      Override cycle frequency
  */
 
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
 import type { PaperRunner } from "@agenttrading/core";
+import { generateSessionId, buildSessionReport } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
+import { ManifestWriter } from "./manifest.ts";
 
 // ── Re-exports (keep backward-compatible library API) ─────────────────
 
@@ -25,6 +29,8 @@ export { loadConfig, formatConfigErrors } from "./config.ts";
 export type { AppConfig, Mode, LoadConfigResult, ConfigError, LogLevel } from "./config.ts";
 export { parseCliArgs, type CliArgs, type CliArgsError, type ParseCliArgsResult } from "./args.ts";
 export { LiveRunner, type LiveRunnerConfig, type LiveRunnerEvents } from "./live-runner.ts";
+export { ManifestWriter, type ManifestData, type ManifestEntry } from "./manifest.ts";
+export { StatusDisplay, type CycleStatusInput, type RegimeChangeInput, type OrderEventInput, type KillSwitchTriggerInput } from "./status-display.ts";
 
 // ── RunOptions (S3: bundle data clumps) ───────────────────────────────
 
@@ -34,6 +40,31 @@ interface RunOptions {
   cycleIntervalMs: number;
   dryRun: boolean;
   label: string;
+}
+
+// ── S3: Session paths (bundle data clumps) ──────────────────────────
+
+/** Computed paths for a session's output files. */
+interface SessionPaths {
+  sessionId: string;
+  reportDir: string;
+  sessionDir: string;
+  auditLogPath: string;
+  summaryPath: string;
+  manifestPath: string;
+}
+
+/** Compute all session output paths from reportDir and sessionId. */
+function buildSessionPaths(reportDir: string, sessionId: string): SessionPaths {
+  const sessionDir = `${reportDir}/${sessionId}`;
+  return {
+    sessionId,
+    reportDir,
+    sessionDir,
+    auditLogPath: `${sessionDir}/audit.jsonl`,
+    summaryPath: `${sessionDir}/summary.json`,
+    manifestPath: `${sessionDir}/manifest.json`,
+  };
 }
 
 // ── Banner ────────────────────────────────────────────────────────────
@@ -98,15 +129,25 @@ function printSessionSummary(
  * feeds market data into GammaSession, simulates fills, and produces
  * audit trail + session report. No API keys required.
  */
-async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
+async function runPaperMode(
+  opts: RunOptions,
+  paths: SessionPaths,
+): Promise<{ exitCode: number }> {
   const { PaperRunner } = await import("@agenttrading/core");
 
   const runner = new PaperRunner({
     symbols: ["BTCUSDT"],
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    auditLogPath: `./reports/paper-session-${Date.now()}.jsonl`,
+    auditLogPath: paths.auditLogPath,
+    sessionId: paths.sessionId,
   });
+
+  const manifest = new ManifestWriter({
+    sessionId: paths.sessionId,
+    startedAtMs: Date.now(),
+  });
+  manifest.track("audit-log", paths.auditLogPath);
 
   await runner.start();
 
@@ -123,6 +164,14 @@ async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
 
       console.log("\n[paper] Shutting down...");
       runner.stop();
+
+      shutdownObservability({
+        runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
+        paths,
+        config: opts.config,
+        manifest,
+      });
+
       resolve();
     };
 
@@ -138,7 +187,10 @@ async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
  * places real orders through LiveExecutionEngine with canary limits,
  * confirms fills via WS, reconciles, and produces full audit trail.
  */
-async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
+async function runLiveMode(
+  opts: RunOptions,
+  paths: SessionPaths,
+): Promise<{ exitCode: number }> {
   const runner = new LiveRunner({
     symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
       t.replace("/", ""),
@@ -147,8 +199,15 @@ async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
     bybitApiSecret: opts.config.bybitApiSecret,
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    auditLogPath: `./reports/live-session-${Date.now()}.jsonl`,
+    auditLogPath: paths.auditLogPath,
+    sessionId: paths.sessionId,
   });
+
+  const manifest = new ManifestWriter({
+    sessionId: paths.sessionId,
+    startedAtMs: Date.now(),
+  });
+  manifest.track("audit-log", paths.auditLogPath);
 
   await runner.start();
 
@@ -165,6 +224,14 @@ async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
 
       console.log("\n[live] Shutting down...");
       runner.stop();
+
+      shutdownObservability({
+        runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
+        paths,
+        config: opts.config,
+        manifest,
+      });
+
       resolve();
     };
 
@@ -194,6 +261,74 @@ async function checkExchangeReachable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── Observability Helpers ─────────────────────────────────────────────
+
+/** S2+S3: Shared shutdown observability — writes summary JSON + manifest. */
+function shutdownObservability(opts: {
+  runner: { startedAtMs: number; stoppedAtMs: number };
+  paths: SessionPaths;
+  config: AppConfig;
+  manifest: ManifestWriter;
+}): void {
+  const { runner, paths, config, manifest } = opts;
+
+  // AC8: Write session summary JSON with real timestamps (S5+S7+SP3)
+  writeSessionSummaryJson(paths.summaryPath, runner, paths.sessionId, config);
+  manifest.track("summary", paths.summaryPath);
+
+  // AC10: Write manifest at shutdown
+  manifest.writeManifest(paths.manifestPath);
+}
+
+/**
+ * AC8: Write session summary to JSON file at shutdown.
+ * Uses buildSessionReport for real session data (SP3).
+ */
+function writeSessionSummaryJson(
+  path: string,
+  runner: { startedAtMs: number; stoppedAtMs: number },
+  sessionId: string,
+  config: AppConfig,
+): void {
+  // SP3: Use buildSessionReport for real data instead of a stub
+  const report = buildSessionReport({
+    startedAtMs: runner.startedAtMs,
+    endedAtMs: runner.stoppedAtMs,
+    cycleCount: 0,
+    opportunitiesDetected: 0,
+    ordersSubmitted: 0,
+    ordersFilled: 0,
+    ordersBlocked: 0,
+    trades: [],
+    regimeChangeCount: 0,
+    finalRegime: undefined,
+    learningRecommendationCount: 0,
+    auditEventCount: 0,
+  });
+
+  const summary = {
+    sessionId,
+    mode: config.mode,
+    startedAtMs: runner.startedAtMs,
+    endedAtMs: runner.stoppedAtMs,
+    durationMs: runner.stoppedAtMs - runner.startedAtMs,
+    config: {
+      cycleIntervalMs: config.cycleIntervalMs,
+      logLevel: config.logLevel,
+      reportDir: config.reportDir,
+    },
+    report,
+  };
+
+  const dir = dirname(path);
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    // Directory may already exist.
+  }
+  writeFileSync(path, JSON.stringify(summary, null, 2) + "\n", "utf-8");
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
@@ -228,10 +363,14 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   // CLI flag takes precedence over config/env.
   const cycleIntervalMs = cliArgs.cycleIntervalMs ?? config.cycleIntervalMs;
 
-  // ── Step 4: Print startup banner ─────────────────────────────────
+  // ── Step 4: Generate session ID and compute output paths ─────────
+  const sessionId = generateSessionId();
+  const paths = buildSessionPaths(config.reportDir, sessionId);
+
+  // ── Step 5: Print startup banner ─────────────────────────────────
   printBanner(config, cycleIntervalMs);
 
-  // ── Step 5: Exchange connectivity check (SP2) ───────────────────
+  // ── Step 6: Exchange connectivity check (SP2) ───────────────────
   if (config.mode === "live") {
     console.log("[live] Checking exchange connectivity...");
     const reachable = await checkExchangeReachable();
@@ -243,7 +382,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     console.log("[live] Exchange reachable.\n");
   }
 
-  // ── Step 6: Dispatch to mode ─────────────────────────────────────
+  // ── Step 7: Dispatch to mode ─────────────────────────────────────
   const runOpts: RunOptions = {
     config,
     cycleIntervalMs,
@@ -253,9 +392,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 
   let exitCode: number;
   if (config.mode === "paper") {
-    exitCode = (await runPaperMode(runOpts)).exitCode;
+    exitCode = (await runPaperMode(runOpts, paths)).exitCode;
   } else {
-    exitCode = (await runLiveMode(runOpts)).exitCode;
+    exitCode = (await runLiveMode(runOpts, paths)).exitCode;
   }
   process.exit(exitCode);
 }

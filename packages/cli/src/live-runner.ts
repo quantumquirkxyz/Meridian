@@ -43,6 +43,7 @@ import {
   BybitWebSocketClient,
   type BybitWSClientEvents,
 } from "@agenttrading/connectors";
+import { StatusDisplay } from "./status-display.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -59,6 +60,8 @@ export interface LiveRunnerConfig {
   canaryConfig?: CanaryConfig;
   /** Path for the JSONL audit log file. */
   auditLogPath?: string;
+  /** Session identifier for audit log correlation. Generated if omitted. */
+  sessionId?: string;
   /** Reconciliation interval in ms (default: 30_000). */
   reconciliationIntervalMs?: number;
   /** Order category for Bybit REST API (default: "linear"). */
@@ -67,6 +70,8 @@ export interface LiveRunnerConfig {
   feeBps?: number;
   /** Injectable clock for testing. */
   nowMs?: () => number;
+  /** Optional status display for real-time cycle output. */
+  statusDisplay?: StatusDisplay;
 }
 
 export interface LiveRunnerEvents {
@@ -123,6 +128,7 @@ export class LiveRunner {
     canaryConfig: CanaryConfig;
     auditLogPath: string;
     nowMs: () => number;
+    statusDisplay?: StatusDisplay;
   };
   private readonly nowMs: () => number;
 
@@ -157,7 +163,7 @@ export class LiveRunner {
   private regimeChangeCount = 0;
   private lastRegime: string | undefined;
   private learningRecommendationCount = 0;
-  private startedAtMs = 0;
+  private _startedAtMs = 0;
   private events: LiveRunnerEvents = {};
 
   constructor(config: LiveRunnerConfig) {
@@ -175,6 +181,7 @@ export class LiveRunner {
       orderCategory: config.orderCategory ?? DEFAULT_ORDER_CATEGORY,
       feeBps: config.feeBps ?? DEFAULT_FEE_BPS,
       nowMs: this.nowMs,
+      statusDisplay: config.statusDisplay,
     };
 
     // AC8: Validate API keys
@@ -190,6 +197,7 @@ export class LiveRunner {
     this.auditLogger = new PaperAuditLogger({
       filePath: this.config.auditLogPath,
       nowMs: this.nowMs,
+      sessionId: config.sessionId,
     });
 
     this.reconciliationEngine = new ReconciliationEngine();
@@ -236,6 +244,16 @@ export class LiveRunner {
     this.events = { ...this.events, ...events };
   }
 
+  /** Session identifier from the audit logger. */
+  get sessionId(): string {
+    return this.auditLogger.sessionId;
+  }
+
+  /** Session start timestamp (Unix ms). 0 if not started. */
+  get startedAtMs(): number {
+    return this._startedAtMs;
+  }
+
   /**
    * SP2: Send a control command to the canary session.
    * Enables emergency modes (cancel-all, reduce-only, cash-only) from
@@ -252,7 +270,7 @@ export class LiveRunner {
     if (this.running) return;
 
     this.running = true;
-    this.startedAtMs = this.nowMs();
+    this._startedAtMs = this.nowMs();
 
     this.session.start();
     this.auditLogger.record("SESSION_STARTED", {
@@ -345,7 +363,7 @@ export class LiveRunner {
     // Record session end
     const endedAtMs = this.nowMs();
     this.auditLogger.record("SESSION_ENDED", {
-      durationMs: endedAtMs - this.startedAtMs,
+      durationMs: endedAtMs - this._startedAtMs,
       cycleCount: this.cycleCount,
       ordersSubmitted: this.ordersSubmitted,
       ordersFilled: this.ordersFilled,
@@ -355,7 +373,7 @@ export class LiveRunner {
 
     // AC12: Build and print session report
     const report = buildSessionReport({
-      startedAtMs: this.startedAtMs,
+      startedAtMs: this._startedAtMs,
       endedAtMs,
       cycleCount: this.cycleCount,
       opportunitiesDetected: this.opportunitiesDetected,
@@ -689,6 +707,20 @@ export class LiveRunner {
       regime: result.regimeClassification?.regime,
       submitted: result.submittedCount,
       blocked: result.blockedCount,
+    });
+
+    // AC3: Display cycle status via StatusDisplay if wired
+    this.config.statusDisplay?.printCycleStatus({
+      mode: "live",
+      cycleCount: this.cycleCount,
+      regime: result.regimeClassification?.regime,
+      regimeConfidence: result.regimeClassification?.confidence,
+      pnlUsd: this.session.status.dailyPnlUsd,
+      openOrders: this.pendingOrders.size,
+      killSwitchActive: this.session.status.killSwitchActive,
+      submitted: result.submittedCount,
+      blocked: result.blockedCount,
+      totalTrades: this.trades.length,
     });
 
     console.log(
