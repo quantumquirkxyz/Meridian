@@ -46,22 +46,24 @@ import type {
   LearningRecommendation,
   MarketGraphSnapshot,
   OrderIntent,
+  PromotionRecord,
   RegimeClassification,
   RegimePolicy,
   RiskDecision,
+  RouteDiscoveryResult,
   TradeReconstruction,
   TradeReport,
 } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
-import { DEFAULT_REGIME_THRESHOLDS, type RegimeClassifierInput } from "./regime-classifier.ts";
+import { type RegimeClassifierInput } from "./regime-classifier.ts";
 import { RegimeClassifier } from "./regime-classifier.ts";
 import { RegimePolicyEngine } from "./regime-policy-engine.ts";
-import { CanarySession, type CanarySessionOptions } from "./canary-session.ts";
+import { CanarySession } from "./canary-session.ts";
 import { LearningEngine } from "./learning-engine.ts";
+import { RouteEngine } from "./route-engine.ts";
 import { AuditReconstructor } from "./audit-reconstructor.ts";
 import { ReportGenerator } from "./report-generator.ts";
 import { AuditExporter } from "./audit-exporter.ts";
-import type { AuditLog } from "../stategraph/audit-log.ts";
 import type { TradeJournal } from "./trade-journal.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -78,6 +80,8 @@ export interface GammaCycleInput {
   intents: OrderIntent[];
   /** Risk decisions for the intents (parallel array). */
   riskDecisions: RiskDecision[];
+  /** Optional market graph snapshot for route discovery (SP1). */
+  snapshot?: MarketGraphSnapshot;
 }
 
 /**
@@ -110,6 +114,8 @@ export interface GammaCycleResult {
   learningRecommendations: LearningRecommendation[];
   /** Whether a learning cycle ran in this cycle. */
   learningCycleRan: boolean;
+  /** Route discovery results when a snapshot was provided (SP1). */
+  routeDiscovery?: RouteDiscoveryResult;
 }
 
 /**
@@ -152,6 +158,10 @@ export interface GammaSessionSummary {
   };
   /** Learning recommendations from the session. */
   learningRecommendations: LearningRecommendation[];
+  /** Active promotions in the pipeline (SP2). */
+  activePromotions: readonly PromotionRecord[];
+  /** All promotion records (SP2). */
+  allPromotions: readonly PromotionRecord[];
   /** Audit event count. */
   auditEventCount: number;
 }
@@ -177,24 +187,21 @@ export class GammaSession {
   private readonly now: () => number;
   private readonly learningCycleInterval: number;
   private cycleCount = 0;
+  private auditSequence = 0;
 
   // Core subsystems
   private readonly canarySession: CanarySession;
   private readonly regimeClassifier: RegimeClassifier;
   private readonly regimePolicyEngine: RegimePolicyEngine;
   private readonly learningEngine: LearningEngine;
+  private readonly routeEngine: RouteEngine;
   private readonly auditReconstructor: AuditReconstructor;
-  private readonly reportGenerator: ReportGenerator | null = null;
   private readonly auditExporter: AuditExporter;
 
   // State
   private running = false;
   private lastRegimeClassification: RegimeClassification | null = null;
   private allRecommendations: LearningRecommendation[] = [];
-  private cycleResults: GammaCycleResult[] = [];
-  private totalSubmittedCount = 0;
-  private totalBlockedCount = 0;
-  private totalRegimeBlockedCount = 0;
 
   constructor(options: GammaSessionOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -205,6 +212,7 @@ export class GammaSession {
     this.regimeClassifier = new RegimeClassifier();
     this.regimePolicyEngine = new RegimePolicyEngine({ now: this.now });
     this.learningEngine = new LearningEngine(undefined, this.now);
+    this.routeEngine = new RouteEngine(undefined, this.now);
     this.canarySession = new CanarySession({
       now: this.now,
       config: options.canaryConfig ?? DEFAULT_CANARY_CONFIG,
@@ -239,33 +247,13 @@ export class GammaSession {
   /** Run a single integration cycle. */
   runCycle(input: GammaCycleInput): GammaCycleResult {
     if (!this.running) {
-      return {
-        ok: false,
-        error: "session is not running",
-        regimeChanged: false,
-        regimeChangeBlocked: false,
-        submittedCount: 0,
-        blockedCount: 0,
-        regimeBlockedCount: 0,
-        learningRecommendations: [],
-        learningCycleRan: false,
-      };
+      return this.cycleError("session is not running");
     }
 
     // Check if kill switch is active.
     const status = this.canarySession.status;
     if (status.killSwitchActive) {
-      return {
-        ok: false,
-        error: "kill switch is active",
-        regimeChanged: false,
-        regimeChangeBlocked: false,
-        submittedCount: 0,
-        blockedCount: 0,
-        regimeBlockedCount: 0,
-        learningRecommendations: [],
-        learningCycleRan: false,
-      };
+      return this.cycleError("kill switch is active");
     }
 
     // Step 1: Classify regime.
@@ -340,11 +328,19 @@ export class GammaSession {
       }
     }
 
-    this.totalSubmittedCount += submittedCount;
-    this.totalBlockedCount += blockedCount;
-    this.totalRegimeBlockedCount += regimeBlockedCount;
+    // Step 4: Discover routes when a snapshot is provided (SP1+SP3).
+    let routeDiscovery: RouteDiscoveryResult | undefined;
+    if (input.snapshot !== undefined) {
+      routeDiscovery = this.routeEngine.discover(input.snapshot, this.now());
+      if (routeDiscovery.blockedRoutes.length > 0) {
+        this.recordAudit("GAMMA_ROUTES_BLOCKED", {
+          blockedCount: routeDiscovery.blockedRoutes.length,
+          liveCount: routeDiscovery.liveRoutes.length,
+        });
+      }
+    }
 
-    // Step 4: Run learning cycle periodically.
+    // Step 5: Run learning cycle periodically.
     let learningRecommendations: LearningRecommendation[] = [];
     let learningCycleRan = false;
     this.cycleCount++;
@@ -382,9 +378,9 @@ export class GammaSession {
       regimeBlockedCount,
       learningRecommendations,
       learningCycleRan,
+      routeDiscovery,
     };
 
-    this.cycleResults.push(result);
     return result;
   }
 
@@ -546,7 +542,28 @@ export class GammaSession {
       reconstructions,
       exportedReports: { dailyJson, dailyCsv, dailyTxt },
       learningRecommendations: this.allRecommendations,
+      activePromotions: this.learningEngine.promotionPipeline.getActivePromotions(),
+      allPromotions: this.learningEngine.promotionPipeline.getAllRecords(),
       auditEventCount: this.auditReconstructor.auditEventCount,
+    };
+  }
+
+  // ── Audit Integration ─────────────────────────────────────────────
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  /** Shared error-return shape for runCycle early exits (S4). */
+  private cycleError(error: string): GammaCycleResult {
+    return {
+      ok: false,
+      error,
+      regimeChanged: false,
+      regimeChangeBlocked: false,
+      submittedCount: 0,
+      blockedCount: 0,
+      regimeBlockedCount: 0,
+      learningRecommendations: [],
+      learningCycleRan: false,
     };
   }
 
@@ -560,9 +577,10 @@ export class GammaSession {
     eventType: string,
     data: Record<string, unknown>,
   ): void {
+    this.auditSequence++;
     this.auditReconstructor.addAuditEvent({
       eventId: `gamma-${eventType}-${this.now()}`,
-      sequence: this.cycleCount,
+      sequence: this.auditSequence,
       timestampMs: this.now(),
       action: "STATE_TRANSITION",
       actor: "gamma-session",

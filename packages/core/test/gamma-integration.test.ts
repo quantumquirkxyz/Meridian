@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_CANARY_CONFIG,
+  type ApprovedRiskDecision,
   type CanaryConfig,
   type GammaControlCommand,
   type OrderIntent,
-  type RiskDecision,
 } from "@agenttrading/contracts";
 import { type RegimeClassifierInput } from "../src/gamma/regime-classifier.ts";
 import { RegimeClassifier } from "../src/gamma/regime-classifier.ts";
@@ -42,8 +42,8 @@ function intent(overrides: Partial<OrderIntent> = {}): OrderIntent {
 }
 
 function approvedDecision(
-  overrides: Partial<RiskDecision> = {},
-): RiskDecision {
+  overrides: Partial<ApprovedRiskDecision> = {},
+): ApprovedRiskDecision {
   return {
     decision: "APPROVE",
     orderIntentIdempotencyKey: "intent-1",
@@ -52,7 +52,7 @@ function approvedDecision(
     approvedLimits: { maxSlippageBps: 20 },
     expiresAtMs: FIXED_TS + 60_000,
     ...overrides,
-  } as RiskDecision;
+  };
 }
 
 function normalRegimeInput(): RegimeClassifierInput {
@@ -211,7 +211,7 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
             approvedDecision({
               orderIntentIdempotencyKey: `open-${i}`,
               approvedSize: 0.25,
-            } as any),
+            }),
           ],
         }),
       );
@@ -223,13 +223,12 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
       cycleInput({
         intents: [
           intent({ idempotencyKey: "open-5", quantity: 0.25, price: 100 }),
-        ],
-        riskDecisions: [
-          approvedDecision({
-            orderIntentIdempotencyKey: "open-5",
-            approvedSize: 0.25,
-          } as any),
-        ],
+        ],          riskDecisions: [
+            approvedDecision({
+              orderIntentIdempotencyKey: "open-5",
+              approvedSize: 0.25,
+            }),
+          ],
       }),
     );
     expect(result5.blockedCount).toBe(1);
@@ -253,7 +252,7 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
     const result = session.runCycle(
       cycleInput({
         intents: [intent({ quantity: 0.5, price: 100 })],
-        riskDecisions: [approvedDecision({ approvedSize: 0.5 } as any)],
+        riskDecisions: [approvedDecision({ approvedSize: 0.5 })],
       }),
     );
 
