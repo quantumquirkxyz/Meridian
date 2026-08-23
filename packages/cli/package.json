@@ -1,0 +1,23 @@
+{
+  "name": "@agenttrading/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI entry point, config loader, mode dispatch for the AgentTrading system.",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agenttrading/contracts": "workspace:*",
+    "@agenttrading/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  }
+}
