@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@agenttrading/contracts": "workspace:*",
-    "@agenttrading/core": "workspace:*"
+    "@agenttrading/core": "workspace:*",
+    "@agenttrading/connectors": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14"

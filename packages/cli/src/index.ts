@@ -17,12 +17,14 @@ import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
 import type { PaperRunner } from "@agenttrading/core";
+import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 
 // ── Re-exports (keep backward-compatible library API) ─────────────────
 
 export { loadConfig, formatConfigErrors } from "./config.ts";
 export type { AppConfig, Mode, LoadConfigResult, ConfigError, LogLevel } from "./config.ts";
 export { parseCliArgs, type CliArgs, type CliArgsError, type ParseCliArgsResult } from "./args.ts";
+export { LiveRunner, type LiveRunnerConfig, type LiveRunnerEvents } from "./live-runner.ts";
 
 // ── RunOptions (S3: bundle data clumps) ───────────────────────────────
 
@@ -132,65 +134,37 @@ async function runPaperMode(opts: RunOptions): Promise<{ exitCode: number }> {
 }
 
 /**
- * Run live mode. Placeholder — requires Bybit REST + WS connectors.
+ * Run live mode using LiveRunner. Connects to Bybit private+public WS,
+ * places real orders through LiveExecutionEngine with canary limits,
+ * confirms fills via WS, reconciles, and produces full audit trail.
  */
 async function runLiveMode(opts: RunOptions): Promise<{ exitCode: number }> {
-  console.log("[live] Live mode is not yet fully operational.");
-  console.log("[live] For live trading, ensure Bybit REST and WebSocket connectors are wired.\n");
-
-  // Fallback to synthetic cycle for now
-  const { GammaSession } = await import("@agenttrading/core");
-  const session = new GammaSession({
+  const runner = new LiveRunner({
+    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
+      t.replace("/", ""),
+    ),
+    bybitApiKey: opts.config.bybitApiKey,
+    bybitApiSecret: opts.config.bybitApiSecret,
+    cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
-    learningCycleInterval: 10,
+    auditLogPath: `./reports/live-session-${Date.now()}.jsonl`,
   });
 
-  session.start();
-  console.log(`[live] Session started. Cycle interval: ${opts.cycleIntervalMs}ms`);
-  console.log("[live] Press Ctrl+C to stop.\n");
+  await runner.start();
 
-  const startTimeMs = Date.now();
-  let cycleCount = 0;
-
+  // AC13: Graceful shutdown
   await new Promise<void>((resolve) => {
     let shutdownDone = false;
-    const timer = setInterval(() => {
-      cycleCount++;
-      try {
-        const result = session.runCycle({
-          regime: {
-            realizedVolatility: 0.5, spreadBps: 10, liquidityUsd: 50_000,
-            gasPriceUsd: 5, cumulativePnlUsd: 0, maxDrawdownUsd: 0,
-            rpcHealthy: true, cexHealthy: true, directionalStreak: 0,
-            reversalCount: 0, nowMs: Date.now(),
-          },
-          market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
-          intents: [], riskDecisions: [],
-        });
-        console.log(
-          `[live] Cycle ${cycleCount}: regime=${result.regimeClassification?.regime ?? "unknown"} submitted=${result.submittedCount} blocked=${result.blockedCount}`,
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`\n[live] Cycle ${cycleCount} failed: ${message}`);
-        clearInterval(timer);
-        session.stop();
-        printSessionSummary(startTimeMs, opts.config, `cycle error: ${message}`, false);
-        console.log("[live] Session ended due to error. Goodbye.");
-        if (!shutdownDone) { shutdownDone = true; resolve(); }
-      }
-    }, opts.cycleIntervalMs);
 
     const shutdown = () => {
       if (shutdownDone) return;
       shutdownDone = true;
-      clearInterval(timer);
+
       process.removeListener("SIGINT", shutdown);
       process.removeListener("SIGTERM", shutdown);
+
       console.log("\n[live] Shutting down...");
-      session.stop();
-      printSessionSummary(startTimeMs, opts.config, "SIGINT/SIGTERM", true);
-      console.log("[live] Session ended. Goodbye.");
+      runner.stop();
       resolve();
     };
 

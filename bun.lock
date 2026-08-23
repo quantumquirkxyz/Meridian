@@ -23,6 +23,7 @@
       "name": "@agenttrading/cli",
       "version": "0.1.0",
       "dependencies": {
+        "@agenttrading/connectors": "workspace:*",
         "@agenttrading/contracts": "workspace:*",
         "@agenttrading/core": "workspace:*",
       },
