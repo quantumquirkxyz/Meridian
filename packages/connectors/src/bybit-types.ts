@@ -118,37 +118,6 @@ export interface BybitOpenOrdersResult {
   nextPageCursor: string;
 }
 
-// ── Market data ─────────────────────────────────────────────────────
-
-export interface BybitTickersResult {
-  list: Array<{
-    symbol: string;
-    bid1Price: string;
-    bid1Size: string;
-    ask1Price: string;
-    ask1Size: string;
-    lastPrice: string;
-    prevPrice24h: string;
-    price24hPcnt: string;
-    highPrice24h: string;
-    lowPrice24h: string;
-    turnover24h: string;
-    volume24h: string;
-    fundingRate: string;
-    nextFundingTime: string;
-    markPrice: string;
-    indexPrice: string;
-    openInterest: string;
-    openInterestValue: string;
-    deliveryFeeRate: string;
-    deliveryTime: string;
-    basisRate: string;
-    preOpenPrice: string;
-    preQty: string;
-    curPreListingPhase: string;
-  }>;
-}
-
 // ── WebSocket types ─────────────────────────────────────────────────
 
 export type BybitWSTopic =

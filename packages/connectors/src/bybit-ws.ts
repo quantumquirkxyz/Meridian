@@ -77,7 +77,6 @@ const PING_INTERVAL_MS = 20_000;
 const WS_OPEN = 1;
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
-const MAX_RECONNECT_ATTEMPTS = Infinity;
 
 // ── Client ───────────────────────────────────────────────────────────
 
