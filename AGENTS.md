@@ -24,4 +24,6 @@ Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agent
 - Domain language, invariants, and ADRs for market graph, execution, and risk -> `domain-modeling`.
 - Market or protocol research -> `research`.
 - Review work -> `code-review` or `review-pr`.
+- Dirty PR review that should be driven to clean -> `review-fix-loop`.
+- Review-fixed PR that should be merged, closed, and synced with tracker metadata -> `ship-review-fix-loop`.
 - Unclear plan or decision -> `grill-me` or `grill-with-docs`.

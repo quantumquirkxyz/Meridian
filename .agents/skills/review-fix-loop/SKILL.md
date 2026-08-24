@@ -1,6 +1,6 @@
 ---
 name: review-fix-loop
-description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply the plan, then repeat until Standards and Spec are clean or the loop is blocked. Use for PRs that should automatically cycle through review-driven fixes before ship-subissue."
+description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply the plan, then repeat until Standards and Spec are clean or the loop is blocked. Use for PRs that should automatically cycle through review-driven fixes before ship-review-fix-loop or ship-subissue."
 version: 1
 capabilities:
   - orchestrate-review-fixes
@@ -26,7 +26,7 @@ risk: medium
 
 ## Overview
 
-Coordinate review, planning, and implementation without diluting any one skill's responsibility. The review remains the measurement instrument; this skill decides whether to plan fixes, implement them, repeat, or hand off to ship-subissue.
+Coordinate review, planning, and implementation without diluting any one skill's responsibility. The review remains the measurement instrument; this skill decides whether to plan fixes, implement them, repeat, or hand off to ship-review-fix-loop or ship-subissue.
 Use the canonical work-item metadata format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) as the source of truth for labels, milestone, and project metadata when preserving the loop state in comments or handoffs.
 
 ## Contract
@@ -82,7 +82,7 @@ Track these facts in the working response or PR comments:
 
 ## Exit Conditions
 
-- **Clean:** review-pr reports no Standards findings and no Spec findings. Say that ship-subissue may proceed.
+- **Clean:** review-pr reports no Standards findings and no Spec findings. Say that ship-review-fix-loop may proceed when the user wants merge/close/project updates, or that ship-subissue may proceed when a separate ship step will handle them.
 - **Blocked:** missing PR, missing fixed point, stale or contradictory plan, failing validation without an obvious scoped fix, or the same findings recurring after three passes.
 - **User stop:** user pauses or redirects the loop.
 
@@ -95,7 +95,7 @@ Track these facts in the working response or PR comments:
 
 ## Guardrails
 
-- Do not merge, close, or delete branches; ship-subissue owns that.
+- Do not merge, close, or delete branches; ship-review-fix-loop or ship-subissue owns that.
 - Do not hide review findings by reclassifying them as planned work.
 - Do not keep looping when the next action needs user judgement.
 - Do not change the fixed point mid-loop unless the user explicitly changes it.
