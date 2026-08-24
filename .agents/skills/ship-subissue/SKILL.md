@@ -1,6 +1,6 @@
 ---
 name: ship-subissue
-description: Use when a finished subissue, including a corrective subissue from `/spec-audit` or `/ticket-audit`, already has a clean PR and you need to merge it, mark it as completed, and close the linked issue if GitHub does not do so automatically.
+description: Use when a finished subissue, including a corrective subissue from `/doc-draft-pr` or `/doc-draft-pr`, already has a clean PR and you need to merge it, mark it as completed, and close the linked issue if GitHub does not do so automatically.
 version: 1
 capabilities:
   - merge-clean-pr

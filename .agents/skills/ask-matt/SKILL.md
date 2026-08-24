@@ -109,8 +109,8 @@ Off the main flow entirely.
 - **`/plan-review-fixes`** — turn dirty `/code-review` findings into a durable GitHub PR comment headed `Review Fix Plan`. Use it alone when you want a human-readable correction plan before anyone edits code.
 - **`/implement-review-fixes`** — read the latest `Review Fix Plan` PR comment, apply the scoped corrections through `/implement`, validate locally, and leave an implementation note. Use it alone when the plan already exists.
 - **`/review-fix-loop`** — orchestrate the review repair cycle: `/code-review`, plan, implement, then review again until clean or blocked. Use it when a PR should be driven to a clean review before `/ship-subissue`.
-- **`/spec-audit`** — audit whether a parent spec with subissues is truly complete. Use it when the user asks if a spec was fully satisfied, whether its tickets/PRs cover every requirement, or whether corrective subissues should be created. It delegates decomposition coverage to `/ticket-audit` and may create corrective subissues only when explicitly allowed.
-- **`/ticket-audit`** — audit whether a ticket or subissue set covers a parent spec. Use it directly when the user only wants the coverage matrix for tickets, without deciding overall spec completion or creating new issues.
+- **`/doc-draft-pr`** — audit whether a parent spec with subissues is truly complete. Use it when the user asks if a spec was fully satisfied, whether its tickets/PRs cover every requirement, or whether corrective subissues should be created. It delegates decomposition coverage to `/doc-draft-pr` and may create corrective subissues only when explicitly allowed.
+- **`/doc-draft-pr`** — audit whether a ticket or subissue set covers a parent spec. Use it directly when the user only wants the coverage matrix for tickets, without deciding overall spec completion or creating new issues.
 - **`/teach`** — learn a concept over multiple sessions, using the current directory as a stateful workspace.
 - **`/writing-great-skills`** — reference for writing and editing skills well.
 

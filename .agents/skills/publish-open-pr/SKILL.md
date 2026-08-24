@@ -1,6 +1,6 @@
 ---
 name: publish-open-pr
-description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/spec-audit` or `/ticket-audit`, as an open GitHub pull request from an already-prepared issue branch, with a draft fallback when GitHub rejects the non-draft path.
+description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/doc-draft-pr` or `/doc-draft-pr`, as an open GitHub pull request from an already-prepared issue branch, with a draft fallback when GitHub rejects the non-draft path.
 version: 1
 capabilities:
   - publish-pr

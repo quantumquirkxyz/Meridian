@@ -18,7 +18,7 @@ risk: low
 
 # Work Item Router
 
-Use this skill before `to-spec`, `to-tickets`, `spec-audit`, `ticket-audit`, or `make-project` when the task involves tracker metadata, project boards, audit coverage, corrective publication, or publication flow.
+Use this skill before `to-spec`, `to-tickets`, `doc-draft-pr`, `doc-draft-pr`, or `make-project` when the task involves tracker metadata, project boards, audit coverage, corrective publication, or publication flow.
 
 ## Contract
 
