@@ -1,6 +1,6 @@
 ---
 name: implement
-description: "Implement a piece of work based on a spec or set of tickets, or build a scoped fix that another skill will publish."
+description: "Implement a piece of work based on a spec or set of tickets, or build a scoped fix that can be handed off for publication."
 version: 1
 capabilities:
   - implement-ticket
@@ -41,6 +41,7 @@ Run typechecking regularly, single test files regularly, and the full test suite
 - Rule: if the work needs a new seam, make the seam choice explicit before coding.
 - Rule: make the implementation commits on the dedicated issue branch using conventional commit formatting.
 - Rule: keep the issue branch local first, then push it to `origin` before handing off to `publish-open-pr`.
+- Rule: do not open, publish, or merge a PR here; this skill stops at the implemented, validated branch.
 
 ## Completion criteria
 

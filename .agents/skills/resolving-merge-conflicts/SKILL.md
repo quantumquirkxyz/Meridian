@@ -1,6 +1,6 @@
 ---
 name: resolving-merge-conflicts
-description: "Use when you need to resolve an in-progress git merge/rebase conflict."
+description: "Use when you need to resolve an in-progress git merge/rebase conflict without merging the pull request itself."
 version: 1
 capabilities:
   - resolve-merge-conflicts
@@ -27,3 +27,5 @@ risk: medium
 4. Discover the project's **automated checks** and run them — typically typecheck, then tests, then format. Fix anything the merge broke.
 
 5. **Finish the merge/rebase.** Stage everything and commit. If rebasing, continue the rebase process until all commits are rebased.
+
+6. **Do not merge the PR here.** This skill resolves the conflicted branch state only; PR merge/close happens in the dedicated ship workflow after the branch is clean.

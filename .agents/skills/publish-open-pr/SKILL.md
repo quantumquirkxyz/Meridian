@@ -1,6 +1,6 @@
 ---
 name: publish-open-pr
-description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/doc-draft-pr` or `/doc-draft-pr`, as an open GitHub pull request from an already-prepared issue branch, with a draft fallback when GitHub rejects the non-draft path.
+description: Use when the user wants to publish a finished subissue, including a corrective subissue from `/doc-draft-pr` or `/doc-draft-pr`, as an open GitHub pull request from an already-prepared issue branch, after `implement` has finished, with a draft fallback when GitHub rejects the non-draft path.
 version: 1
 capabilities:
   - publish-pr
@@ -22,7 +22,7 @@ risk: medium
 
 # Publish Open PR
 
-Publish one completed Quant subissue, including a corrective subissue, from a local checkout to GitHub as an open pull request.
+Publish one completed Quant subissue, including a corrective subissue, from a local checkout to GitHub as an open pull request after `implement` has finished.
 Keep the diff tight and leave a reviewer with a short body that explains what changed and why in Quant terms.
 Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-prepared branch.
 The linked issue's metadata is the source of truth for labels and milestone. Follow [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when carrying metadata into the PR.
@@ -66,6 +66,7 @@ The linked issue's metadata is the source of truth for labels and milestone. Fol
 - Never guess at reviewer handles. If the workflow cannot resolve a required reviewer from repository context, stop and report the missing configuration.
 - Never use a vague title like `Update` or `Misc fixes` unless the diff is genuinely broad and unavoidable.
 - Never create or amend commits here; that belongs to `implement`.
+- Never implement new issue work in this skill; only package, push, and publish the branch that `implement` already prepared.
 - Never merge the PR or close the issue here; that belongs to `ship-subissue`.
 - Never override the linked issue's labels or milestone unless the user explicitly asked for a metadata change.
 
