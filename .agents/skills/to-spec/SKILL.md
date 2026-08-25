@@ -26,7 +26,7 @@ stopCondition: The spec is published and the implementation decisions are explic
 risk: medium
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a spec (you may know this document as a PRD). Do NOT interview the user — just synthesize what you already know. Write the published issue body in English, and use the repo's Quant vocabulary consistently.
+This skill takes the current conversation context and codebase understanding and produces a spec (you may know this document as a PRD). Do NOT interview the user — just synthesize what you already know. Write the published issue body in English, and use the this repo's vocabulary consistently.
 
 The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
 The canonical work-item metadata shape is documented in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md); follow it for labels, milestone, project, fields, and todo/acceptance structure.
@@ -37,7 +37,7 @@ The canonical work-item metadata shape is documented in [`docs/agents/work-item-
 - Output: one published spec issue plus the implementation and testing decisions that make the work buildable.
 - Scope: synthesize what is already known; do not reopen discovery interviews.
 - Rule: prefer one seam, and make any seam choice explicit before publishing.
-- Rule: frame the work in terms of Quant concepts where relevant: context, harness, loop, graph, data plane, execution plane, observability, and safety boundaries.
+- Rule: frame the work in terms of this repo's concepts where relevant: context, harness, loop, graph, data plane, execution plane, observability, and safety boundaries.
 - Rule: if the spec cannot be made concrete enough to hand off, stop and say what is still missing.
 
 ## Process

@@ -1,6 +1,6 @@
 ---
 name: wayfinder
-description: Plan a huge chunk of work — more than one agent session can hold — as a shared map of decision tickets on your issue tracker, and resolve them one at a time until the way to the destination is clear.
+description: Plan a huge chunk of work — more than one agent session can hold — as a map of decision tickets on your issue tracker, and resolve them one at a time until the way to the destination is clear.
 disable-model-invocation: true
 version: 1
 capabilities:
@@ -12,7 +12,7 @@ inputs:
   - foggy effort
   - tracker configuration
 outputs:
-  - shared map
+  - map
   - decision tickets
   - clear route
 dependencies:
@@ -25,14 +25,14 @@ stopCondition: The route is clear enough to hand off into spec and implementatio
 risk: medium
 ---
 
-A loose idea has arrived — too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** on the repo's issue tracker, then works its **decision tickets** — questions whose resolution is a decision, not slices of a build to execute — one at a time until the route is clear.
+A loose idea has arrived — too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **map** on the repo's issue tracker, then works its **decision tickets** — questions whose resolution is a decision, not slices of a build to execute — one at a time until the route is clear.
 
 Start each map by resolving a minimal fresh context pack, then route the first question against declared capabilities so the map stays anchored in the current repo state.
 
 ## Contract
 
 - Input: one destination, one foggy effort, and the tracker configuration.
-- Output: a shared map, decision tickets, and a clear route for the next build step.
+- Output: a map, decision tickets, and a clear route for the next build step.
 - Scope: produce decisions, not deliverables.
 - Rule: only ticket questions that are already sharp enough to state precisely.
 - Rule: resolve at most one ticket per session unless the ticket is research.

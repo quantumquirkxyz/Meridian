@@ -126,5 +126,5 @@ A change can pass one axis and fail the other:
 
 Reporting them separately stops one axis from masking the other.
 
-When reviewing a Quant spec or ADR, keep the spec axis aligned to `CONTEXT.md` and `docs/model/quant_model.tex` so findings use the project's canonical architecture and domain vocabulary.
+When reviewing a spec or ADR, keep the spec axis aligned to `CONTEXT.md` and the repo's ADRs so findings use the project's canonical architecture and domain vocabulary.
 When the review is attached to a tracker-backed PR, treat the linked issue metadata as part of the review surface: the published review should preserve traceability to the issue labels and milestone, following [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) for any metadata references you include in the PR review body.

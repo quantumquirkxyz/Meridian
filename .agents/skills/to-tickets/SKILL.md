@@ -41,7 +41,7 @@ The canonical work-item metadata shape is documented in [`docs/agents/work-item-
 - Input: a plan, a spec, conversation context, or a corrective ticket recommendation from `/doc-draft-pr` or `/doc-draft-pr`.
 - Output: an ordered set of published tickets with explicit blockers.
 - Scope: produce tracer bullets, not a horizontal task dump.
-- Rule: frame slices in Quant terms where relevant: context, harness, loop, graph, data plane, execution plane, observability, and safety boundaries.
+- Rule: frame slices in this repo's terms where relevant: context, harness, loop, graph, data plane, execution plane, observability, and safety boundaries.
 - Rule: every ticket must be independently understandable and claimable.
 - Rule: every blocking edge must correspond to a genuine prerequisite.
 - Rule: every published ticket must carry the canonical metadata from `docs/agents/work-item-format.md` for labels, milestone, project item, and project fields.
@@ -55,7 +55,7 @@ Build a minimal fresh context pack first, then route the task against declared c
 
 ### 2. Explore the codebase (optional)
 
-If you have not already explored the codebase, do so to understand the current state of the code. Ticket titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching. Prefer terms from `CONTEXT.md` and `docs/model/quant_model.tex` when they define the slice boundary more precisely than generic wording.
+If you have not already explored the codebase, do so to understand the current state of the code. Ticket titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching. Prefer terms from `CONTEXT.md` when they define the slice boundary more precisely than generic wording.
 
 Look for opportunities to prefactor the code to make the implementation easier. "Make the change easy, then make the easy change."
 
@@ -109,7 +109,7 @@ For corrective inputs, the user approval step may be skipped only when the audit
 Publish the approved tickets. **How** depends on the tracker `/setup-matt-pocock-skills` configured — the tickets are the same either way, only the shape of the blocking edges changes:
 
 - **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below — one ticket per file, never a single combined file.
-- **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. When the input came from `/to-spec`, create the tickets as subissues of that spec issue so the execution tree stays attached to the published spec. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the tracker defaults from `docs/agents/issue-tracker.md`: for this repo that means `ready-for-agent` plus any justified area or priority labels inherited from the source spec or parent issue. The ticket body itself must also be written in English and should preserve Quant vocabulary rather than backsliding to generic trading wording.
+- **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. When the input came from `/to-spec`, create the tickets as subissues of that spec issue so the execution tree stays attached to the published spec. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the tracker defaults from `docs/agents/issue-tracker.md`: for this repo that means `ready-for-agent` plus any justified area or priority labels inherited from the source spec or parent issue. The ticket body itself must also be written in English and should preserve this repo's vocabulary rather than backsliding to generic trading wording.
 
 Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
 
