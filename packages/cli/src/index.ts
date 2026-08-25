@@ -50,6 +50,7 @@ interface SessionPaths {
   reportDir: string;
   sessionDir: string;
   auditLogPath: string;
+  evidencePath: string;
   summaryPath: string;
   manifestPath: string;
 }
@@ -62,6 +63,7 @@ function buildSessionPaths(reportDir: string, sessionId: string): SessionPaths {
     reportDir,
     sessionDir,
     auditLogPath: `${sessionDir}/audit.jsonl`,
+    evidencePath: `${sessionDir}/evidence.json`,
     summaryPath: `${sessionDir}/summary.json`,
     manifestPath: `${sessionDir}/manifest.json`,
   };
@@ -163,7 +165,12 @@ async function runPaperMode(
       process.removeListener("SIGTERM", shutdown);
 
       console.log("\n[paper] Shutting down...");
-      runner.stop();
+      const artifacts = runner.stop();
+
+      if (artifacts) {
+        writePaperPromotionEvidence(paths.evidencePath, artifacts.evidence);
+        manifest.track("promotion-evidence", paths.evidencePath);
+      }
 
       shutdownObservability({
         runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
@@ -293,6 +300,20 @@ function shutdownObservability(opts: {
 
   // AC10: Write manifest at shutdown
   manifest.writeManifest(paths.manifestPath);
+}
+
+/** Write promotion evidence JSON for paper-mode validation. */
+export function writePaperPromotionEvidence(
+  path: string,
+  evidence: import("@agenttrading/core").PaperPromotionEvidence,
+): void {
+  const dir = dirname(path);
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    // Directory may already exist.
+  }
+  writeFileSync(path, JSON.stringify(evidence, null, 2) + "\n", "utf-8");
 }
 
 /**

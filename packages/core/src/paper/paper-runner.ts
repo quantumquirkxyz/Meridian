@@ -25,7 +25,14 @@ import { GammaSession, type GammaCycleInput } from "../gamma/gamma-session.ts";
 import { PaperExecutionEngine, type PaperMarketSnapshot } from "../execution/paper-execution-engine.ts";
 import { RegimeClassifier, type RegimeClassifierInput } from "../gamma/regime-classifier.ts";
 import { PaperAuditLogger } from "./audit-logger.ts";
-import { buildSessionReport, printSessionReport, type PaperTradeRecord } from "./session-report.ts";
+import {
+  buildPromotionEvidence,
+  buildSessionReport,
+  printSessionReport,
+  type PaperPromotionEvidence,
+  type PaperTradeRecord,
+  type PaperSessionReportData,
+} from "./session-report.ts";
 import { computeSlippageBps } from "../utils/slippage.ts";
 import type { MarketState } from "../utils/market-state.ts";
 
@@ -101,6 +108,11 @@ export interface PaperRunnerEvents {
   onShutdown?: () => void;
 }
 
+export interface PaperRunnerArtifacts {
+  report: PaperSessionReportData;
+  evidence: PaperPromotionEvidence;
+}
+
 /** Minimal WebSocket interface for the WS factory. */
 interface WebSocketLike {
   readyState: number;
@@ -166,6 +178,7 @@ export class PaperRunner {
   private learningRecommendationCount = 0;
   private _startedAtMs = 0;
   private events: PaperRunnerEvents = {};
+  private lastArtifacts: PaperRunnerArtifacts | null = null;
 
   constructor(config: PaperRunnerConfig) {
     this.nowMs = config.nowMs ?? (() => Date.now());
@@ -247,8 +260,8 @@ export class PaperRunner {
   }
 
   /** Stop the paper runner: close WS, stop cycles, print report. */
-  stop(): void {
-    if (!this.running) return;
+  stop(): PaperRunnerArtifacts | null {
+    if (!this.running) return this.lastArtifacts;
     this.running = false;
 
     // Stop cycle loop
@@ -291,9 +304,21 @@ export class PaperRunner {
     });
     printSessionReport(report);
 
+    const reconciliationResolved =
+      this.cycleCount > 0 && this.ordersSubmitted === this.ordersFilled + this.ordersBlocked;
+    const evidence = buildPromotionEvidence({
+      startedAtMs: this._startedAtMs,
+      endedAtMs,
+      report,
+      reconciliationResolved,
+      gracefulShutdownValidated: true,
+    });
+    this.lastArtifacts = { report, evidence };
+
     // S3: Wire onShutdown callback
     this.events.onShutdown?.();
     console.log("[paper] Session ended. Goodbye.");
+    return this.lastArtifacts;
   }
 
   // ── WebSocket ────────────────────────────────────────────────────

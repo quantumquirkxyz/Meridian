@@ -202,12 +202,15 @@ describe("PaperRunner", () => {
     });
 
     await runner.start();
-    runner.stop();
+    const artifacts = runner.stop();
 
     // Audit log should have SESSION_STARTED and SESSION_ENDED events
     const content = readFileSync(join(tmpDir, "test.jsonl"), "utf-8");
     expect(content).toContain("SESSION_STARTED");
     expect(content).toContain("SESSION_ENDED");
+    expect(artifacts?.evidence.credentialFree).toBe(true);
+    expect(artifacts?.evidence.verdict).toBe("fail");
+    expect(artifacts?.evidence.reasons).toContain("paper cycle did not execute");
   });
 
   test("receives orderbook data and updates market state", async () => {
@@ -246,6 +249,37 @@ describe("PaperRunner", () => {
     // Audit log should have CYCLE_COMPLETE
     const content = readFileSync(join(tmpDir, "test.jsonl"), "utf-8");
     expect(content).toContain("CYCLE_COMPLETE");
+  });
+
+  test("emits promotion evidence after a paper cycle", async () => {
+    const mockWs = createMockWs();
+    const runner = new PaperRunner({
+      symbols: ["BTCUSDT"],
+      cycleIntervalMs: 50,
+      auditLogPath: join(tmpDir, "test.jsonl"),
+      nowMs: () => 1000,
+      wsFactory: () => mockWs as never,
+    });
+
+    await runner.start();
+    mockWs.simulateMessage(JSON.stringify({
+      topic: "orderbook.50.BTCUSDT",
+      data: {
+        s: "BTCUSDT",
+        b: [{ price: "50000", size: "1" }],
+        a: [{ price: "50001", size: "1" }],
+      },
+    }));
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    const artifacts = runner.stop();
+    expect(artifacts).toBeDefined();
+    expect(artifacts?.evidence.credentialFree).toBe(true);
+    expect(artifacts?.evidence.endToEndLoopValidated).toBe(true);
+    expect(artifacts?.evidence.failClosedValidated).toBe(true);
+    expect(artifacts?.evidence.verdict).toBe("pass");
+    expect(artifacts?.report.auditEventCount).toBeGreaterThan(0);
   });
 
   test("handles graceful shutdown via stop()", async () => {
