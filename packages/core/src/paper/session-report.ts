@@ -168,6 +168,9 @@ export function buildPromotionEvidence(opts: {
   if (opts.report.cycleCount <= 0) {
     reasons.push("paper cycle did not execute");
   }
+  if (opts.report.ordersFilled + opts.report.ordersBlocked <= 0) {
+    reasons.push("paper execution outcome missing");
+  }
   if (opts.report.auditEventCount <= 0) {
     reasons.push("audit evidence missing");
   }
@@ -183,9 +186,11 @@ export function buildPromotionEvidence(opts: {
     endedAtMs: opts.endedAtMs,
     durationMs: opts.endedAtMs - opts.startedAtMs,
     credentialFree: true,
-    endToEndLoopValidated: opts.report.cycleCount > 0,
+    endToEndLoopValidated:
+      opts.report.cycleCount > 0 &&
+      opts.report.ordersFilled + opts.report.ordersBlocked > 0,
     reconciliationResolved: opts.reconciliationResolved,
-    failClosedValidated: opts.report.ordersBlocked >= 0,
+    failClosedValidated: opts.report.ordersFilled + opts.report.ordersBlocked > 0,
     gracefulShutdownValidated: opts.gracefulShutdownValidated,
     auditEventCount: opts.report.auditEventCount,
     cycleCount: opts.report.cycleCount,

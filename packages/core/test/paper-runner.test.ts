@@ -271,7 +271,7 @@ describe("PaperRunner", () => {
       },
     }));
 
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 420));
 
     const artifacts = runner.stop();
     expect(artifacts).toBeDefined();
