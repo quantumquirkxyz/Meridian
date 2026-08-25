@@ -13,15 +13,14 @@
  *   --cycle-interval <ms>      Override cycle frequency
  */
 
-import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
-import type { PaperSessionReportData } from "@agenttrading/core";
 import { generateSessionId } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 import { ManifestWriter } from "./manifest.ts";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 // ── Re-exports (keep backward-compatible library API) ─────────────────
 
@@ -142,6 +141,7 @@ async function runPaperMode(
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
     auditLogPath: paths.auditLogPath,
+    summaryPath: paths.summaryPath,
     sessionId: paths.sessionId,
   });
 
@@ -170,15 +170,9 @@ async function runPaperMode(
       if (artifacts) {
         writePaperPromotionEvidence(paths.evidencePath, artifacts.evidence);
         manifest.track("promotion-evidence", paths.evidencePath);
-        writeSessionSummaryJson(paths.summaryPath, {
-          sessionId: paths.sessionId,
-          reportDir: opts.config.reportDir,
-          runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
-          config: opts.config,
-          report: artifacts.report,
-        });
-        manifest.track("summary", paths.summaryPath);
       }
+
+      manifest.track("summary", paths.summaryPath);
 
       shutdownObservability({
         runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
@@ -318,43 +312,6 @@ export function writePaperPromotionEvidence(
     // Directory may already exist.
   }
   writeFileSync(path, JSON.stringify(evidence, null, 2) + "\n", "utf-8");
-}
-
-/**
- * AC8: Write session summary to JSON file at shutdown.
- * Uses the real report from the runner so summary and evidence stay aligned.
- */
-function writeSessionSummaryJson(
-  path: string,
-  opts: {
-    sessionId: string;
-    reportDir: string;
-    runner: { startedAtMs: number; stoppedAtMs: number };
-    config: AppConfig;
-    report: PaperSessionReportData;
-  },
-): void {
-  const summary = {
-    sessionId: opts.sessionId,
-    mode: opts.config.mode,
-    startedAtMs: opts.runner.startedAtMs,
-    endedAtMs: opts.runner.stoppedAtMs,
-    durationMs: opts.runner.stoppedAtMs - opts.runner.startedAtMs,
-    config: {
-      cycleIntervalMs: opts.config.cycleIntervalMs,
-      logLevel: opts.config.logLevel,
-      reportDir: opts.reportDir,
-    },
-    report: opts.report,
-  };
-
-  const dir = dirname(path);
-  try {
-    mkdirSync(dir, { recursive: true });
-  } catch {
-    // Directory may already exist.
-  }
-  writeFileSync(path, JSON.stringify(summary, null, 2) + "\n", "utf-8");
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
