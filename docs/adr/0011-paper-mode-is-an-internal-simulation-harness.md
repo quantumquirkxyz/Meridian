@@ -16,6 +16,8 @@ Paper mode is defined as an internal simulation harness.
 - `evidence.json` is a promotion artifact used to decide whether the session qualifies for the next stage.
 - Demo trading remains a separate mode and must not be treated as paper.
 
+Operator guidance: when validating paper, inspect the session directory for `audit.jsonl`, `summary.json`, and `evidence.json` if a shutdown produced promotion evidence. Treat a successful paper run as one that completes the local control loop, writes the expected artifacts, and fails closed on any unresolved reconciliation, audit, or risk condition; treat any missing artifact or open failure as a rejected session, not as a successful venue test.
+
 ## Consequences
 
 - Paper mode can be exercised safely and repeatedly without capital exposure.

@@ -206,7 +206,7 @@ _Avoid_: trading always active.
 
 **Paper**:
 An internal simulation mode where the system runs its own market, execution, and fill simulation without using Bybit demo or live capital. It is the safest mode for validating control flow, audit, and state transitions.
-Paper is a harness first, not a venue. Its purpose is to validate the full decision chain inside the repository: market ingestion, opportunity detection, risk gating, simulated execution, reconciliation, and shutdown reporting. The canonical outputs are `audit.jsonl` and `summary.json`; `evidence.json` is a promotion artifact, not the primary product of the mode.
+Paper is a harness first, not a venue proxy. Its purpose is to validate the full decision chain inside the repository: market ingestion, opportunity detection, risk gating, simulated execution, reconciliation, and shutdown reporting. The canonical outputs are `audit.jsonl` and `summary.json`; `evidence.json` is a promotion artifact, not the primary product of the mode.
 _Avoid_: Bybit demo trading, live capital, or any assumption that simulated fills reflect exchange-side behavior.
 
 **Demo Trading**:

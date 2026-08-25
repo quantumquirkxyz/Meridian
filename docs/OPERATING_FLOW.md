@@ -53,6 +53,19 @@ validation must use REST order actions plus private stream confirmation.
 
 Source: https://bybit-exchange.github.io/docs/v5/demo
 
+## Paper Validation Runbook
+
+Use this when you want to validate the internal simulation harness locally.
+
+1. Start the default paper session with `bun run start` or `bun run start --mode paper`.
+2. Let the session run until it shuts down cleanly or until you stop it with `Ctrl+C`.
+3. Inspect the session directory under the configured report output path and verify that `audit.jsonl` and `summary.json` exist.
+4. If the run emitted `evidence.json`, treat it as promotion evidence only; it does not change the meaning of the paper session itself.
+5. Read `summary.json` for the final status. A successful paper run completes the internal control loop with no unresolved reconciliation, audit, or risk failures. A fail-closed run may stop early, but it should do so with explicit error reporting and no silent continuation.
+6. Treat any missing audit trail, missing summary, or unresolved error as a rejected validation run, not as proof that paper behaved like a venue.
+
+The paper phase remains the repository's internal simulation harness. It validates deterministic control flow and auditability, not exchange connectivity.
+
 ## Tracker Hygiene
 
 Do not create implementation issues until the phase contract is stable and each
