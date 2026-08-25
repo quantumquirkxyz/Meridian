@@ -19,6 +19,7 @@ export interface ManifestEntry {
     | "report-json"
     | "report-csv"
     | "report-txt"
+    | "promotion-evidence"
     | "summary"
     | "manifest";
   /** Absolute or relative path to the file. */
