@@ -44,6 +44,15 @@ describe("parseCliArgs", () => {
     }
   });
 
+  test("--mode demo is accepted", () => {
+    const result = parseCliArgs(argv("--mode", "demo"));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.args.mode).toBe("demo");
+    }
+  });
+
   test("-m shorthand works", () => {
     const result = parseCliArgs(argv("-m", "live"));
 
@@ -62,6 +71,7 @@ describe("parseCliArgs", () => {
       expect(err).toBeDefined();
       expect(err!.message).toContain("Invalid mode");
       expect(err!.message).toContain("paper");
+      expect(err!.message).toContain("demo");
       expect(err!.message).toContain("live");
     }
   });

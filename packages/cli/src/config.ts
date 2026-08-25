@@ -3,10 +3,11 @@
  *
  * Responsibilities:
  * - Load `.env` file via Bun built-in (`Bun.env`)
- * - Validate required API keys for live mode
+ * - Validate required API keys for demo/live modes
  * - Parse optional parameters (MODE, CONFIG_PATH, etc.)
  * - Apply JSON config overrides from `--config` flag
  * - Paper mode requires zero API keys
+ * - Demo mode uses Bybit Demo Trading credentials but cannot pass as live
  * - Fail fast with descriptive error listing all missing/invalid fields
  */
 
@@ -16,8 +17,8 @@ import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-/** System mode: paper or live. */
-export type Mode = "paper" | "live";
+/** System mode: internal paper, Bybit Demo Trading, or live capital. */
+export type Mode = "paper" | "demo" | "live";
 
 /** Validated runtime configuration for the CLI. */
 export interface AppConfig {
@@ -84,7 +85,10 @@ export async function loadConfig(
   const rawMode = env.MODE ?? "paper";
   const mode = parseMode(rawMode);
   if (mode === undefined) {
-    errors.push({ field: "MODE", message: `Invalid mode "${rawMode}". Must be "paper" or "live".` });
+    errors.push({
+      field: "MODE",
+      message: `Invalid mode "${rawMode}". Must be "paper", "demo", or "live".`,
+    });
   }
 
   // ── Parse optional numeric fields ─────────────────────────────────
@@ -103,17 +107,17 @@ export async function loadConfig(
   const bybitApiKey = env.BYBIT_API_KEY ?? "";
   const bybitApiSecret = env.BYBIT_API_SECRET ?? "";
 
-  if (mode === "live") {
+  if (mode === "demo" || mode === "live") {
     if (!bybitApiKey.trim()) {
       errors.push({
         field: "BYBIT_API_KEY",
-        message: "BYBIT_API_KEY is required for live mode.",
+        message: `BYBIT_API_KEY is required for ${mode} mode.`,
       });
     }
     if (!bybitApiSecret.trim()) {
       errors.push({
         field: "BYBIT_API_SECRET",
-        message: "BYBIT_API_SECRET is required for live mode.",
+        message: `BYBIT_API_SECRET is required for ${mode} mode.`,
       });
     }
   }
@@ -164,7 +168,7 @@ export async function loadConfig(
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function parseMode(raw: string): Mode | undefined {
-  if (raw === "paper" || raw === "live") return raw;
+  if (raw === "paper" || raw === "demo" || raw === "live") return raw;
   return undefined;
 }
 

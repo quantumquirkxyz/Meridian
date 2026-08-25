@@ -71,6 +71,60 @@ describe("loadConfig", () => {
     }
   });
 
+  test("demo mode requires Bybit API key", async () => {
+    const result = await loadConfig({
+      env: env({ MODE: "demo", BYBIT_API_SECRET: "demo-secret" }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const keyError = result.errors.find((e) => e.field === "BYBIT_API_KEY");
+      expect(keyError).toBeDefined();
+      expect(keyError!.message).toContain("required for demo mode");
+    }
+  });
+
+  test("demo mode requires Bybit API secret", async () => {
+    const result = await loadConfig({
+      env: env({ MODE: "demo", BYBIT_API_KEY: "demo-key" }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const secretError = result.errors.find((e) => e.field === "BYBIT_API_SECRET");
+      expect(secretError).toBeDefined();
+      expect(secretError!.message).toContain("required for demo mode");
+    }
+  });
+
+  test("demo mode succeeds with demo API keys and no live withdrawal gate", async () => {
+    await withTmpJsonFile(
+      {
+        ...DEFAULT_CANARY_CONFIG,
+        apiKeys: {
+          readApiKey: { keyId: "demo-read", secretRef: "demo-read-secret" },
+          tradingApiKey: { keyId: "demo-trade", secretRef: "demo-trade-secret" },
+          withdrawalsDisabled: false,
+        },
+      },
+      async (filePath) => {
+        const result = await loadConfig({
+          env: env({
+            MODE: "demo",
+            BYBIT_API_KEY: "demo-key",
+            BYBIT_API_SECRET: "demo-secret",
+          }),
+          configPath: filePath,
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.config.mode).toBe("demo");
+        }
+      },
+    );
+  });
+
   test("live mode fails without BYBIT_API_KEY", async () => {
     const result = await loadConfig({
       env: env({ MODE: "live", BYBIT_API_SECRET: "secret-123" }),
@@ -220,6 +274,7 @@ describe("loadConfig", () => {
       const err = result.errors.find((e) => e.field === "MODE");
       expect(err).toBeDefined();
       expect(err!.message).toContain("paper");
+      expect(err!.message).toContain("demo");
       expect(err!.message).toContain("live");
     }
   });
@@ -463,7 +518,7 @@ describe("formatConfigErrors", () => {
 
   test("formats single error", () => {
     const errors: ConfigError[] = [
-      { field: "MODE", message: 'Invalid mode "test". Must be "paper" or "live".' },
+      { field: "MODE", message: 'Invalid mode "test". Must be "paper", "demo", or "live".' },
     ];
 
     const msg = formatConfigErrors(errors);

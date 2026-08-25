@@ -3,7 +3,7 @@
  *
  * Shows mode, regime, PnL, open orders, kill switch state, regime changes,
  * order lifecycle events, and kill switch triggers. Integrates with both
- * paper and live runners.
+ * paper, demo, and live runners.
  *
  * Acceptance criteria (issue #78):
  *   AC3: Real-time status display: mode, regime, PnL, open orders, kill switch state
@@ -15,7 +15,7 @@
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface CycleStatusInput {
-  /** Current mode (paper or live). */
+  /** Current mode (paper, demo, or live). */
   mode: string;
   /** Cycle number. */
   cycleCount: number;

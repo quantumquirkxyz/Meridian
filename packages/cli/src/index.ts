@@ -7,7 +7,7 @@
  * Usage: `bun run start [options]`
  *
  * Flags:
- *   --mode paper|live          System mode (default: paper)
+ *   --mode paper|demo|live     System mode (default: paper)
  *   --config <path>            JSON config override path
  *   --dry-run                  Skip order submission
  *   --cycle-interval <ms>      Override cycle frequency
@@ -242,6 +242,19 @@ async function runLiveMode(
   return { exitCode: 0 };
 }
 
+/**
+ * Demo mode is intentionally separated from paper and live. Until a Bybit
+ * Demo Trading runner exists, starting this mode must fail closed instead of
+ * falling through to the live runner with virtual-capital credentials.
+ */
+async function runDemoMode(): Promise<{ exitCode: number }> {
+  console.error("[demo] Bybit Demo Trading runner is not implemented yet.");
+  console.error("[demo] Required boundary: demo REST/WS endpoints, runtime demo-key prompt,");
+  console.error("[demo] order lifecycle validation, reconciliation, risk limits, and audit.");
+  console.error("[demo] Refusing to start so demo credentials cannot route through live execution.");
+  return { exitCode: 1 };
+}
+
 // ── Exchange connectivity check (SP2) ─────────────────────────────────
 
 /**
@@ -350,6 +363,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   // ── Step 2: Load and validate configuration ──────────────────────
   const loadResult: LoadConfigResult = await loadConfig({
     configPath: cliArgs.configPath,
+    env: { ...(Bun.env as Record<string, string | undefined>), MODE: cliArgs.mode },
   });
 
   if (!loadResult.ok) {
@@ -393,6 +407,8 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   let exitCode: number;
   if (config.mode === "paper") {
     exitCode = (await runPaperMode(runOpts, paths)).exitCode;
+  } else if (config.mode === "demo") {
+    exitCode = (await runDemoMode()).exitCode;
   } else {
     exitCode = (await runLiveMode(runOpts, paths)).exitCode;
   }

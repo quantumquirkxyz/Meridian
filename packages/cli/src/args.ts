@@ -14,7 +14,7 @@ const { version: CLI_VERSION } = require("../../../package.json") as {
 };
 
 /** Valid system mode. */
-export type Mode = "paper" | "live";
+export type Mode = "paper" | "demo" | "live";
 
 /** Parsed CLI arguments. */
 export interface CliArgs {
@@ -108,7 +108,7 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
   if (mode === undefined) {
     errors.push({
       field: "mode",
-      message: `Invalid mode "${rawMode}". Must be "paper" or "live".`,
+      message: `Invalid mode "${rawMode}". Must be "paper", "demo", or "live".`,
     });
   }
 
@@ -145,19 +145,19 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function parseMode(raw: string): Mode | undefined {
-  if (raw === "paper" || raw === "live") return raw;
+  if (raw === "paper" || raw === "demo" || raw === "live") return raw;
   return undefined;
 }
 
 function printHelp(): void {
   console.log(
-    `AgentTrading CLI — start a paper or live trading session.
+    `AgentTrading CLI — start a paper, demo, or live trading session.
 
 Usage:
   bun run start [options]
 
 Options:
-  -m, --mode <paper|live>       System mode (default: paper)
+  -m, --mode <paper|demo|live>  System mode (default: paper)
   -c, --config <path>           Path to JSON config override
       --dry-run                 Run full cycle but skip order submission
       --cycle-interval <ms>     Override cycle frequency (ms)
@@ -167,6 +167,7 @@ Options:
 Examples:
   bun run start                          # Paper mode, defaults
   bun run start --mode paper --dry-run   # Paper mode, dry run
+  bun run start --mode demo              # Bybit Demo Trading gate
   bun run start --config ./config.json   # Paper mode with config override
   bun run start --mode live --config ./live.json  # Live mode`,
   );

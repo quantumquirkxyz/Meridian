@@ -1,6 +1,6 @@
 # Roadmap — Multi-agent CEX/DEX trading system
 
-Structure: **3 SCRUM boards** (Alpha, Beta, Gamma). **Phase Zero** runs as **Sprint 0 of the Alpha board**. Progression is by **eliminated risk**, not feature count.
+Structure: **3 SCRUM boards** (Alpha, Beta, Gamma). **Phase Zero** runs as **Sprint 0 of the Alpha board**. Progression is by **eliminated risk**, not feature count. The operational promotion path is defined in `docs/OPERATING_FLOW.md`: `paper` first, Bybit Demo Trading second, live canary last.
 
 - Alpha eliminates data risk.
 - Beta eliminates decision and simulated-execution risk.
@@ -51,7 +51,7 @@ Subprojects:
 - **Beta.6 Reconciliation Engine**: orders/fills/positions/balances vs external state; detection of orphans and mismatches; cancel-only/halt.
 - **Beta.7 Inventory Engine**: balances, free/locked/exposed capital, gas reserves, rebalancing, pre-positioned inventory.
 
-**Exit criterion:** complete loop works, agents produce structured analysis, Risk approves/rejects everything, paper trading operational, reconciliation detects inconsistencies, inventory managed, every decision audited, no real capital, fails closed.
+**Exit criterion:** complete loop works, agents produce structured analysis, Risk approves/rejects everything, paper trading operational, reconciliation detects inconsistencies, inventory managed, every decision audited, no real capital, fails closed. Paper completion does not authorize live trading; it only authorizes the separate Bybit Demo Trading phase.
 
 ## Gamma — Live canary, adaptation, and hardening (Gamma board)
 
@@ -65,4 +65,4 @@ Subprojects:
 - **Gamma.5 Infrastructure Hardening**: health checks, heartbeats, WS/REST/RPC failover, queues, rate limits, error budget, secrets, key rotation, runbooks, incident replay, alerting.
 - **Gamma.6 Full Audit**: reconstruction of every trade (data → signal → debate → risk → order → fill → reconciliation → PnL), daily/weekly reports, TXT/JSON/CSV export.
 
-**Exit criterion:** operates live with bounded capital, preserves limits, adapts by regime, learns without mutating production directly, failover + kill switch, full audit, safe degradation, scales only with evidence.
+**Exit criterion:** operates live with bounded capital, preserves limits, adapts by regime, learns without mutating production directly, failover + kill switch, full audit, safe degradation, scales only with evidence. Entry into Gamma live canary requires paper and Bybit Demo Trading evidence plus explicit human approval.

@@ -14,7 +14,8 @@
 - No trading while reconciliation is unresolved.
 - No trading while audit is unavailable.
 - No agent has `APPROVE_RISK`, `SUBMIT_ORDER`, `SIGN_TRANSACTION`, `MOVE_FUNDS`, or `MODIFY_RISK_LIMITS`.
-- No strategy change reaches live without going through backtest → paper → canary.
+- No strategy change reaches live without going through backtest → paper → Bybit Demo Trading → canary.
+- Demo Trading uses virtual assets but still requires deterministic risk, reconciliation, and audit; it must not share live credentials or silently route through live execution.
 - The Learning Loop generates hypotheses; it does not mutate production.
 
 ## Minimum Risk Engine rules
