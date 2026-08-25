@@ -22,6 +22,8 @@ stopCondition: Review is clean or the loop is blocked after repeated evidence.
 risk: medium
 ---
 
+Do not merge, close, or delete branches here; this skill coordinates the loop only.
+
 # Review Fix Loop
 
 ## Overview
@@ -91,6 +93,7 @@ Track these facts in the working response or PR comments:
 - the latest review state is preserved accurately
 - the next action is either a scoped fix, a re-review, or a stop
 - validation evidence exists for the most recent implementation pass
+- the loop does not attempt to merge or close the PR
 - the loop does not continue past the repeat threshold for the same blocker
 
 ## Guardrails

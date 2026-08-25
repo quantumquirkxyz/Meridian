@@ -1,6 +1,6 @@
 ---
 name: ask-matt
-description: Ask which skill or flow fits your situation. A router over the skills in this repo.
+description: Ask which skill or flow fits your situation. A router over the skills in this repo that recommends the next step without doing the work itself.
 disable-model-invocation: true
 version: 1
 capabilities:
@@ -36,6 +36,7 @@ Start by building a minimal fresh context pack and then route against declared c
 - Scope: recommend the next skill, not the implementation plan.
 - Rule: if the answer is "insufficient context," say what is missing instead of guessing.
 - Rule: the recommendation must be grounded in declared capabilities and side effects, not recall.
+- Rule: do not draft the spec, issue, PR, or code here; only recommend the next skill path.
 
 A **flow** is a path through the skills. Most paths run along one **main flow**, and two **on-ramps** merge onto it. Everything else is standalone, or a vocabulary layer that runs underneath.
 

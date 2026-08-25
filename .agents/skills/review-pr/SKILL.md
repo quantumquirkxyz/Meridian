@@ -20,6 +20,8 @@ stopCondition: Both axes are reported against the fixed point with no ambiguity 
 risk: medium
 ---
 
+Do not change source files, fix the PR, or merge it in this skill; publish findings only.
+
 Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
 - **Standards** — does the code conform to this repo's documented coding standards?

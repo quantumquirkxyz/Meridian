@@ -16,6 +16,8 @@ stopCondition: The canonical governance index has been read and the matching dow
 risk: low
 ---
 
+This skill routes only. It does not create issues, tickets, PRs, or project items.
+
 # Work Item Router
 
 Use this skill before `to-spec`, `to-tickets`, `doc-draft-pr`, `doc-draft-pr`, or `make-project` when the task involves tracker metadata, project boards, audit coverage, corrective publication, or publication flow.
