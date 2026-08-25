@@ -204,6 +204,18 @@ _Avoid_: fixed limits ignoring market state.
 Global permission state enforced by the contracts package (`SYSTEM_MODES` in `packages/contracts/src/modes.ts`): `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `PAPER_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. The system changes mode on failures or regime changes; modes can only reduce activity, never increase it. This matches ARCHITECTURE.md:39 and the RISK.md emergency chain. It diverges from the Spec Alpha mode list ("normal, degraded, signal-only, paper-only, cancel-only, reduce-only, cash-only, halt") by naming the first defensive mode `OBSERVE_ONLY` instead of `degraded`; the per-source data-quality state `DEGRADED` (DATA_QUALITY_STATES) covers the "degraded" concept. This substitution is the accepted vocabulary (changing it requires an ADR). Note the overlap with `StateName` (stategraph.ts): `HALT` is both a mode and a terminal state, and the defensive *states* are suffixed (`CASH_ONLY_MODE`, `CANCEL_ONLY_MODE`, `REDUCE_ONLY_MODE`) while the *modes* are not (`CASH_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`) — keep the distinction explicit when referencing either. Shared literals also appear across other contract vocabularies and are intentionally distinct per domain: `REQUEST_MORE_DATA` is both a `Permission` (stategraph.ts) and an `AgentReviewAction` (stategraph.ts); `CANCEL_ONLY`/`CASH_ONLY` are both `SystemMode` (modes.ts) and `RiskDecisionOutcome` (reason-codes.ts); `HALT_SYSTEM` (a risk outcome) is related to, but not the same as, the `HALT` mode/state. Treat each enum as its own namespace; renaming to disambiguate requires an ADR.
 _Avoid_: trading always active.
 
+**Paper**:
+An internal simulation mode where the system runs its own market, execution, and fill simulation without using Bybit demo or live capital. It is the safest mode for validating control flow, audit, and state transitions.
+_Avoid_: Bybit demo trading, live capital, or any assumption that simulated fills reflect exchange-side behavior.
+
+**Demo Trading**:
+Bybit's simulated trading environment with public and private API interaction against the demo venue. It is risk-free with virtual assets, but it exercises the exchange integration layer more realistically than internal paper simulation.
+_Avoid_: treating demo trading as if it were live capital, or treating it as a pure internal simulator.
+
+**Live**:
+Bybit's real trading environment with real balances, real API keys, and capital at risk. It is the final phase after paper and demo trading have been validated.
+_Avoid_: any mode that can be used without real exchange credentials or without capital exposure.
+
 **Phase**:
 A roadmap milestone with an exit criterion defined by eliminated risk: Phase Zero (contracts and invariants), Alpha (data, graph, and harness), Beta (loops, orchestration, agents, risk, and paper trading), Gamma (live canary, adaptation, and hardening).
 _Avoid_: advancing by feature count instead of by eliminated risk.
