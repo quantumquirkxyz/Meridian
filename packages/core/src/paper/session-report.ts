@@ -102,13 +102,15 @@ export interface PaperPromotionEvidence {
   reasons: string[];
 }
 
-/** Result of evaluating the paper-session promotion contract. */
-export interface PaperSessionContractCheck {
+/** Shared decision surface for the paper-session harness contract. */
+export interface PaperSessionContract {
   credentialFree: true;
   endToEndLoopValidated: boolean;
+  visibleExecutionOutcomeValidated: boolean;
   reconciliationResolved: boolean;
   failClosedValidated: boolean;
   gracefulShutdownValidated: boolean;
+  pass: boolean;
   reasons: string[];
 }
 
@@ -194,7 +196,7 @@ export function buildPromotionEvidence(opts: {
     ordersSubmitted: opts.report.ordersSubmitted,
     ordersFilled: opts.report.ordersFilled,
     ordersBlocked: opts.report.ordersBlocked,
-    verdict: contract.reasons.length === 0 ? "pass" : "fail",
+    verdict: contract.pass ? "pass" : "fail",
     reasons: contract.reasons,
   };
 }
@@ -211,12 +213,16 @@ export function evaluatePaperSessionContract(opts: {
   report: PaperSessionReportData;
   reconciliationResolved: boolean;
   gracefulShutdownValidated: boolean;
-}): PaperSessionContractCheck {
+}): PaperSessionContract {
   const reasons: string[] = [];
-  if (opts.report.cycleCount <= 0) {
+  const endToEndLoopValidated = opts.report.cycleCount > 0;
+  const visibleExecutionOutcomeValidated = opts.report.ordersFilled + opts.report.ordersBlocked > 0;
+  const failClosedValidated = opts.report.ordersFilled + opts.report.ordersBlocked > 0;
+
+  if (!endToEndLoopValidated) {
     reasons.push("paper cycle did not execute");
   }
-  if (opts.report.ordersFilled + opts.report.ordersBlocked <= 0) {
+  if (!visibleExecutionOutcomeValidated) {
     reasons.push("paper execution outcome missing");
   }
   if (opts.report.auditEventCount <= 0) {
@@ -231,12 +237,12 @@ export function evaluatePaperSessionContract(opts: {
 
   return {
     credentialFree: true,
-    endToEndLoopValidated:
-      opts.report.cycleCount > 0 &&
-      opts.report.ordersFilled + opts.report.ordersBlocked > 0,
+    endToEndLoopValidated,
+    visibleExecutionOutcomeValidated,
     reconciliationResolved: opts.reconciliationResolved,
-    failClosedValidated: opts.report.ordersFilled + opts.report.ordersBlocked > 0,
+    failClosedValidated,
     gracefulShutdownValidated: opts.gracefulShutdownValidated,
+    pass: reasons.length === 0,
     reasons,
   };
 }

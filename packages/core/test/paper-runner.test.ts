@@ -179,8 +179,39 @@ describe("SessionReport", () => {
 
     expect(contract.credentialFree).toBe(true);
     expect(contract.endToEndLoopValidated).toBe(true);
+    expect(contract.visibleExecutionOutcomeValidated).toBe(true);
     expect(contract.failClosedValidated).toBe(true);
+    expect(contract.pass).toBe(true);
     expect(contract.reasons).toHaveLength(0);
+  });
+
+  test("evaluatePaperSessionContract fails closed when execution is invisible", () => {
+    const report = buildSessionReport({
+      startedAtMs: 1000,
+      endedAtMs: 5000,
+      cycleCount: 3,
+      opportunitiesDetected: 1,
+      ordersSubmitted: 0,
+      ordersFilled: 0,
+      ordersBlocked: 0,
+      trades: [],
+      regimeChangeCount: 1,
+      finalRegime: "range",
+      learningRecommendationCount: 0,
+      auditEventCount: 4,
+    });
+
+    const contract = evaluatePaperSessionContract({
+      report,
+      reconciliationResolved: true,
+      gracefulShutdownValidated: true,
+    });
+
+    expect(contract.endToEndLoopValidated).toBe(true);
+    expect(contract.visibleExecutionOutcomeValidated).toBe(false);
+    expect(contract.failClosedValidated).toBe(false);
+    expect(contract.pass).toBe(false);
+    expect(contract.reasons).toContain("paper execution outcome missing");
   });
 });
 
