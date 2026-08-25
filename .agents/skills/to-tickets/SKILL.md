@@ -38,7 +38,7 @@ The canonical work-item metadata shape is documented in [`docs/agents/work-item-
 
 ## Contract
 
-- Input: a plan, a spec, conversation context, or a corrective ticket recommendation from `/doc-draft-pr` or `/doc-draft-pr`.
+- Input: a plan, a spec, or conversation context.
 - Output: an ordered set of published tickets with explicit blockers.
 - Scope: produce tracer bullets, not a horizontal task dump.
 - Rule: frame slices in this repo's terms where relevant: context, harness, loop, graph, data plane, execution plane, observability, and safety boundaries.
