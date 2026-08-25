@@ -18,8 +18,8 @@ import { dirname } from "node:path";
 import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
-import type { PaperRunner } from "@agenttrading/core";
-import { generateSessionId, buildSessionReport } from "@agenttrading/core";
+import type { PaperSessionReportData } from "@agenttrading/core";
+import { generateSessionId } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 import { ManifestWriter } from "./manifest.ts";
 
@@ -170,6 +170,14 @@ async function runPaperMode(
       if (artifacts) {
         writePaperPromotionEvidence(paths.evidencePath, artifacts.evidence);
         manifest.track("promotion-evidence", paths.evidencePath);
+        writeSessionSummaryJson(paths.summaryPath, {
+          sessionId: paths.sessionId,
+          reportDir: opts.config.reportDir,
+          runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
+          config: opts.config,
+          report: artifacts.report,
+        });
+        manifest.track("summary", paths.summaryPath);
       }
 
       shutdownObservability({
@@ -285,18 +293,14 @@ async function checkExchangeReachable(): Promise<boolean> {
 
 // ── Observability Helpers ─────────────────────────────────────────────
 
-/** S2+S3: Shared shutdown observability — writes summary JSON + manifest. */
+/** S2+S3: Shared shutdown observability — writes manifest after the mode-specific artifacts are flushed. */
 function shutdownObservability(opts: {
   runner: { startedAtMs: number; stoppedAtMs: number };
   paths: SessionPaths;
   config: AppConfig;
   manifest: ManifestWriter;
 }): void {
-  const { runner, paths, config, manifest } = opts;
-
-  // AC8: Write session summary JSON with real timestamps (S5+S7+SP3)
-  writeSessionSummaryJson(paths.summaryPath, runner, paths.sessionId, config);
-  manifest.track("summary", paths.summaryPath);
+  const { paths, manifest } = opts;
 
   // AC10: Write manifest at shutdown
   manifest.writeManifest(paths.manifestPath);
@@ -318,42 +322,30 @@ export function writePaperPromotionEvidence(
 
 /**
  * AC8: Write session summary to JSON file at shutdown.
- * Uses buildSessionReport for real session data (SP3).
+ * Uses the real report from the runner so summary and evidence stay aligned.
  */
 function writeSessionSummaryJson(
   path: string,
-  runner: { startedAtMs: number; stoppedAtMs: number },
-  sessionId: string,
-  config: AppConfig,
+  opts: {
+    sessionId: string;
+    reportDir: string;
+    runner: { startedAtMs: number; stoppedAtMs: number };
+    config: AppConfig;
+    report: PaperSessionReportData;
+  },
 ): void {
-  // SP3: Use buildSessionReport for real data instead of a stub
-  const report = buildSessionReport({
-    startedAtMs: runner.startedAtMs,
-    endedAtMs: runner.stoppedAtMs,
-    cycleCount: 0,
-    opportunitiesDetected: 0,
-    ordersSubmitted: 0,
-    ordersFilled: 0,
-    ordersBlocked: 0,
-    trades: [],
-    regimeChangeCount: 0,
-    finalRegime: undefined,
-    learningRecommendationCount: 0,
-    auditEventCount: 0,
-  });
-
   const summary = {
-    sessionId,
-    mode: config.mode,
-    startedAtMs: runner.startedAtMs,
-    endedAtMs: runner.stoppedAtMs,
-    durationMs: runner.stoppedAtMs - runner.startedAtMs,
+    sessionId: opts.sessionId,
+    mode: opts.config.mode,
+    startedAtMs: opts.runner.startedAtMs,
+    endedAtMs: opts.runner.stoppedAtMs,
+    durationMs: opts.runner.stoppedAtMs - opts.runner.startedAtMs,
     config: {
-      cycleIntervalMs: config.cycleIntervalMs,
-      logLevel: config.logLevel,
-      reportDir: config.reportDir,
+      cycleIntervalMs: opts.config.cycleIntervalMs,
+      logLevel: opts.config.logLevel,
+      reportDir: opts.reportDir,
     },
-    report,
+    report: opts.report,
   };
 
   const dir = dirname(path);
