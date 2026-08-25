@@ -211,6 +211,7 @@ _Avoid_: Bybit demo trading, live capital, or any assumption that simulated fill
 **Demo Trading**:
 Bybit's simulated trading environment with public and private API interaction against the demo venue. It is risk-free with virtual assets, but it exercises the exchange integration layer more realistically than internal paper simulation.
 _Avoid_: treating demo trading as if it were live capital, or treating it as a pure internal simulator.
+_Note_: issue and tracker language should still follow the phase contract (`paper` → `demo` → `live`), not collapse everything into the venue name.
 
 **Live**:
 Bybit's real trading environment with real balances, real API keys, and capital at risk. It is the final phase after paper and demo trading have been validated.

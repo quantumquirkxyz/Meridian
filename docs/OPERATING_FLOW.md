@@ -1,8 +1,8 @@
-# Operating Flow: Paper -> Demo Trading -> Live
+# Operating Flow: Paper -> Demo -> Live
 
 This repo advances by eliminated operational risk, not by feature count. The
 trading flow is therefore a three-phase gate: internal paper simulation first,
-Bybit Demo Trading second, and live capital last.
+demo second, and live capital last.
 
 ## First Principles
 
