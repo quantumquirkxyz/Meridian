@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { PaperAuditLogger } from "../src/paper/audit-logger.ts";
-import { buildSessionReport, printSessionReport } from "../src/paper/session-report.ts";
+import {
+  buildSessionReport,
+  evaluatePaperSessionContract,
+  printSessionReport,
+} from "../src/paper/session-report.ts";
 import { PaperRunner } from "../src/paper/paper-runner.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -149,6 +153,34 @@ describe("SessionReport", () => {
 
     // Should not throw
     printSessionReport(report);
+  });
+
+  test("evaluatePaperSessionContract encodes the paper harness contract", () => {
+    const report = buildSessionReport({
+      startedAtMs: 1000,
+      endedAtMs: 5000,
+      cycleCount: 3,
+      opportunitiesDetected: 1,
+      ordersSubmitted: 1,
+      ordersFilled: 1,
+      ordersBlocked: 0,
+      trades: [],
+      regimeChangeCount: 1,
+      finalRegime: "range",
+      learningRecommendationCount: 0,
+      auditEventCount: 4,
+    });
+
+    const contract = evaluatePaperSessionContract({
+      report,
+      reconciliationResolved: true,
+      gracefulShutdownValidated: true,
+    });
+
+    expect(contract.credentialFree).toBe(true);
+    expect(contract.endToEndLoopValidated).toBe(true);
+    expect(contract.failClosedValidated).toBe(true);
+    expect(contract.reasons).toHaveLength(0);
   });
 });
 

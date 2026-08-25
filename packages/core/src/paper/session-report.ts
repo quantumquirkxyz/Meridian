@@ -102,6 +102,16 @@ export interface PaperPromotionEvidence {
   reasons: string[];
 }
 
+/** Result of evaluating the paper-session promotion contract. */
+export interface PaperSessionContractCheck {
+  credentialFree: true;
+  endToEndLoopValidated: boolean;
+  reconciliationResolved: boolean;
+  failClosedValidated: boolean;
+  gracefulShutdownValidated: boolean;
+  reasons: string[];
+}
+
 /**
  * Build a session report from GammaSession summary data and local counters.
  */
@@ -164,6 +174,44 @@ export function buildPromotionEvidence(opts: {
   reconciliationResolved: boolean;
   gracefulShutdownValidated: boolean;
 }): PaperPromotionEvidence {
+  const contract = evaluatePaperSessionContract({
+    report: opts.report,
+    reconciliationResolved: opts.reconciliationResolved,
+    gracefulShutdownValidated: opts.gracefulShutdownValidated,
+  });
+
+  return {
+    startedAtMs: opts.startedAtMs,
+    endedAtMs: opts.endedAtMs,
+    durationMs: opts.endedAtMs - opts.startedAtMs,
+    credentialFree: contract.credentialFree,
+    endToEndLoopValidated: contract.endToEndLoopValidated,
+    reconciliationResolved: contract.reconciliationResolved,
+    failClosedValidated: contract.failClosedValidated,
+    gracefulShutdownValidated: contract.gracefulShutdownValidated,
+    auditEventCount: opts.report.auditEventCount,
+    cycleCount: opts.report.cycleCount,
+    ordersSubmitted: opts.report.ordersSubmitted,
+    ordersFilled: opts.report.ordersFilled,
+    ordersBlocked: opts.report.ordersBlocked,
+    verdict: contract.reasons.length === 0 ? "pass" : "fail",
+    reasons: contract.reasons,
+  };
+}
+
+/**
+ * Evaluate whether a paper session satisfied the local harness contract.
+ *
+ * This is the structural rule for paper: it must prove a runnable local
+ * loop, a visible execution outcome, audit evidence, reconciliation, and a
+ * clean shutdown path. The function is intentionally pure so the CLI and the
+ * tests can share one definition of "correctly structured paper".
+ */
+export function evaluatePaperSessionContract(opts: {
+  report: PaperSessionReportData;
+  reconciliationResolved: boolean;
+  gracefulShutdownValidated: boolean;
+}): PaperSessionContractCheck {
   const reasons: string[] = [];
   if (opts.report.cycleCount <= 0) {
     reasons.push("paper cycle did not execute");
@@ -182,9 +230,6 @@ export function buildPromotionEvidence(opts: {
   }
 
   return {
-    startedAtMs: opts.startedAtMs,
-    endedAtMs: opts.endedAtMs,
-    durationMs: opts.endedAtMs - opts.startedAtMs,
     credentialFree: true,
     endToEndLoopValidated:
       opts.report.cycleCount > 0 &&
@@ -192,12 +237,6 @@ export function buildPromotionEvidence(opts: {
     reconciliationResolved: opts.reconciliationResolved,
     failClosedValidated: opts.report.ordersFilled + opts.report.ordersBlocked > 0,
     gracefulShutdownValidated: opts.gracefulShutdownValidated,
-    auditEventCount: opts.report.auditEventCount,
-    cycleCount: opts.report.cycleCount,
-    ordersSubmitted: opts.report.ordersSubmitted,
-    ordersFilled: opts.report.ordersFilled,
-    ordersBlocked: opts.report.ordersBlocked,
-    verdict: reasons.length === 0 ? "pass" : "fail",
     reasons,
   };
 }
