@@ -256,10 +256,12 @@ describe("PaperRunner", () => {
 
   test("stop produces session report", async () => {
     const mockWs = createMockWs();
+    const summaryPath = join(tmpDir, "summary.json");
     const runner = new PaperRunner({
       symbols: ["BTCUSDT"],
       cycleIntervalMs: 100,
       auditLogPath: join(tmpDir, "test.jsonl"),
+      summaryPath,
       nowMs: () => 1000,
       wsFactory: () => mockWs as never,
     });
@@ -271,6 +273,9 @@ describe("PaperRunner", () => {
     const content = readFileSync(join(tmpDir, "test.jsonl"), "utf-8");
     expect(content).toContain("SESSION_STARTED");
     expect(content).toContain("SESSION_ENDED");
+    const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
+    expect(summary.mode).toBe("paper");
+    expect(summary.report.cycleCount).toBe(0);
     expect(artifacts?.evidence.credentialFree).toBe(true);
     expect(artifacts?.evidence.verdict).toBe("fail");
     expect(artifacts?.evidence.reasons).toContain("paper cycle did not execute");
@@ -316,10 +321,12 @@ describe("PaperRunner", () => {
 
   test("emits promotion evidence after a paper cycle", async () => {
     const mockWs = createMockWs();
+    const summaryPath = join(tmpDir, "summary.json");
     const runner = new PaperRunner({
       symbols: ["BTCUSDT"],
       cycleIntervalMs: 50,
       auditLogPath: join(tmpDir, "test.jsonl"),
+      summaryPath,
       nowMs: () => 1000,
       wsFactory: () => mockWs as never,
     });
@@ -343,6 +350,9 @@ describe("PaperRunner", () => {
     expect(artifacts?.evidence.failClosedValidated).toBe(true);
     expect(artifacts?.evidence.verdict).toBe("pass");
     expect(artifacts?.report.auditEventCount).toBeGreaterThan(0);
+    const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
+    expect(summary.report.auditEventCount).toBe(artifacts?.report.auditEventCount);
+    expect(summary.report.cycleCount).toBe(artifacts?.report.cycleCount);
   });
 
   test("handles graceful shutdown via stop()", async () => {

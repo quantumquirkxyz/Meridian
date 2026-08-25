@@ -21,6 +21,8 @@
 
 import type { CanaryConfig, OrderIntent } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { GammaSession, type GammaCycleInput } from "../gamma/gamma-session.ts";
 import { PaperExecutionEngine, type PaperMarketSnapshot } from "../execution/paper-execution-engine.ts";
 import { RegimeClassifier, type RegimeClassifierInput } from "../gamma/regime-classifier.ts";
@@ -91,6 +93,8 @@ export interface PaperRunnerConfig {
   canaryConfig?: CanaryConfig;
   /** Path for the JSONL audit log file. */
   auditLogPath?: string;
+  /** Path for the JSON session summary file. */
+  summaryPath?: string;
   /** Session identifier for audit log correlation. Generated if omitted. */
   sessionId?: string;
   /** Injectable clock for testing. */
@@ -146,7 +150,11 @@ const WS_OPEN = 1;
  *   4. On shutdown: close WS, flush audit log, print session report
  */
 export class PaperRunner {
-  private readonly config: Omit<Required<PaperRunnerConfig>, "sessionId" | "statusDisplay"> & { sessionId?: string; statusDisplay?: StatusDisplayLike };
+  private readonly config: Omit<Required<PaperRunnerConfig>, "sessionId" | "statusDisplay" | "summaryPath"> & {
+    sessionId?: string;
+    statusDisplay?: StatusDisplayLike;
+    summaryPath?: string;
+  };
   private readonly nowMs: () => number;
   private readonly wsFactory: (url: string) => WebSocketLike;
 
@@ -192,6 +200,7 @@ export class PaperRunner {
       feeBps: config.feeBps ?? DEFAULT_FEE_BPS,
       canaryConfig: config.canaryConfig ?? DEFAULT_CANARY_CONFIG,
       auditLogPath: config.auditLogPath ?? DEFAULT_AUDIT_LOG_PATH,
+      summaryPath: config.summaryPath,
       nowMs: this.nowMs,
       wsFactory: this.wsFactory,
       sessionId: config.sessionId,
@@ -302,6 +311,15 @@ export class PaperRunner {
       learningRecommendationCount: this.learningRecommendationCount,
       auditEventCount: this.auditLogger.count,
     });
+    if (this.config.summaryPath) {
+      writeSessionSummaryJson(this.config.summaryPath, {
+        sessionId: this.sessionId,
+        reportDir: dirname(this.config.summaryPath),
+        startedAtMs: this._startedAtMs,
+        endedAtMs,
+        report,
+      });
+    }
     printSessionReport(report);
 
     const reconciliationResolved =
@@ -737,4 +755,36 @@ export class PaperRunner {
       `[paper] Cycle ${this.cycleCount}: regime=${result.regimeClassification?.regime ?? "unknown"} submitted=${result.submittedCount} blocked=${result.blockedCount} trades=${this.trades.length}`,
     );
   }
+}
+
+/** Write the canonical paper-mode session summary to disk. */
+function writeSessionSummaryJson(
+  path: string,
+  opts: {
+    sessionId: string;
+    reportDir: string;
+    startedAtMs: number;
+    endedAtMs: number;
+    report: ReturnType<typeof buildSessionReport>;
+  },
+): void {
+  const summary = {
+    sessionId: opts.sessionId,
+    mode: "paper",
+    startedAtMs: opts.startedAtMs,
+    endedAtMs: opts.endedAtMs,
+    durationMs: opts.endedAtMs - opts.startedAtMs,
+    config: {
+      reportDir: opts.reportDir,
+    },
+    report: opts.report,
+  };
+
+  const dir = dirname(path);
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    // Directory may already exist.
+  }
+  writeFileSync(path, JSON.stringify(summary, null, 2) + "\n", "utf-8");
 }
