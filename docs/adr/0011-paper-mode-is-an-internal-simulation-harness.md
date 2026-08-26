@@ -18,6 +18,8 @@ Paper mode is defined as an internal simulation harness.
 
 Operator guidance: when validating paper, inspect the session directory for `audit.jsonl`, `summary.json`, and `evidence.json` if a shutdown produced promotion evidence. Treat a successful paper run as one that completes the local control loop, writes the expected artifacts, and fails closed on any unresolved reconciliation, audit, or risk condition; treat any missing artifact or open failure as a rejected session, not as a successful venue test.
 
+Sessions that detect no opportunities may still qualify as successful paper runs if they complete at least one cycle, emit audit evidence, resolve reconciliation, and shut down cleanly. In that case, the `summary.json` contract should agree with the promotion evidence so operators can read one consistent verdict from both artifacts.
+
 ## Consequences
 
 - Paper mode can be exercised safely and repeatedly without capital exposure.
