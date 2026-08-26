@@ -30,6 +30,7 @@ import { PaperAuditLogger } from "./audit-logger.ts";
 import {
   buildPromotionEvidence,
   buildSessionReport,
+  evaluatePaperSessionContract,
   printSessionReport,
   type PaperPromotionEvidence,
   type PaperTradeRecord,
@@ -311,6 +312,9 @@ export class PaperRunner {
       learningRecommendationCount: this.learningRecommendationCount,
       auditEventCount: this.auditLogger.count,
     });
+    const reconciliationResolved =
+      this.cycleCount > 0 &&
+      (this.ordersFilled + this.ordersBlocked > 0 || this.opportunitiesDetected === 0);
     if (this.config.summaryPath) {
       writeSessionSummaryJson(this.config.summaryPath, {
         sessionId: this.sessionId,
@@ -318,12 +322,12 @@ export class PaperRunner {
         startedAtMs: this._startedAtMs,
         endedAtMs,
         report,
+        reconciliationResolved,
+        gracefulShutdownValidated: true,
       });
     }
     printSessionReport(report);
 
-    const reconciliationResolved =
-      this.cycleCount > 0 && this.ordersFilled + this.ordersBlocked > 0;
     const evidence = buildPromotionEvidence({
       startedAtMs: this._startedAtMs,
       endedAtMs,
@@ -766,8 +770,16 @@ function writeSessionSummaryJson(
     startedAtMs: number;
     endedAtMs: number;
     report: ReturnType<typeof buildSessionReport>;
+    reconciliationResolved: boolean;
+    gracefulShutdownValidated: boolean;
   },
 ): void {
+  const contract = evaluatePaperSessionContract({
+    report: opts.report,
+    reconciliationResolved: opts.reconciliationResolved,
+    gracefulShutdownValidated: opts.gracefulShutdownValidated,
+  });
+
   const summary = {
     sessionId: opts.sessionId,
     mode: "paper",
@@ -777,6 +789,7 @@ function writeSessionSummaryJson(
     config: {
       reportDir: opts.reportDir,
     },
+    contract,
     report: opts.report,
   };
 

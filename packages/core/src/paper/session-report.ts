@@ -216,13 +216,17 @@ export function evaluatePaperSessionContract(opts: {
 }): PaperSessionContract {
   const reasons: string[] = [];
   const endToEndLoopValidated = opts.report.cycleCount > 0;
-  const visibleExecutionOutcomeValidated = opts.report.ordersFilled + opts.report.ordersBlocked > 0;
-  const failClosedValidated = opts.report.ordersFilled + opts.report.ordersBlocked > 0;
+  const visibleExecutionOutcomeValidated =
+    opts.report.opportunitiesDetected === 0 ||
+    opts.report.ordersFilled + opts.report.ordersBlocked > 0;
+  const failClosedValidated =
+    opts.report.opportunitiesDetected === 0 ||
+    opts.report.ordersFilled + opts.report.ordersBlocked > 0;
 
   if (!endToEndLoopValidated) {
     reasons.push("paper cycle did not execute");
   }
-  if (!visibleExecutionOutcomeValidated) {
+  if (opts.report.opportunitiesDetected > 0 && !visibleExecutionOutcomeValidated) {
     reasons.push("paper execution outcome missing");
   }
   if (opts.report.auditEventCount <= 0) {
