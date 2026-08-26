@@ -34,6 +34,8 @@ export interface AppConfig {
   cycleIntervalMs: number;
   /** Log level. */
   logLevel: string;
+  /** Paper market feed selector. Ignored outside paper mode. */
+  marketFeedMode: "public" | "synthetic";
   /** Report output directory. */
   reportDir: string;
   /** Merged canary config (defaults + JSON overrides). */
@@ -56,6 +58,7 @@ export type LoadConfigResult =
 const DEFAULT_CYCLE_INTERVAL_MS = 5_000;
 const DEFAULT_LOG_LEVEL = "info";
 const DEFAULT_REPORT_DIR = "./reports";
+const DEFAULT_MARKET_FEED_MODE: "public" = "public";
 
 const VALID_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export type LogLevel = (typeof VALID_LOG_LEVELS)[number];
@@ -102,6 +105,7 @@ export async function loadConfig(
   const rawLogLevel = env.LOG_LEVEL ?? DEFAULT_LOG_LEVEL;
   const logLevel = parseLogLevel(rawLogLevel, errors);
   const reportDir = env.REPORT_DIR ?? DEFAULT_REPORT_DIR;
+  const marketFeedMode = parseMarketFeedMode(env.MARKET_FEED_MODE ?? DEFAULT_MARKET_FEED_MODE, errors);
 
   // ── Validate API keys based on mode ───────────────────────────────
   const bybitApiKey = env.BYBIT_API_KEY ?? "";
@@ -159,6 +163,7 @@ export async function loadConfig(
       configPath,
       cycleIntervalMs,
       logLevel,
+      marketFeedMode,
       reportDir,
       canaryConfig,
     },
@@ -182,6 +187,18 @@ function parseLogLevel(raw: string, errors: ConfigError[]): string {
     message: `Invalid log level "${raw}". Must be one of: ${VALID_LOG_LEVELS.join(", ")}.`,
   });
   return DEFAULT_LOG_LEVEL;
+}
+
+function parseMarketFeedMode(raw: string, errors: ConfigError[]): "public" | "synthetic" {
+  if (raw === "public" || raw === "synthetic") {
+    return raw;
+  }
+
+  errors.push({
+    field: "MARKET_FEED_MODE",
+    message: `Invalid market feed mode "${raw}". Must be "public" or "synthetic".`,
+  });
+  return DEFAULT_MARKET_FEED_MODE;
 }
 
 function parsePositiveInt(

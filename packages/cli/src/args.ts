@@ -22,6 +22,7 @@ export interface CliArgs {
   configPath: string | undefined;
   dryRun: boolean;
   cycleIntervalMs: number | undefined;
+  marketFeedMode: "public" | "synthetic" | undefined;
 }
 
 /** Error returned when CLI args are invalid. */
@@ -68,6 +69,9 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
           default: false,
         },
         "cycle-interval": {
+          type: "string",
+        },
+        "market-feed": {
           type: "string",
         },
         help: {
@@ -127,6 +131,20 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
     }
   }
 
+  let marketFeedMode: "public" | "synthetic" | undefined;
+  if (parsed.values["market-feed"] !== undefined) {
+    const raw = String(parsed.values["market-feed"]);
+    const parsedMode = parseMarketFeedMode(raw);
+    if (parsedMode === undefined) {
+      errors.push({
+        field: "market-feed",
+        message: `Invalid market feed "${raw}". Must be "public" or "synthetic".`,
+      });
+    } else {
+      marketFeedMode = parsedMode;
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -138,6 +156,7 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
       configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
       dryRun: (parsed.values["dry-run"] as boolean) ?? false,
       cycleIntervalMs,
+      marketFeedMode,
     },
   };
 }
@@ -146,6 +165,11 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
 
 function parseMode(raw: string): Mode | undefined {
   if (raw === "paper" || raw === "demo" || raw === "live") return raw;
+  return undefined;
+}
+
+function parseMarketFeedMode(raw: string): "public" | "synthetic" | undefined {
+  if (raw === "public" || raw === "synthetic") return raw;
   return undefined;
 }
 
@@ -161,6 +185,8 @@ Options:
   -c, --config <path>           Path to JSON config override
       --dry-run                 Run full cycle but skip order submission
       --cycle-interval <ms>     Override cycle frequency (ms)
+      --market-feed <public|synthetic>
+                                Paper market feed selector
   -h, --help                    Show this help message
   -V, --version                 Show version number
 

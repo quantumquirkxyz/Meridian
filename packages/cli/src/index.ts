@@ -95,6 +95,7 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
   console.log(
     `║  Cycle:         ${cycleIntervalMs}ms${" ".repeat(Math.max(0, 40 - String(cycleIntervalMs).length - 2))}║`,
   );
+  console.log(`║  Feed:          ${config.marketFeedMode.padEnd(40)}║`);
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log();
 }
@@ -143,6 +144,7 @@ async function runPaperMode(
     auditLogPath: paths.auditLogPath,
     summaryPath: paths.summaryPath,
     sessionId: paths.sessionId,
+    marketFeedMode: opts.config.marketFeedMode,
   });
 
   const manifest = new ManifestWriter({
@@ -333,7 +335,11 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   // ── Step 2: Load and validate configuration ──────────────────────
   const loadResult: LoadConfigResult = await loadConfig({
     configPath: cliArgs.configPath,
-    env: { ...(Bun.env as Record<string, string | undefined>), MODE: cliArgs.mode },
+    env: {
+      ...(Bun.env as Record<string, string | undefined>),
+      MODE: cliArgs.mode,
+      ...(cliArgs.marketFeedMode !== undefined ? { MARKET_FEED_MODE: cliArgs.marketFeedMode } : {}),
+    },
   });
 
   if (!loadResult.ok) {

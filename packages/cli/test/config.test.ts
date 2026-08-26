@@ -206,7 +206,33 @@ describe("loadConfig", () => {
     if (result.ok) {
       expect(result.config.cycleIntervalMs).toBe(5_000);
       expect(result.config.logLevel).toBe("info");
+      expect(result.config.marketFeedMode).toBe("public");
       expect(result.config.reportDir).toBe("./reports");
+    }
+  });
+
+  test("paper market feed can be selected explicitly from env", async () => {
+    const result = await loadConfig({
+      env: env({ MARKET_FEED_MODE: "synthetic" }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.marketFeedMode).toBe("synthetic");
+    }
+  });
+
+  test("invalid MARKET_FEED_MODE reports error", async () => {
+    const result = await loadConfig({
+      env: env({ MARKET_FEED_MODE: "simulated" }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const err = result.errors.find((e) => e.field === "MARKET_FEED_MODE");
+      expect(err).toBeDefined();
+      expect(err!.message).toContain("public");
+      expect(err!.message).toContain("synthetic");
     }
   });
 
