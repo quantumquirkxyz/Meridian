@@ -63,6 +63,10 @@ export interface PaperSessionReportData {
   learningRecommendationCount: number;
   /** Audit event count. */
   auditEventCount: number;
+  /** Market feed used by the run. */
+  marketFeedMode: "public" | "synthetic";
+  /** Number of visible synthetic degradation episodes. */
+  feedDegradationCount: number;
 }
 
 /**
@@ -110,6 +114,7 @@ export interface PaperSessionContract {
   reconciliationResolved: boolean;
   failClosedValidated: boolean;
   gracefulShutdownValidated: boolean;
+  syntheticFeedVisible: boolean;
   pass: boolean;
   reasons: string[];
 }
@@ -130,6 +135,8 @@ export function buildSessionReport(opts: {
   finalRegime: string | undefined;
   learningRecommendationCount: number;
   auditEventCount: number;
+  marketFeedMode?: "public" | "synthetic";
+  feedDegradationCount?: number;
 }): PaperSessionReportData {
   const totalPnlUsd = opts.trades.reduce((sum, t) => {
     const direction = t.side === "BUY" ? -1 : 1;
@@ -158,6 +165,8 @@ export function buildSessionReport(opts: {
     finalRegime: opts.finalRegime,
     learningRecommendationCount: opts.learningRecommendationCount,
     auditEventCount: opts.auditEventCount,
+    marketFeedMode: opts.marketFeedMode ?? "public",
+    feedDegradationCount: opts.feedDegradationCount ?? 0,
   };
 }
 
@@ -222,6 +231,8 @@ export function evaluatePaperSessionContract(opts: {
   const failClosedValidated =
     opts.report.opportunitiesDetected === 0 ||
     opts.report.ordersFilled + opts.report.ordersBlocked > 0;
+  const syntheticFeedVisible =
+    opts.report.marketFeedMode === "public" || opts.report.feedDegradationCount > 0;
 
   if (!endToEndLoopValidated) {
     reasons.push("paper cycle did not execute");
@@ -238,6 +249,9 @@ export function evaluatePaperSessionContract(opts: {
   if (!opts.gracefulShutdownValidated) {
     reasons.push("shutdown did not flush evidence");
   }
+  if (opts.report.marketFeedMode === "synthetic" && opts.report.feedDegradationCount <= 0) {
+    reasons.push("synthetic feed degradation not visible");
+  }
 
   return {
     credentialFree: true,
@@ -246,6 +260,7 @@ export function evaluatePaperSessionContract(opts: {
     reconciliationResolved: opts.reconciliationResolved,
     failClosedValidated,
     gracefulShutdownValidated: opts.gracefulShutdownValidated,
+    syntheticFeedVisible,
     pass: reasons.length === 0,
     reasons,
   };
