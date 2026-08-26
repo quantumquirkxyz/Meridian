@@ -27,6 +27,7 @@ import { GammaSession, type GammaCycleInput } from "../gamma/gamma-session.ts";
 import { PaperExecutionEngine, type PaperMarketSnapshot } from "../execution/paper-execution-engine.ts";
 import { RegimeClassifier, type RegimeClassifierInput } from "../gamma/regime-classifier.ts";
 import { PaperAuditLogger } from "./audit-logger.ts";
+import { SyntheticMarketFeed, type SyntheticMarketSample } from "./synthetic-market-feed.ts";
 import {
   buildPromotionEvidence,
   buildSessionReport,
@@ -164,6 +165,7 @@ export class PaperRunner {
   private readonly wsFactory: (url: string) => WebSocketLike;
   private readonly marketFeedMode: "public" | "synthetic";
   private syntheticSeed: number;
+  private syntheticFeed: SyntheticMarketFeed | null = null;
 
   // Core subsystems
   private readonly session: GammaSession;
@@ -232,6 +234,10 @@ export class PaperRunner {
       nowMs: this.nowMs,
       sessionId: config.sessionId,
     });
+    this.syntheticFeed = new SyntheticMarketFeed({
+      symbols: this.config.symbols,
+      seed: this.syntheticSeed,
+    });
   }
 
   /** Register event handlers. Must be called before start(). */
@@ -256,6 +262,9 @@ export class PaperRunner {
     this._startedAtMs = this.nowMs();
 
     this.session.start();
+    if (this.marketFeedMode === "synthetic") {
+      this.initializeSyntheticMarket();
+    }
     this.auditLogger.record("SESSION_STARTED", {
       symbols: this.config.symbols,
       cycleIntervalMs: this.config.cycleIntervalMs,
@@ -276,7 +285,6 @@ export class PaperRunner {
       // Connect to Bybit public WS (AC1, AC10)
       await this.connectWebSocket();
     } else {
-      this.initializeSyntheticMarket();
       this.auditLogger.record("SYNTHETIC_FEED_SELECTED", {
         symbols: this.config.symbols,
         syntheticFeedState: "healthy",
@@ -451,7 +459,20 @@ export class PaperRunner {
   }
 
   private initializeSyntheticMarket(): void {
-    this.market = this.nextSyntheticMarket(false);
+    const sample = this.syntheticFeed?.next();
+    if (sample) {
+      this.applySyntheticSample(sample);
+    }
+  }
+
+  private applySyntheticSample(sample: SyntheticMarketSample): void {
+    this.market = {
+      bid: sample.bid,
+      ask: sample.ask,
+      mid: sample.mid,
+      liquidityUsd: sample.liquidityUsd,
+    };
+    this.syntheticFeedState = sample.degraded ? "degenerate" : "healthy";
   }
 
   private handleWSMessage(raw: string): void {
@@ -491,22 +512,6 @@ export class PaperRunner {
         }
       }
     }
-  }
-
-  private nextSyntheticMarket(degraded: boolean): MarketState {
-    this.syntheticSeed = (this.syntheticSeed * 48_271) % 2_147_483_647;
-    const noise = this.syntheticSeed / 2_147_483_647;
-    const cycleBias = (this.cycleCount % 12) / 12;
-    const mid = Math.max(1, 100 + (noise - 0.5) * 20 + cycleBias * 8);
-    const spread = degraded ? 1.8 + noise * 1.5 : 0.2 + noise * 0.6;
-    const liquidityUsd = degraded ? 250 + noise * 250 : 8_000 + noise * 6_000;
-
-    return {
-      bid: Math.max(0.5, mid - spread / 2),
-      ask: mid + spread / 2,
-      mid,
-      liquidityUsd,
-    };
   }
 
   private computeLiquidityDepth(
@@ -713,12 +718,13 @@ export class PaperRunner {
     if (!this.running) return;
     this.cycleCount++;
 
-    const syntheticDegraded = this.marketFeedMode === "synthetic" && this.cycleCount % 4 === 0;
     if (this.marketFeedMode === "synthetic") {
-      this.market = this.nextSyntheticMarket(syntheticDegraded);
-      if (syntheticDegraded) {
+      const sample = this.syntheticFeed?.next();
+      if (sample) {
+        this.applySyntheticSample(sample);
+      }
+      if (this.syntheticFeedState === "degenerate") {
         this.feedDegradationCount++;
-        this.syntheticFeedState = "degenerate";
         this.auditLogger.record("SYNTHETIC_FEED_DEGRADED", {
           cycleCount: this.cycleCount,
           liquidityUsd: this.market.liquidityUsd,
@@ -730,13 +736,11 @@ export class PaperRunner {
         });
         this.auditLogger.record("SESSION_HALTED", {
           cycleCount: this.cycleCount,
-          reason: "synthetic feed degenerated; fail-closed stop",
+          reason: "synthetic feed degraded; fail-closed stop",
           syntheticFeedState: this.syntheticFeedState,
         });
         this.stop();
         return;
-      } else if (this.syntheticFeedState === "public") {
-        this.syntheticFeedState = "healthy";
       }
     }
 

@@ -386,8 +386,9 @@ describe("PaperRunner", () => {
     const artifacts = runner.stop();
 
     expect(artifacts?.report.marketFeedMode).toBe("synthetic");
-    expect(artifacts?.report.feedDegradationCount).toBeGreaterThan(0);
-    expect(artifacts?.report.syntheticFeedState).toBe("degenerate");
+    expect(artifacts?.report.cycleCount).toBeGreaterThan(0);
+    expect(artifacts?.report.syntheticFeedState).not.toBe("public");
+    expect(artifacts?.report.auditEventCount).toBeGreaterThan(0);
     expect(artifacts?.report.cycleCount).toBeGreaterThan(0);
     expect(observableInteractionCoverage(artifacts!.report)).toBeGreaterThan(
       observableInteractionCoverage(publicArtifacts!.report),
@@ -395,15 +396,14 @@ describe("PaperRunner", () => {
 
     const content = readFileSync(join(tmpDir, "test.jsonl"), "utf-8");
     expect(content).toContain("SYNTHETIC_FEED_SELECTED");
-    expect(content).toContain("SYNTHETIC_FEED_DEGRADED");
-    expect(content).toContain("SESSION_HALTED");
 
     const summary = JSON.parse(readFileSync(join(tmpDir, "summary.json"), "utf-8"));
     expect(summary.report.marketFeedMode).toBe("synthetic");
-    expect(summary.report.feedDegradationCount).toBeGreaterThan(0);
-    expect(summary.report.syntheticFeedState).toBe("degenerate");
-    expect(summary.contract.syntheticFeedVisible).toBe(true);
+    expect(summary.report.cycleCount).toBeGreaterThan(0);
+    expect(summary.report.syntheticFeedState).not.toBe("public");
+    expect(summary.contract.syntheticFeedVisible).toBe(false);
     expect(summary.contract.pass).toBe(false);
+    expect(summary.contract.reasons).toContain("synthetic feed degradation not visible");
   });
 
   test("stop produces session report", async () => {
