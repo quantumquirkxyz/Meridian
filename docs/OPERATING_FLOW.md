@@ -63,6 +63,7 @@ Use this when you want to validate the internal simulation harness locally.
 4. If the run emitted `evidence.json`, treat it as promotion evidence only; it does not change the meaning of the paper session itself.
 5. Read `summary.json` for the final status. A successful paper run completes the internal control loop with no unresolved reconciliation, audit, or risk failures. A fail-closed run may stop early, but it should do so with explicit error reporting and no silent continuation.
 6. Treat any missing audit trail, missing summary, or unresolved error as a rejected validation run, not as proof that paper behaved like a venue.
+7. If a paper run completes a clean no-op session with zero opportunities, treat it as a valid paper pass only when the session still produced audit evidence, resolved reconciliation, and wrote a summary contract that matches the promotion evidence.
 
 The paper phase remains the repository's internal simulation harness. It validates deterministic control flow and auditability, not exchange connectivity.
 

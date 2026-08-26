@@ -213,6 +213,34 @@ describe("SessionReport", () => {
     expect(contract.pass).toBe(false);
     expect(contract.reasons).toContain("paper execution outcome missing");
   });
+
+  test("evaluatePaperSessionContract accepts a zero-opportunity paper session", () => {
+    const report = buildSessionReport({
+      startedAtMs: 1000,
+      endedAtMs: 5000,
+      cycleCount: 2,
+      opportunitiesDetected: 0,
+      ordersSubmitted: 0,
+      ordersFilled: 0,
+      ordersBlocked: 0,
+      trades: [],
+      regimeChangeCount: 1,
+      finalRegime: "range",
+      learningRecommendationCount: 0,
+      auditEventCount: 4,
+    });
+
+    const contract = evaluatePaperSessionContract({
+      report,
+      reconciliationResolved: true,
+      gracefulShutdownValidated: true,
+    });
+
+    expect(contract.pass).toBe(true);
+    expect(contract.visibleExecutionOutcomeValidated).toBe(true);
+    expect(contract.failClosedValidated).toBe(true);
+    expect(contract.reasons).toHaveLength(0);
+  });
 });
 
 // ── PaperRunner Tests ────────────────────────────────────────────────
@@ -276,6 +304,7 @@ describe("PaperRunner", () => {
     const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
     expect(summary.mode).toBe("paper");
     expect(summary.report.cycleCount).toBe(0);
+    expect(summary.contract.pass).toBe(false);
     expect(artifacts?.evidence.credentialFree).toBe(true);
     expect(artifacts?.evidence.verdict).toBe("fail");
     expect(artifacts?.evidence.reasons).toContain("paper cycle did not execute");
@@ -353,6 +382,39 @@ describe("PaperRunner", () => {
     const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
     expect(summary.report.auditEventCount).toBe(artifacts?.report.auditEventCount);
     expect(summary.report.cycleCount).toBe(artifacts?.report.cycleCount);
+    expect(summary.contract.pass).toBe(true);
+  });
+
+  test("writes a passing summary when no opportunities occur", async () => {
+    const mockWs = createMockWs();
+    const summaryPath = join(tmpDir, "summary.json");
+    const runner = new PaperRunner({
+      symbols: ["BTCUSDT"],
+      cycleIntervalMs: 50,
+      auditLogPath: join(tmpDir, "test.jsonl"),
+      summaryPath,
+      nowMs: () => 1000,
+      wsFactory: () => mockWs as never,
+    });
+
+    await runner.start();
+    mockWs.simulateMessage(JSON.stringify({
+      topic: "orderbook.50.BTCUSDT",
+      data: {
+        s: "BTCUSDT",
+        b: [{ price: "50000", size: "1" }],
+        a: [{ price: "50001", size: "1" }],
+      },
+    }));
+
+    await new Promise((r) => setTimeout(r, 120));
+
+    const artifacts = runner.stop();
+    const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
+
+    expect(artifacts?.evidence.verdict).toBe("pass");
+    expect(summary.report.opportunitiesDetected).toBe(0);
+    expect(summary.contract.pass).toBe(true);
   });
 
   test("handles graceful shutdown via stop()", async () => {
