@@ -209,6 +209,10 @@ An internal simulation mode where the system runs its own market, execution, and
 Paper is a harness first, not a venue proxy. Its purpose is to validate the full decision chain inside the repository: market ingestion, opportunity detection, risk gating, simulated execution, reconciliation, and shutdown reporting. The canonical outputs are `audit.jsonl` and `summary.json`; `evidence.json` is a promotion artifact, not the primary product of the mode. A paper session is allowed to pass with zero opportunities if it still completes at least one cycle, writes audit evidence, resolves reconciliation, and shuts down cleanly; in that case the summary's contract should show the same pass/fail decision as the promotion evidence.
 _Avoid_: Bybit demo trading, live capital, or any assumption that simulated fills reflect exchange-side behavior.
 
+**Synthetic Paper Feed**:
+A seeded market-data source used by `paper` when the run is explicitly configured for synthetic simulation instead of live public market data. It generates generic crypto-like volatility with alternating regimes, shocks, liquidity variation, and mild mean reversion so the paper loop can produce more interaction coverage. Each run uses a fresh random seed and the seed is not persisted, so the synthetic session is intentionally not reproducible for forensic replay.
+_Avoid_: treating synthetic paper feeds as historical replay, asset-specific calibration, or a substitute for the live public feed contract.
+
 **Demo Trading**:
 Bybit's simulated trading environment with public and private API interaction against the demo venue. It is risk-free with virtual assets, but it exercises the exchange integration layer more realistically than internal paper simulation.
 _Avoid_: treating demo trading as if it were live capital, or treating it as a pure internal simulator.
