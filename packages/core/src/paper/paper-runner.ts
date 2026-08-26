@@ -192,6 +192,7 @@ export class PaperRunner {
   private lastRegime: string | undefined;
   private learningRecommendationCount = 0;
   private feedDegradationCount = 0;
+  private syntheticFeedState: "public" | "healthy" | "degenerate" = "public";
   private _startedAtMs = 0;
   private events: PaperRunnerEvents = {};
   private lastArtifacts: PaperRunnerArtifacts | null = null;
@@ -261,6 +262,7 @@ export class PaperRunner {
       fillDelayMs: this.config.fillDelayMs,
       slippageBps: this.config.slippageBps,
       marketFeedMode: this.marketFeedMode,
+      syntheticFeedState: this.syntheticFeedState,
     });
 
     console.log(`[paper] Starting paper runner...`);
@@ -277,6 +279,7 @@ export class PaperRunner {
       this.initializeSyntheticMarket();
       this.auditLogger.record("SYNTHETIC_FEED_SELECTED", {
         symbols: this.config.symbols,
+        syntheticFeedState: "healthy",
       });
     }
 
@@ -331,6 +334,7 @@ export class PaperRunner {
       learningRecommendationCount: this.learningRecommendationCount,
       auditEventCount: this.auditLogger.count,
       marketFeedMode: this.marketFeedMode,
+      syntheticFeedState: this.syntheticFeedState,
       feedDegradationCount: this.feedDegradationCount,
     });
     const reconciliationResolved =
@@ -714,6 +718,7 @@ export class PaperRunner {
       this.market = this.nextSyntheticMarket(syntheticDegraded);
       if (syntheticDegraded) {
         this.feedDegradationCount++;
+        this.syntheticFeedState = "degenerate";
         this.auditLogger.record("SYNTHETIC_FEED_DEGRADED", {
           cycleCount: this.cycleCount,
           liquidityUsd: this.market.liquidityUsd,
@@ -721,7 +726,17 @@ export class PaperRunner {
             this.market.mid > 0
               ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
               : undefined,
+          syntheticFeedState: this.syntheticFeedState,
         });
+        this.auditLogger.record("SESSION_HALTED", {
+          cycleCount: this.cycleCount,
+          reason: "synthetic feed degenerated; fail-closed stop",
+          syntheticFeedState: this.syntheticFeedState,
+        });
+        this.stop();
+        return;
+      } else if (this.syntheticFeedState === "public") {
+        this.syntheticFeedState = "healthy";
       }
     }
 

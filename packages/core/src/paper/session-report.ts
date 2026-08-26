@@ -65,6 +65,8 @@ export interface PaperSessionReportData {
   auditEventCount: number;
   /** Market feed used by the run. */
   marketFeedMode: "public" | "synthetic";
+  /** Final synthetic-feed state, explicit even when the run never degraded. */
+  syntheticFeedState: "public" | "healthy" | "degenerate";
   /** Number of visible synthetic degradation episodes. */
   feedDegradationCount: number;
 }
@@ -136,6 +138,7 @@ export function buildSessionReport(opts: {
   learningRecommendationCount: number;
   auditEventCount: number;
   marketFeedMode?: "public" | "synthetic";
+  syntheticFeedState?: "public" | "healthy" | "degenerate";
   feedDegradationCount?: number;
 }): PaperSessionReportData {
   const totalPnlUsd = opts.trades.reduce((sum, t) => {
@@ -166,6 +169,13 @@ export function buildSessionReport(opts: {
     learningRecommendationCount: opts.learningRecommendationCount,
     auditEventCount: opts.auditEventCount,
     marketFeedMode: opts.marketFeedMode ?? "public",
+    syntheticFeedState:
+      opts.syntheticFeedState ??
+      (opts.marketFeedMode === "synthetic"
+        ? opts.feedDegradationCount && opts.feedDegradationCount > 0
+          ? "degenerate"
+          : "healthy"
+        : "public"),
     feedDegradationCount: opts.feedDegradationCount ?? 0,
   };
 }
@@ -251,6 +261,9 @@ export function evaluatePaperSessionContract(opts: {
   }
   if (opts.report.marketFeedMode === "synthetic" && opts.report.feedDegradationCount <= 0) {
     reasons.push("synthetic feed degradation not visible");
+  }
+  if (opts.report.marketFeedMode === "synthetic" && opts.report.syntheticFeedState === "degenerate") {
+    reasons.push("synthetic feed marked degenerate");
   }
 
   return {
