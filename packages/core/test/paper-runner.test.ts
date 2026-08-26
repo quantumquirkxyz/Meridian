@@ -56,6 +56,22 @@ function createMockWs() {
   return ws;
 }
 
+function observableInteractionCoverage(report: {
+  auditEventCount: number;
+  feedDegradationCount?: number;
+  ordersSubmitted: number;
+  ordersFilled: number;
+  ordersBlocked: number;
+}): number {
+  return (
+    report.auditEventCount +
+    (report.feedDegradationCount ?? 0) +
+    report.ordersSubmitted +
+    report.ordersFilled +
+    report.ordersBlocked
+  );
+}
+
 // ── AuditLogger Tests ────────────────────────────────────────────────
 
 describe("PaperAuditLogger", () => {
@@ -241,6 +257,35 @@ describe("SessionReport", () => {
     expect(contract.failClosedValidated).toBe(true);
     expect(contract.reasons).toHaveLength(0);
   });
+
+  test("evaluatePaperSessionContract requires synthetic degradation to be visible", () => {
+    const report = buildSessionReport({
+      startedAtMs: 1000,
+      endedAtMs: 5000,
+      cycleCount: 4,
+      opportunitiesDetected: 1,
+      ordersSubmitted: 1,
+      ordersFilled: 1,
+      ordersBlocked: 0,
+      trades: [],
+      regimeChangeCount: 1,
+      finalRegime: "range",
+      learningRecommendationCount: 0,
+      auditEventCount: 4,
+      marketFeedMode: "synthetic",
+      feedDegradationCount: 0,
+    });
+
+    const contract = evaluatePaperSessionContract({
+      report,
+      reconciliationResolved: true,
+      gracefulShutdownValidated: true,
+    });
+
+    expect(contract.pass).toBe(false);
+    expect(contract.syntheticFeedVisible).toBe(false);
+    expect(contract.reasons).toContain("synthetic feed degradation not visible");
+  });
 });
 
 // ── PaperRunner Tests ────────────────────────────────────────────────
@@ -280,6 +325,49 @@ describe("PaperRunner", () => {
     expect(subscribeMsg).toContain("trade.BTCUSDT");
 
     runner.stop();
+  });
+
+  test("synthetic mode can be selected explicitly without a WebSocket", async () => {
+    const publicRunner = new PaperRunner({
+      symbols: ["BTCUSDT"],
+      cycleIntervalMs: 20,
+      auditLogPath: join(tmpDir, "public.jsonl"),
+      summaryPath: join(tmpDir, "public-summary.json"),
+      nowMs: () => 1000,
+      wsFactory: () => createMockWs() as never,
+    });
+
+    await publicRunner.start();
+    const publicArtifacts = publicRunner.stop();
+
+    const runner = new PaperRunner({
+      symbols: ["BTCUSDT"],
+      cycleIntervalMs: 20,
+      marketFeedMode: "synthetic",
+      auditLogPath: join(tmpDir, "test.jsonl"),
+      summaryPath: join(tmpDir, "summary.json"),
+      nowMs: () => 1000,
+    });
+
+    await runner.start();
+    await new Promise((r) => setTimeout(r, 120));
+    const artifacts = runner.stop();
+
+    expect(artifacts?.report.marketFeedMode).toBe("synthetic");
+    expect(artifacts?.report.feedDegradationCount).toBeGreaterThan(0);
+    expect(artifacts?.report.cycleCount).toBeGreaterThan(0);
+    expect(observableInteractionCoverage(artifacts!.report)).toBeGreaterThan(
+      observableInteractionCoverage(publicArtifacts!.report),
+    );
+
+    const content = readFileSync(join(tmpDir, "test.jsonl"), "utf-8");
+    expect(content).toContain("SYNTHETIC_FEED_SELECTED");
+    expect(content).toContain("SYNTHETIC_FEED_DEGRADED");
+
+    const summary = JSON.parse(readFileSync(join(tmpDir, "summary.json"), "utf-8"));
+    expect(summary.report.marketFeedMode).toBe("synthetic");
+    expect(summary.report.feedDegradationCount).toBeGreaterThan(0);
+    expect(summary.contract.syntheticFeedVisible).toBe(true);
   });
 
   test("stop produces session report", async () => {
@@ -379,6 +467,7 @@ describe("PaperRunner", () => {
     expect(artifacts?.evidence.failClosedValidated).toBe(true);
     expect(artifacts?.evidence.verdict).toBe("pass");
     expect(artifacts?.report.auditEventCount).toBeGreaterThan(0);
+    expect(artifacts?.report.marketFeedMode).toBe("public");
     const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
     expect(summary.report.auditEventCount).toBe(artifacts?.report.auditEventCount);
     expect(summary.report.cycleCount).toBe(artifacts?.report.cycleCount);

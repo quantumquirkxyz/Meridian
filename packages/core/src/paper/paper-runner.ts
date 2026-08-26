@@ -104,6 +104,8 @@ export interface PaperRunnerConfig {
   wsFactory?: (url: string) => WebSocketLike;
   /** Optional status display for real-time cycle output. */
   statusDisplay?: StatusDisplayLike;
+  /** Market feed mode: public WebSocket or synthetic generator. */
+  marketFeedMode?: "public" | "synthetic";
 }
 
 export interface PaperRunnerEvents {
@@ -135,6 +137,7 @@ const DEFAULT_AUDIT_LOG_PATH = "./reports/paper-session.jsonl";
 const DEFAULT_SYMBOLS = ["BTCUSDT"];
 const BYBIT_PUBLIC_WS_URL = "wss://stream.bybit.com/v5/public/linear";
 const WS_OPEN = 1;
+const DEFAULT_MARKET_FEED_MODE = "public";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -155,9 +158,12 @@ export class PaperRunner {
     sessionId?: string;
     statusDisplay?: StatusDisplayLike;
     summaryPath?: string;
+    marketFeedMode: "public" | "synthetic";
   };
   private readonly nowMs: () => number;
   private readonly wsFactory: (url: string) => WebSocketLike;
+  private readonly marketFeedMode: "public" | "synthetic";
+  private syntheticSeed: number;
 
   // Core subsystems
   private readonly session: GammaSession;
@@ -185,6 +191,7 @@ export class PaperRunner {
   private regimeChangeCount = 0;
   private lastRegime: string | undefined;
   private learningRecommendationCount = 0;
+  private feedDegradationCount = 0;
   private _startedAtMs = 0;
   private events: PaperRunnerEvents = {};
   private lastArtifacts: PaperRunnerArtifacts | null = null;
@@ -192,6 +199,8 @@ export class PaperRunner {
   constructor(config: PaperRunnerConfig) {
     this.nowMs = config.nowMs ?? (() => Date.now());
     this.wsFactory = config.wsFactory ?? ((url) => new WebSocket(url) as unknown as WebSocketLike);
+    this.marketFeedMode = config.marketFeedMode ?? DEFAULT_MARKET_FEED_MODE;
+    this.syntheticSeed = Math.floor(this.nowMs() % 2_147_483_647) || 1;
 
     this.config = {
       symbols: config.symbols ?? DEFAULT_SYMBOLS,
@@ -206,6 +215,7 @@ export class PaperRunner {
       wsFactory: this.wsFactory,
       sessionId: config.sessionId,
       statusDisplay: config.statusDisplay,
+      marketFeedMode: this.marketFeedMode,
     };
 
     // Initialize subsystems
@@ -250,6 +260,7 @@ export class PaperRunner {
       cycleIntervalMs: this.config.cycleIntervalMs,
       fillDelayMs: this.config.fillDelayMs,
       slippageBps: this.config.slippageBps,
+      marketFeedMode: this.marketFeedMode,
     });
 
     console.log(`[paper] Starting paper runner...`);
@@ -257,9 +268,17 @@ export class PaperRunner {
     console.log(`[paper] Cycle interval: ${this.config.cycleIntervalMs}ms`);
     console.log(`[paper] Fill delay: ${this.config.fillDelayMs}ms`);
     console.log(`[paper] Slippage: ${this.config.slippageBps}bps`);
+    console.log(`[paper] Market feed: ${this.marketFeedMode}`);
 
-    // Connect to Bybit public WS (AC1, AC10)
-    await this.connectWebSocket();
+    if (this.marketFeedMode === "public") {
+      // Connect to Bybit public WS (AC1, AC10)
+      await this.connectWebSocket();
+    } else {
+      this.initializeSyntheticMarket();
+      this.auditLogger.record("SYNTHETIC_FEED_SELECTED", {
+        symbols: this.config.symbols,
+      });
+    }
 
     // Start cycle loop (AC5)
     this.cycleTimer = setInterval(() => {
@@ -311,6 +330,8 @@ export class PaperRunner {
       finalRegime: this.lastRegime,
       learningRecommendationCount: this.learningRecommendationCount,
       auditEventCount: this.auditLogger.count,
+      marketFeedMode: this.marketFeedMode,
+      feedDegradationCount: this.feedDegradationCount,
     });
     const reconciliationResolved =
       this.cycleCount > 0 &&
@@ -425,6 +446,10 @@ export class PaperRunner {
     }
   }
 
+  private initializeSyntheticMarket(): void {
+    this.market = this.nextSyntheticMarket(false);
+  }
+
   private handleWSMessage(raw: string): void {
     let parsed: { topic?: string; data: unknown; op?: string };
     try {
@@ -462,6 +487,22 @@ export class PaperRunner {
         }
       }
     }
+  }
+
+  private nextSyntheticMarket(degraded: boolean): MarketState {
+    this.syntheticSeed = (this.syntheticSeed * 48_271) % 2_147_483_647;
+    const noise = this.syntheticSeed / 2_147_483_647;
+    const cycleBias = (this.cycleCount % 12) / 12;
+    const mid = Math.max(1, 100 + (noise - 0.5) * 20 + cycleBias * 8);
+    const spread = degraded ? 1.8 + noise * 1.5 : 0.2 + noise * 0.6;
+    const liquidityUsd = degraded ? 250 + noise * 250 : 8_000 + noise * 6_000;
+
+    return {
+      bid: Math.max(0.5, mid - spread / 2),
+      ask: mid + spread / 2,
+      mid,
+      liquidityUsd,
+    };
   }
 
   private computeLiquidityDepth(
@@ -667,6 +708,22 @@ export class PaperRunner {
   private runCycle(): void {
     if (!this.running) return;
     this.cycleCount++;
+
+    const syntheticDegraded = this.marketFeedMode === "synthetic" && this.cycleCount % 4 === 0;
+    if (this.marketFeedMode === "synthetic") {
+      this.market = this.nextSyntheticMarket(syntheticDegraded);
+      if (syntheticDegraded) {
+        this.feedDegradationCount++;
+        this.auditLogger.record("SYNTHETIC_FEED_DEGRADED", {
+          cycleCount: this.cycleCount,
+          liquidityUsd: this.market.liquidityUsd,
+          spreadBps:
+            this.market.mid > 0
+              ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
+              : undefined,
+        });
+      }
+    }
 
     // Track price history for volatility/streak computation
     if (this.market.mid > 0) {
