@@ -121,6 +121,36 @@ describe("parseCliArgs", () => {
     }
   });
 
+  test("--market-feed flag is parsed", () => {
+    const result = parseCliArgs(argv("--market-feed", "synthetic"));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.args.marketFeedMode).toBe("synthetic");
+    }
+  });
+
+  test("--market-feed defaults to undefined", () => {
+    const result = parseCliArgs(argv());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.args.marketFeedMode).toBeUndefined();
+    }
+  });
+
+  test("--market-feed with invalid value returns error", () => {
+    const result = parseCliArgs(argv("--market-feed", "simulated"));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const err = result.errors.find((e) => e.field === "market-feed");
+      expect(err).toBeDefined();
+      expect(err!.message).toContain("public");
+      expect(err!.message).toContain("synthetic");
+    }
+  });
+
   test("--cycle-interval with non-integer returns error", () => {
     const result = parseCliArgs(argv("--cycle-interval", "5.5"));
 
