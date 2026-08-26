@@ -56,6 +56,22 @@ function createMockWs() {
   return ws;
 }
 
+function observableInteractionCoverage(report: {
+  auditEventCount: number;
+  feedDegradationCount?: number;
+  ordersSubmitted: number;
+  ordersFilled: number;
+  ordersBlocked: number;
+}): number {
+  return (
+    report.auditEventCount +
+    (report.feedDegradationCount ?? 0) +
+    report.ordersSubmitted +
+    report.ordersFilled +
+    report.ordersBlocked
+  );
+}
+
 // ── AuditLogger Tests ────────────────────────────────────────────────
 
 describe("PaperAuditLogger", () => {
@@ -312,6 +328,18 @@ describe("PaperRunner", () => {
   });
 
   test("synthetic mode can be selected explicitly without a WebSocket", async () => {
+    const publicRunner = new PaperRunner({
+      symbols: ["BTCUSDT"],
+      cycleIntervalMs: 20,
+      auditLogPath: join(tmpDir, "public.jsonl"),
+      summaryPath: join(tmpDir, "public-summary.json"),
+      nowMs: () => 1000,
+      wsFactory: () => createMockWs() as never,
+    });
+
+    await publicRunner.start();
+    const publicArtifacts = publicRunner.stop();
+
     const runner = new PaperRunner({
       symbols: ["BTCUSDT"],
       cycleIntervalMs: 20,
@@ -327,6 +355,10 @@ describe("PaperRunner", () => {
 
     expect(artifacts?.report.marketFeedMode).toBe("synthetic");
     expect(artifacts?.report.feedDegradationCount).toBeGreaterThan(0);
+    expect(artifacts?.report.cycleCount).toBeGreaterThan(0);
+    expect(observableInteractionCoverage(artifacts!.report)).toBeGreaterThan(
+      observableInteractionCoverage(publicArtifacts!.report),
+    );
 
     const content = readFileSync(join(tmpDir, "test.jsonl"), "utf-8");
     expect(content).toContain("SYNTHETIC_FEED_SELECTED");
