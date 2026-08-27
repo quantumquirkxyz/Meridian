@@ -5,7 +5,7 @@
  *   AC1: Trade journal records every outcome automatically.
  *   AC2: Edge decay is detected and flagged.
  *   AC3: No strategy change reaches live without
- *        backtest → paper → review → canary.
+ *        backtest → review → canary.
  *   AC4: Learning never modifies production directly.
  *
  * The learning engine is deterministic — no LLM, no I/O. It

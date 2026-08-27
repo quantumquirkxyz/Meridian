@@ -485,8 +485,8 @@ describe("Rule 16: DEGRADED_MODE", () => {
     expect(decision.decision).toBe("APPROVE");
   });
 
-  test("approves in PAPER_ONLY mode", () => {
-    const decision = engine.evaluate(baseInput({ mode: "PAPER_ONLY" }));
+  test("approves in SIGNAL_ONLY mode", () => {
+    const decision = engine.evaluate(baseInput({ mode: "SIGNAL_ONLY" }));
     expect(decision.decision).toBe("APPROVE");
   });
 
@@ -658,7 +658,6 @@ describe("Contract validation", () => {
     const modes = [
       "NORMAL",
       "SIGNAL_ONLY",
-      "PAPER_ONLY",
       "CANCEL_ONLY",
       "REDUCE_ONLY",
       "CASH_ONLY",

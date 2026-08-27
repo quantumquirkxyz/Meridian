@@ -506,7 +506,7 @@ const FORBIDDEN_ROUTES: ReadonlyArray<{
 }> = [
   {
     from: ["DETECT_OPPORTUNITY", "BUILD_ORDER_INTENT"],
-    to: ["EXECUTE_ORDER", "PAPER_EXECUTING", "EXECUTION_PRECHECK"],
+    to: ["EXECUTE_ORDER", "EXECUTING", "EXECUTION_PRECHECK"],
     reason:
       "direct jump to execution forbidden; must pass through DEBATING, RISK_CHECKING, APPROVED",
   },
@@ -547,7 +547,7 @@ export function defaultStateTimeouts(): readonly StateTimeoutConfig[] {
       timeoutMs: 10_000,
     },
     {
-      state: "PAPER_EXECUTING",
+      state: "EXECUTING",
       timeoutMs: 30_000,
     },
     {

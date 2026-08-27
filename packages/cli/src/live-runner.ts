@@ -31,13 +31,13 @@ import type {
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import {
   GammaSession,
-  PaperAuditLogger,
+  AuditLogger,
   buildSessionReport,
   printSessionReport,
   ReconciliationEngine,
   computeSlippageBps,
 } from "@agenttrading/core";
-import type { PaperTradeRecord, MarketState } from "@agenttrading/core";
+import type { TradeRecord, MarketState } from "@agenttrading/core";
 import {
   BybitRESTClient,
   BybitWebSocketClient,
@@ -83,7 +83,7 @@ export interface LiveRunnerEvents {
       blocked: number;
     },
   ) => void;
-  onTrade?: (trade: PaperTradeRecord) => void;
+  onTrade?: (trade: TradeRecord) => void;
   onError?: (error: Error) => void;
   onShutdown?: () => void;
 }
@@ -134,7 +134,7 @@ export class LiveRunner {
 
   // Core subsystems
   private readonly session: GammaSession;
-  private readonly auditLogger: PaperAuditLogger;
+  private readonly auditLogger: AuditLogger;
   private readonly reconciliationEngine: ReconciliationEngine;
 
   // Connectors
@@ -155,7 +155,7 @@ export class LiveRunner {
   private pendingOrders: Map<string, OrderIntent> = new Map();
 
   // Tracking
-  private trades: PaperTradeRecord[] = [];
+  private trades: TradeRecord[] = [];
   private ordersSubmitted = 0;
   private ordersFilled = 0;
   private ordersBlocked = 0;
@@ -194,7 +194,7 @@ export class LiveRunner {
       now: this.nowMs,
     });
 
-    this.auditLogger = new PaperAuditLogger({
+    this.auditLogger = new AuditLogger({
       filePath: this.config.auditLogPath,
       nowMs: this.nowMs,
       sessionId: config.sessionId,
@@ -436,7 +436,7 @@ export class LiveRunner {
       // SP6: Compute fees from configured fee rate
       const feesUsd = notionalUsd * (this.config.feeBps / 10_000);
 
-      const trade: PaperTradeRecord = {
+      const trade: TradeRecord = {
         orderId,
         symbol: update.symbol,
         side: update.side,

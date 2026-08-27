@@ -15,7 +15,7 @@ import {
  * The learning loop records every trade outcome (journal), detects when
  * a strategy's edge is decaying, and manages a promotion pipeline that
  * prevents any strategy change from reaching scale without passing through
- * backtest → paper → review → canary → scale.
+ * backtest → review → canary → scale.
  *
  * Core invariant: learning never mutates production directly. It only
  * produces recommendations that a human or automation must approve.
@@ -32,7 +32,6 @@ import {
 export const PROMOTION_STAGES = [
   "hypothesis",
   "backtest",
-  "paper",
   "review",
   "canary",
   "scale",
@@ -333,7 +332,6 @@ export const isPromotionRecord: Validator<PromotionRecord> = isObjectOf({
   stageOutcomes: isObjectOf({
     hypothesis: isPromotionOutcome,
     backtest: isPromotionOutcome,
-    paper: isPromotionOutcome,
     review: isPromotionOutcome,
     canary: isPromotionOutcome,
     scale: isPromotionOutcome,
@@ -341,7 +339,6 @@ export const isPromotionRecord: Validator<PromotionRecord> = isObjectOf({
   stageNotes: isObjectOf({
     hypothesis: isString,
     backtest: isString,
-    paper: isString,
     review: isString,
     canary: isString,
     scale: isString,
@@ -455,10 +452,8 @@ export interface LearningLoopConfig {
   decayProfitFactorThreshold: number;
 
   // ── Promotion Pipeline ─────────────────────────────────────────
-  /** Minimum backtest trades before promotion to paper. */
+  /** Minimum backtest trades before promotion to review. */
   promotionMinBacktestTrades: number;
-  /** Minimum paper trades before promotion to review. */
-  promotionMinPaperTrades: number;
   /** Minimum canary trades before promotion to scale. */
   promotionMinCanaryTrades: number;
   /** Minimum win rate required at backtest stage. */
@@ -489,7 +484,6 @@ export const isLearningLoopConfig: Validator<LearningLoopConfig> =
     decayWinRateThreshold: isNumber,
     decayProfitFactorThreshold: isNumber,
     promotionMinBacktestTrades: isNumber,
-    promotionMinPaperTrades: isNumber,
     promotionMinCanaryTrades: isNumber,
     promotionBacktestMinWinRate: isNumber,
     promotionBacktestMinSharpe: isNumber,
@@ -521,7 +515,6 @@ export const DEFAULT_LEARNING_LOOP_CONFIG: LearningLoopConfig = {
   decayWinRateThreshold: 0.4,
   decayProfitFactorThreshold: 1.0,
   promotionMinBacktestTrades: 100,
-  promotionMinPaperTrades: 50,
   promotionMinCanaryTrades: 30,
   promotionBacktestMinWinRate: 0.55,
   promotionBacktestMinSharpe: 0.5,

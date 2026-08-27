@@ -61,7 +61,6 @@ const MODE_LADDER: readonly SystemMode[] = [
   "NORMAL",
   "OBSERVE_ONLY",
   "SIGNAL_ONLY",
-  "PAPER_ONLY",
   "REDUCE_ONLY",
   "CANCEL_ONLY",
   "CASH_ONLY",
@@ -424,7 +423,7 @@ export class InfrastructureEngine {
     }
 
     if (openBreakers.length > 0) {
-      requiredMode = clampDown(requiredMode, "PAPER_ONLY");
+      requiredMode = clampDown(requiredMode, "SIGNAL_ONLY");
       reason = `open circuit breakers: ${openBreakers.join(", ")}`;
     }
 

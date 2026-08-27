@@ -1,8 +1,7 @@
-# Operating Flow: Paper -> Demo -> Live
+# Operating Flow: Demo -> Live
 
 This repo advances by eliminated operational risk, not by feature count. The
-trading flow is therefore a three-phase gate: internal paper simulation first,
-demo second, and live capital last.
+trading flow is a two-phase gate: demo validation first, live capital last.
 
 ## First Principles
 
@@ -11,36 +10,32 @@ loops. A profitable signal is only useful if the system can observe state,
 decide under constraints, execute deterministically, reconcile external state,
 and audit the result. Each phase removes a different class of uncertainty:
 
-1. `paper` removes logical risk in the local loop.
-2. `demo` removes exchange-integration risk against Bybit Demo Trading.
-3. `live` controls capital risk with canary limits and explicit approval.
+1. `demo` removes exchange-integration risk against Bybit Demo Trading.
+2. `live` controls capital risk with canary limits and explicit approval.
 
-The phases must not be collapsed. Paper fills do not prove exchange behavior;
-demo exchange behavior does not prove safe live-capital operation.
+The phases must not be collapsed. Demo exchange behavior does not prove safe
+live-capital operation.
 
 ## Phase Contract
 
 | Phase | Purpose | Credentials | Execution Surface | Exit Gate |
 |---|---|---|---|---|
-| `paper` | Validate state transitions, risk gates, order lifecycle, reconciliation, audit, and reports. | None. | Internal simulation and safe public data only. | Reproducible session report with no unresolved reconciliation, audit, or risk failures. |
 | `demo` | Validate Bybit REST/WebSocket integration with virtual assets. | Bybit Demo Trading keys only. | Demo REST endpoint, demo private WebSocket, normal public market stream, and virtual balances. | Order lifecycle, private stream confirmation, reconciliation, limits, and audit pass under realistic exchange behavior. |
-| `live` | Run bounded capital canary after paper and demo evidence exists. | Real Bybit keys with withdrawals disabled. | Live Bybit endpoints with real balances. | Explicit human approval, canary config, kill switch, audit, and rollback path. |
+| `live` | Run bounded capital canary after demo evidence exists. | Real Bybit keys with withdrawals disabled. | Live Bybit endpoints with real balances. | Explicit human approval, canary config, kill switch, audit, and rollback path. |
 
 ## Invariants
 
 - No AI agent executes, approves risk, signs transactions, moves funds, or modifies risk limits.
 - No OrderIntent exists without deterministic Risk Engine approval.
 - No phase may skip reconciliation or audit.
-- `paper` must not require API keys.
 - `demo` must not use live credentials or the live runner.
 - `live` must not start without explicit approval, real credentials, disabled withdrawals, canary limits, and a rollback path.
 - Any unresolved data, risk, execution, reconciliation, or audit failure reduces permissions and fails closed.
 
 ## Implementation Order
 
-1. Keep `paper` executable and credential-free.
-2. Add a dedicated Bybit Demo Trading runner with runtime/config demo-key injection, demo endpoint selection, order lifecycle tests, reconciliation, and audit.
-3. Promote to `live` only after paper and demo produce evidence that the loop is stable under realistic conditions.
+1. Add a dedicated Bybit Demo Trading runner with runtime/config demo-key injection, demo endpoint selection, order lifecycle tests, reconciliation, and audit.
+2. Promote to `live` only after demo produces evidence that the loop is stable under realistic conditions.
 
 ## Bybit Demo Trading Surface
 
@@ -52,20 +47,6 @@ The WebSocket trade channel is not supported for demo trading, so demo order
 validation must use REST order actions plus private stream confirmation.
 
 Source: https://bybit-exchange.github.io/docs/v5/demo
-
-## Paper Validation Runbook
-
-Use this when you want to validate the internal simulation harness locally.
-
-1. Start the default paper session with `bun run start` or `bun run start --mode paper`.
-2. Let the session run until it shuts down cleanly or until you stop it with `Ctrl+C`.
-3. Inspect the session directory under the configured report output path and verify that `audit.jsonl` and `summary.json` exist.
-4. If the run emitted `evidence.json`, treat it as promotion evidence only; it does not change the meaning of the paper session itself.
-5. Read `summary.json` for the final status. A successful paper run completes the internal control loop with no unresolved reconciliation, audit, or risk failures. A fail-closed run may stop early, but it should do so with explicit error reporting and no silent continuation.
-6. Treat any missing audit trail, missing summary, or unresolved error as a rejected validation run, not as proof that paper behaved like a venue.
-7. If a paper run completes a clean no-op session with zero opportunities, treat it as a valid paper pass only when the session still produced audit evidence, resolved reconciliation, and wrote a summary contract that matches the promotion evidence.
-
-The paper phase remains the repository's internal simulation harness. It validates deterministic control flow and auditability, not exchange connectivity.
 
 ## Tracker Hygiene
 

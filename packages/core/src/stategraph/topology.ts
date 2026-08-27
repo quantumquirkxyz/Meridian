@@ -506,7 +506,7 @@ const ORCHESTRATOR_STATES: readonly StateName[] = [
   "RISK_CHECKING",
   "APPROVED",
   "REJECTED",
-  "PAPER_EXECUTING",
+  "EXECUTING",
   "RECONCILING",
   "AUDITING",
 ];
@@ -521,7 +521,7 @@ const NORMAL_STATES: readonly StateName[] = [
  * Orchestrator flow transitions (issue #25):
  *
  *   BUILD_ORDER_INTENT -> DEBATING -> RISK_CHECKING
- *     -> APPROVED -> PAPER_EXECUTING -> RECONCILING -> AUDITING -> IDLE
+ *     -> APPROVED -> EXECUTING -> RECONCILING -> AUDITING -> IDLE
  *     -> REJECTED -> AUDITING -> IDLE
  *
  * plus defensive fan-out from every orchestrator state.
@@ -582,12 +582,12 @@ function orchestratorTransitions(): Transition[] {
       audit: true,
     },
     {
-      id: "approved-to-paper-executing",
+      id: "approved-to-executing",
       from: "APPROVED",
-      to: "PAPER_EXECUTING",
-      guard: allOf("approvedToPaperExecuting", [
+      to: "EXECUTING",
+      guard: allOf("approvedToExecuting", [
         requiresData("approvedRiskDecision", "riskDecision"),
-        modeAllows("paperExecMode", EXECUTION_MODES),
+        modeAllows("execMode", EXECUTION_MODES),
         allowWhen(
           "approvalNotExpired",
           (ctx) => {
@@ -604,10 +604,10 @@ function orchestratorTransitions(): Transition[] {
       audit: true,
     },
     {
-      id: "paper-executing-to-reconciling",
-      from: "PAPER_EXECUTING",
+      id: "executing-to-reconciling",
+      from: "EXECUTING",
       to: "RECONCILING",
-      guard: requiresData("paperExecToReconciling", "execution"),
+      guard: requiresData("execToReconciling", "execution"),
       requiredPermissions: ["SUBMIT_ORDER"],
       audit: true,
     },

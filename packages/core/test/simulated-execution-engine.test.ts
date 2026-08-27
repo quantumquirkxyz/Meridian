@@ -4,9 +4,9 @@ import {
   type RiskDecision,
 } from "@agenttrading/contracts";
 import {
-  PaperExecutionEngine,
-  type PaperOrderSnapshot,
-} from "../src/execution/paper-execution-engine.ts";
+  SimulatedExecutionEngine,
+  type OrderSnapshot,
+} from "../src/execution/simulated-execution-engine.ts";
 
 function intent(overrides: Partial<OrderIntent> = {}): OrderIntent {
   return {
@@ -60,13 +60,13 @@ function rejectedDecision(overrides: Partial<RiskDecision> = {}): RiskDecision {
   } as RiskDecision;
 }
 
-function getOrder(snapshot: PaperOrderSnapshot): PaperOrderSnapshot {
+function getOrder(snapshot: OrderSnapshot): OrderSnapshot {
   return snapshot;
 }
 
-describe("PaperExecutionEngine", () => {
+describe("SimulatedExecutionEngine", () => {
   test("keeps submit, accept, and fill as distinct async confirmations", () => {
-    const engine = new PaperExecutionEngine();
+    const engine = new SimulatedExecutionEngine();
     const submitted = engine.submit({
       intent: intent(),
       riskDecision: approvedDecision(),
@@ -91,11 +91,11 @@ describe("PaperExecutionEngine", () => {
 
     const fill = engine.poll(1_200);
     expect(fill.map((event) => event.state)).toEqual(["FILLED"]);
-    expect(engine.snapshot("intent-1")).toBeUndefined();
+    expect(engine.snapshot("intent-1")?.state).toBe("FILLED");
   });
 
   test("supports partial fills and later completion", () => {
-    const engine = new PaperExecutionEngine();
+    const engine = new SimulatedExecutionEngine();
     engine.submit({
       intent: intent({ quantity: 5 }),
       riskDecision: approvedDecision({ approvedSize: 5 }),
@@ -118,11 +118,11 @@ describe("PaperExecutionEngine", () => {
 
     const finalFill = engine.poll(1_120);
     expect(finalFill.map((event) => event.state)).toEqual(["FILLED"]);
-    expect(engine.snapshot("intent-1")).toBeUndefined();
+    expect(engine.snapshot("intent-1")?.state).toBe("FILLED");
   });
 
   test("cancels pending orders before final fill", () => {
-    const engine = new PaperExecutionEngine();
+    const engine = new SimulatedExecutionEngine();
     engine.submit({
       intent: intent(),
       riskDecision: approvedDecision(),
@@ -135,11 +135,11 @@ describe("PaperExecutionEngine", () => {
     expect(engine.poll(1_010).map((event) => event.state)).toEqual(["ACCEPTED"]);
     const cancelled = engine.cancel("intent-1", 1_020);
     expect(cancelled?.state).toBe("CANCELLED");
-    expect(engine.snapshot("intent-1")).toBeUndefined();
+    expect(engine.snapshot("intent-1")?.state).toBe("CANCELLED");
   });
 
   test("exposes and cancels all pending paper orders", () => {
-    const engine = new PaperExecutionEngine();
+    const engine = new SimulatedExecutionEngine();
     engine.submit({
       intent: intent({ idempotencyKey: "intent-1" }),
       riskDecision: approvedDecision({ orderIntentIdempotencyKey: "intent-1" }),
@@ -173,7 +173,7 @@ describe("PaperExecutionEngine", () => {
   });
 
   test("rejects expired intents and rejected risk decisions", () => {
-    const engine = new PaperExecutionEngine();
+    const engine = new SimulatedExecutionEngine();
 
     const expired = engine.submit({
       intent: intent({ expiresAtMs: 999 }),
@@ -193,7 +193,7 @@ describe("PaperExecutionEngine", () => {
   });
 
   test("accepts reduced approvals as executable intents", () => {
-    const engine = new PaperExecutionEngine();
+    const engine = new SimulatedExecutionEngine();
     const submitted = engine.submit({
       intent: intent(),
       riskDecision: reducedDecision(),

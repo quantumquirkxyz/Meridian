@@ -401,7 +401,6 @@ describe("SystemMode", () => {
       "NORMAL",
       "OBSERVE_ONLY",
       "SIGNAL_ONLY",
-      "PAPER_ONLY",
       "CANCEL_ONLY",
       "REDUCE_ONLY",
       "CASH_ONLY",

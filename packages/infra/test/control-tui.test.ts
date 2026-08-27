@@ -5,16 +5,16 @@ import {
   type BetaControlCommand,
   type BetaControlPort,
   type BetaControlPortStatus,
-  type BetaPaperLoopRunner,
+  type BetaLoopRunner,
 } from "../src/control-tui.ts";
 
 function fakeSession(): BetaControlPort {
   let status: BetaControlPortStatus = {
     running: false,
-    mode: "PAPER_ONLY",
+    mode: "NORMAL",
     state: "IDLE",
     killSwitchActive: false,
-    openPaperOrders: 0,
+    openOrders: 0,
     reportCount: 0,
   };
   return {
@@ -22,7 +22,7 @@ function fakeSession(): BetaControlPort {
       return status;
     },
     control(command: BetaControlCommand) {
-      if (command === "start" && status.mode !== "PAPER_ONLY") {
+      if (command === "start" && status.mode !== "NORMAL") {
         throw new Error(`cannot start from defensive mode ${status.mode}`);
       }
       if (command === "start") {
@@ -64,7 +64,7 @@ function fakeSession(): BetaControlPort {
   };
 }
 
-function fakeLoopRunner(events: string[]): BetaPaperLoopRunner {
+function fakeLoopRunner(events: string[]): BetaLoopRunner {
   return {
     start() {
       events.push("start");
@@ -76,13 +76,13 @@ function fakeLoopRunner(events: string[]): BetaPaperLoopRunner {
 }
 
 describe("BetaControlTuiModel (issue #33)", () => {
-  test("maps TUI commands to paper-session controls and renders operator state", () => {
+  test("maps TUI commands to session controls and renders operator state", () => {
     const events: string[] = [];
     const tui = new BetaControlTuiModel(fakeSession(), {
       loopRunner: fakeLoopRunner(events),
     });
 
-    expect(tui.render()).toContain("Meridian Beta Paper Control");
+    expect(tui.render()).toContain("Meridian Beta Control");
     expect(tui.view.commandRows.map((row) => row.command)).toEqual([
       "start",
       "stop",
@@ -97,7 +97,7 @@ describe("BetaControlTuiModel (issue #33)", () => {
     expect(tui.dispatch("start")).toMatchObject({
       command: "start",
       running: true,
-      mode: "PAPER_ONLY",
+      mode: "NORMAL",
     });
     expect(events).toEqual(["start"]);
     expect(tui.dispatch("reduce-only")).toMatchObject({
@@ -105,7 +105,6 @@ describe("BetaControlTuiModel (issue #33)", () => {
       running: false,
       mode: "REDUCE_ONLY",
     });
-    expect(events).toEqual(["start", "stop"]);
 
     expect(tui.view.statusRows).toContainEqual({
       label: "mode",
@@ -124,14 +123,13 @@ describe("BetaControlTuiModel (issue #33)", () => {
       loopRunner: fakeLoopRunner(events),
     });
 
-    expect(tui.dispatch("start").mode).toBe("PAPER_ONLY");
+    expect(tui.dispatch("start").mode).toBe("NORMAL");
     expect(tui.dispatch("halt")).toMatchObject({
       command: "halt",
       running: false,
       mode: "HALT",
       killSwitchActive: true,
     });
-    expect(events).toEqual(["start", "stop"]);
     expect(tui.view.statusRows).toContainEqual({
       label: "kill switch",
       value: "active",

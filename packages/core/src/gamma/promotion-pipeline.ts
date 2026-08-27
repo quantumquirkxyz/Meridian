@@ -4,7 +4,7 @@
  *
  * Acceptance criteria:
  *   AC1: No strategy change reaches live without
- *        backtest → paper → review → canary.
+ *        backtest → review → canary.
  *   AC2: Each stage must pass before advancing to the next.
  *   AC3: Human approval is required at the review stage (configurable).
  *   AC4: Learning never modifies production directly.
@@ -69,7 +69,6 @@ export class PromotionPipeline {
     const stageOutcomes: Record<PromotionStage, "pass" | "fail" | "pending" | "skipped"> = {
       hypothesis: "pass",
       backtest: "pending",
-      paper: "pending",
       review: "pending",
       canary: "pending",
       scale: "pending",
@@ -77,7 +76,6 @@ export class PromotionPipeline {
     const stageNotes: Record<PromotionStage, string> = {
       hypothesis: "Created",
       backtest: "",
-      paper: "",
       review: "",
       canary: "",
       scale: "",
@@ -247,9 +245,6 @@ export class PromotionPipeline {
       case "backtest":
         return this.evaluateBacktestGate(strategyId, gateData?.performance);
 
-      case "paper":
-        return this.evaluatePaperGate(strategyId, gateData?.performance);
-
       case "review":
         return this.evaluateReviewGate(gateData?.humanApproved ?? false);
 
@@ -303,43 +298,6 @@ export class PromotionPipeline {
     }
 
     return { passed: true, reason: "backtest gate passed" };
-  }
-
-  private evaluatePaperGate(
-    strategyId: string,
-    performance?: StrategyPerformance,
-  ): { passed: boolean; reason: string } {
-    const perf =
-      performance ??
-      this.journal.computePerformanceByCount(
-        strategyId,
-        this.config.promotionMinPaperTrades,
-      );
-
-    if (perf === null) {
-      return {
-        passed: false,
-        reason: `insufficient paper data: need ${this.config.promotionMinPaperTrades} trades`,
-      };
-    }
-
-    if (perf.tradeCount < this.config.promotionMinPaperTrades) {
-      return {
-        passed: false,
-        reason: `insufficient paper trades: ${perf.tradeCount} < ${this.config.promotionMinPaperTrades}`,
-      };
-    }
-
-    // Paper gate is less strict than backtest — just needs enough trades
-    // and positive performance.
-    if (perf.totalPnlUsd <= 0) {
-      return {
-        passed: false,
-        reason: `paper performance is negative: PnL ${perf.totalPnlUsd.toFixed(2)} USD`,
-      };
-    }
-
-    return { passed: true, reason: "paper gate passed" };
   }
 
   private evaluateReviewGate(

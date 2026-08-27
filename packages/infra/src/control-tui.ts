@@ -34,19 +34,19 @@ export interface BetaControlTuiView {
   footer: string;
 }
 
-export interface BetaPaperLoopRunner {
+export interface BetaLoopRunner {
   start(): void;
   stop(): void;
 }
 
 export interface BetaControlTuiModelOptions {
-  loopRunner?: BetaPaperLoopRunner;
+  loopRunner?: BetaLoopRunner;
 }
 
 const BETA_CONTROL_LABELS: Record<BetaControlCommand, string> = {
-  start: "Start paper loop",
-  stop: "Stop paper loop",
-  "cancel-all": "Cancel all paper orders",
+  start: "Start loop",
+  stop: "Stop loop",
+  "cancel-all": "Cancel all orders",
   "cash-only": "Cash-only mode",
   "reduce-only": "Reduce-only mode",
   halt: "Kill switch",
@@ -71,8 +71,7 @@ function modeEmphasis(
   status: BetaControlStatus,
 ): BetaControlStatusRow["emphasis"] {
   if (status.killSwitchActive || status.mode === "HALT") return "danger";
-  if (status.mode !== "PAPER_ONLY") return "warning";
-  return "normal";
+  return "warning";
 }
 
 function renderStatus(status: BetaControlStatus): BetaControlStatusRow[] {
@@ -87,9 +86,9 @@ function renderStatus(status: BetaControlStatus): BetaControlStatusRow[] {
       emphasis: status.killSwitchActive ? "danger" : "normal",
     },
     {
-      label: "open paper orders",
-      value: String(status.openPaperOrders),
-      emphasis: status.openPaperOrders > 0 ? "warning" : "normal",
+      label: "open orders",
+      value: String(status.openOrders),
+      emphasis: status.openOrders > 0 ? "warning" : "normal",
     },
     {
       label: "reports",
@@ -110,7 +109,7 @@ function renderCommands(): BetaControlCommandRow[] {
  */
 export class BetaControlTuiModel {
   private lastError: string | undefined;
-  private readonly loopRunner: BetaPaperLoopRunner | undefined;
+  private readonly loopRunner: BetaLoopRunner | undefined;
 
   constructor(
     private readonly session: BetaControlPort,
@@ -125,7 +124,7 @@ export class BetaControlTuiModel {
 
   get view(): BetaControlTuiView {
     return {
-      title: "Meridian Beta Paper Control",
+      title: "Meridian Beta Control",
       statusRows: renderStatus(this.session.status),
       commandRows: renderCommands(),
       footer:
@@ -139,7 +138,7 @@ export class BetaControlTuiModel {
       const result = this.session.control(command);
       if (command === "start") {
         this.loopRunner?.start();
-      } else if (command === "stop" || result.mode !== "PAPER_ONLY") {
+      } else if (command === "stop") {
         this.loopRunner?.stop();
       }
       this.lastError = undefined;

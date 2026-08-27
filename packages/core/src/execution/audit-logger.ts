@@ -1,5 +1,5 @@
 /**
- * PaperAuditLogger: writes every paper-trading decision to a JSONL file.
+ * AuditLogger: writes every trading decision to a JSONL file.
  *
  * Each line is a self-contained JSON object with a timestamp, event type,
  * and the full payload. Designed for deterministic replay and post-session
@@ -10,7 +10,7 @@ import { appendFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 /** A single audit event written to the JSONL file. */
-export interface PaperAuditEvent {
+export interface AuditEvent {
   /** Event timestamp (Unix ms). */
   timestampMs: number;
   /** Event type discriminator. */
@@ -22,9 +22,9 @@ export interface PaperAuditEvent {
 }
 
 /**
- * Options for the paper audit logger.
+ * Options for the audit logger.
  */
-export interface PaperAuditLoggerOptions {
+export interface AuditLoggerOptions {
   /** Path to the JSONL output file. */
   filePath: string;
   /** Injectable clock; defaults to Date.now. */
@@ -34,21 +34,20 @@ export interface PaperAuditLoggerOptions {
 }
 
 /**
- * PaperAuditLogger: appends JSONL lines to a file. Each line is a
+ * AuditLogger: appends JSONL lines to a file. Each line is a
  * self-contained JSON object for deterministic replay.
  */
-export class PaperAuditLogger {
+export class AuditLogger {
   private readonly filePath: string;
   private readonly nowMs: () => number;
   private readonly sessionIdValue: string;
   private eventCount = 0;
 
-  constructor(options: PaperAuditLoggerOptions) {
+  constructor(options: AuditLoggerOptions) {
     this.filePath = options.filePath;
     this.nowMs = options.nowMs ?? (() => Date.now());
     this.sessionIdValue = options.sessionId ?? generateSessionId(this.nowMs());
 
-    // Ensure the directory exists and create the file.
     const dir = dirname(this.filePath);
     try {
       mkdirSync(dir, { recursive: true });
@@ -72,7 +71,7 @@ export class PaperAuditLogger {
    * Record an audit event. Appends a single JSONL line to the file.
    */
   record(type: string, data: Record<string, unknown>): void {
-    const event: PaperAuditEvent = {
+    const event: AuditEvent = {
       timestampMs: this.nowMs(),
       type,
       data,
@@ -92,8 +91,6 @@ export class PaperAuditLogger {
     // Synchronous writes — nothing to flush.
   }
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────
 
 /**
  * Generate a session ID from a timestamp and random suffix.

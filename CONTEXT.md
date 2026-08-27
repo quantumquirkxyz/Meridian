@@ -62,7 +62,7 @@ Modern agent frameworks tend to model complex flows as interaction graphs betwee
 
 In this context, **Harness Engineering** can be understood as the design of the experimental and operational harness that allows testing, containing, measuring, and controlling agents and algorithms. A harness is infrastructure that wraps system components to evaluate their behavior under reproducible scenarios.
 
-For trading, this includes backtesting, paper trading, fill simulation, order book replay, slippage simulation, stress tests, disconnection tests, limit validation, API mocks, latency tests, and sandbox environments. Without a robust harness, the system may look profitable in theory but fail against real frictions: commissions, funding, execution queues, partial fills, API errors, liquidity changes, or divergence between expected and realized price.
+For trading, this includes backtesting, fill simulation, order book replay, slippage simulation, stress tests, disconnection tests, limit validation, API mocks, latency tests, and sandbox environments. Without a robust harness, the system may look profitable in theory but fail against real frictions: commissions, funding, execution queues, partial fills, API errors, liquidity changes, or divergence between expected and realized price.
 
 The harness is especially important when using AI Agents, because their responses can vary with context, memory, prompt, and available tools. Therefore, each agent must be evaluated not only by its output, but by its consistency, reproducibility, operational safety, and ability to abstain when there is no sufficient statistical advantage.
 
@@ -132,7 +132,7 @@ In cross-chain arbitrage, research shows that pre-positioned inventory is key be
 
 In algorithmic trading, the strategy does not live apart from infrastructure. Latency, reliability, data quality, error handling, state reconciliation, and recovery capability are part of the edge. A mathematically sound strategy can fail if the infrastructure executes late, reads inconsistent data, loses WebSocket events, or fails to detect a partial fill.
 
-The infrastructure must contemplate per-exchange connectors, data normalization, an event engine, a message bus, historical storage, secret control, a permission system, order queues, simulators, monitors, alerts, and circuit breakers. It must also support distinct modes: backtest, paper trading, sandbox, limited production, and full production.
+The infrastructure must contemplate per-exchange connectors, data normalization, an event engine, a message bus, historical storage, secret control, a permission system, order queues, simulators, monitors, alerts, and circuit breakers. It must also support distinct modes: backtest, sandbox, limited production, and full production.
 
 On CEXs, this implies robustness against rate limits, time sync, WebSocket disconnections, and order errors. On DEXs, it implies robustness against RPC failure, gas spikes, nonce conflicts, failed transactions, and MEV. Both layers require defensive engineering.
 
@@ -201,27 +201,17 @@ A classification of market state (trend, range, high volatility, low liquidity, 
 _Avoid_: fixed limits ignoring market state.
 
 **SystemMode**:
-Global permission state enforced by the contracts package (`SYSTEM_MODES` in `packages/contracts/src/modes.ts`): `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `PAPER_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. The system changes mode on failures or regime changes; modes can only reduce activity, never increase it. This matches ARCHITECTURE.md:39 and the RISK.md emergency chain. It diverges from the Spec Alpha mode list ("normal, degraded, signal-only, paper-only, cancel-only, reduce-only, cash-only, halt") by naming the first defensive mode `OBSERVE_ONLY` instead of `degraded`; the per-source data-quality state `DEGRADED` (DATA_QUALITY_STATES) covers the "degraded" concept. This substitution is the accepted vocabulary (changing it requires an ADR). Note the overlap with `StateName` (stategraph.ts): `HALT` is both a mode and a terminal state, and the defensive *states* are suffixed (`CASH_ONLY_MODE`, `CANCEL_ONLY_MODE`, `REDUCE_ONLY_MODE`) while the *modes* are not (`CASH_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`) — keep the distinction explicit when referencing either. Shared literals also appear across other contract vocabularies and are intentionally distinct per domain: `REQUEST_MORE_DATA` is both a `Permission` (stategraph.ts) and an `AgentReviewAction` (stategraph.ts); `CANCEL_ONLY`/`CASH_ONLY` are both `SystemMode` (modes.ts) and `RiskDecisionOutcome` (reason-codes.ts); `HALT_SYSTEM` (a risk outcome) is related to, but not the same as, the `HALT` mode/state. Treat each enum as its own namespace; renaming to disambiguate requires an ADR.
+Global permission state enforced by the contracts package (`SYSTEM_MODES` in `packages/contracts/src/modes.ts`): `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. The system changes mode on failures or regime changes; modes can only reduce activity, never increase it. This matches ARCHITURE.md:39 and the RISK.md emergency chain. Note the overlap with `StateName` (stategraph.ts): `HALT` is both a mode and a terminal state, and the defensive *states* are suffixed (`CASH_ONLY_MODE`, `CANCEL_ONLY_MODE`, `REDUCE_ONLY_MODE`) while the *modes* are not (`CASH_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`) — keep the distinction explicit when referencing either. Shared literals also appear across other contract vocabularies and are intentionally distinct per domain: `CANCEL_ONLY`/`CASH_ONLY` are both `SystemMode` (modes.ts) and `RiskDecisionOutcome` (reason-codes.ts); `HALT_SYSTEM` (a risk outcome) is related to, but not the same as, the `HALT` mode/state. Treat each enum as its own namespace; renaming to disambiguate requires an ADR.
 _Avoid_: trading always active.
 
-**Paper**:
-An internal simulation mode where the system runs its own market, execution, and fill simulation without using Bybit demo or live capital. It is the safest mode for validating control flow, audit, and state transitions.
-Paper is a harness first, not a venue proxy. Its purpose is to validate the full decision chain inside the repository: market ingestion, opportunity detection, risk gating, simulated execution, reconciliation, and shutdown reporting. The canonical outputs are `audit.jsonl` and `summary.json`; `evidence.json` is a promotion artifact, not the primary product of the mode. A paper session is allowed to pass with zero opportunities if it still completes at least one cycle, writes audit evidence, resolves reconciliation, and shuts down cleanly; in that case the summary's contract should show the same pass/fail decision as the promotion evidence.
-_Avoid_: Bybit demo trading, live capital, or any assumption that simulated fills reflect exchange-side behavior.
-
-**Synthetic Paper Feed**:
-A seeded market-data source used by `paper` when the run is explicitly configured for synthetic simulation instead of live public market data. It generates generic crypto-like volatility with alternating regimes, shocks, liquidity variation, and mild mean reversion so the paper loop can produce more interaction coverage. Each run uses a fresh random seed and the seed is not persisted, so the synthetic session is intentionally not reproducible for forensic replay.
-_Avoid_: treating synthetic paper feeds as historical replay, asset-specific calibration, or a substitute for the live public feed contract.
-
 **Demo Trading**:
-Bybit's simulated trading environment with public and private API interaction against the demo venue. It is risk-free with virtual assets, but it exercises the exchange integration layer more realistically than internal paper simulation.
+Bybit's simulated trading environment with public and private API interaction against the demo venue. It is risk-free with virtual assets, but it exercises the exchange integration layer more realistically than internal simulation.
 _Avoid_: treating demo trading as if it were live capital, or treating it as a pure internal simulator.
-_Note_: issue and tracker language should still follow the phase contract (`paper` → `demo` → `live`), not collapse everything into the venue name.
 
 **Live**:
-Bybit's real trading environment with real balances, real API keys, and capital at risk. It is the final phase after paper and demo trading have been validated.
+Bybit's real trading environment with real balances, real API keys, and capital at risk. It is the final phase after demo trading has been validated.
 _Avoid_: any mode that can be used without real exchange credentials or without capital exposure.
 
 **Phase**:
-A roadmap milestone with an exit criterion defined by eliminated risk: Phase Zero (contracts and invariants), Alpha (data, graph, and harness), Beta (loops, orchestration, agents, risk, and paper trading), Gamma (live canary, adaptation, and hardening).
+A roadmap milestone with an exit criterion defined by eliminated risk: Phase Zero (contracts and invariants), Alpha (data, graph, and harness), Beta (loops, orchestration, agents, risk, and demo trading), Gamma (live canary, adaptation, and hardening).
 _Avoid_: advancing by feature count instead of by eliminated risk.

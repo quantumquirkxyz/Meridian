@@ -28,7 +28,7 @@ export {
   type BetaControlPortStatus,
   type BetaControlStatusRow,
   type BetaControlTuiView,
-  type BetaPaperLoopRunner,
+  type BetaLoopRunner,
 } from "./control-tui.ts";
 export {
   BetaControlInkTui,
@@ -48,5 +48,5 @@ export {
   type GammaControlPortStatus,
   type GammaControlStatusRow,
   type GammaControlTuiView,
-  type GammaPaperLoopRunner,
+  type GammaLoopRunner,
 } from "./gamma-control-tui.ts";

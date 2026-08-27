@@ -151,7 +151,7 @@ export function defaultLoopDefinitions(): readonly LoopDefinition[] {
     {
       name: "execution",
       description:
-        "Execution Engine submits approved orders (paper mode in Beta).",
+        "Execution Engine submits approved orders.",
       frequencyMs: 10_000,
       inputKeys: ["riskDecisions"],
       outputKeys: ["executionResults"],

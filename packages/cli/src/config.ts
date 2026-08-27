@@ -6,7 +6,6 @@
  * - Validate required API keys for demo/live modes
  * - Parse optional parameters (MODE, CONFIG_PATH, etc.)
  * - Apply JSON config overrides from `--config` flag
- * - Paper mode requires zero API keys
  * - Demo mode uses Bybit Demo Trading credentials but cannot pass as live
  * - Fail fast with descriptive error listing all missing/invalid fields
  */
@@ -17,8 +16,8 @@ import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-/** System mode: internal paper, Bybit Demo Trading, or live capital. */
-export type Mode = "paper" | "demo" | "live";
+/** System mode: Bybit Demo Trading or live capital. */
+export type Mode = "demo" | "live";
 
 /** Validated runtime configuration for the CLI. */
 export interface AppConfig {
@@ -34,8 +33,6 @@ export interface AppConfig {
   cycleIntervalMs: number;
   /** Log level. */
   logLevel: string;
-  /** Paper market feed selector. Ignored outside paper mode. */
-  marketFeedMode: "public" | "synthetic";
   /** Report output directory. */
   reportDir: string;
   /** Merged canary config (defaults + JSON overrides). */
@@ -58,7 +55,6 @@ export type LoadConfigResult =
 const DEFAULT_CYCLE_INTERVAL_MS = 5_000;
 const DEFAULT_LOG_LEVEL = "info";
 const DEFAULT_REPORT_DIR = "./reports";
-const DEFAULT_MARKET_FEED_MODE: "public" = "public";
 
 const VALID_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export type LogLevel = (typeof VALID_LOG_LEVELS)[number];
@@ -85,12 +81,12 @@ export async function loadConfig(
   const errors: ConfigError[] = [];
 
   // ── Parse mode ────────────────────────────────────────────────────
-  const rawMode = env.MODE ?? "paper";
+  const rawMode = env.MODE ?? "demo";
   const mode = parseMode(rawMode);
   if (mode === undefined) {
     errors.push({
       field: "MODE",
-      message: `Invalid mode "${rawMode}". Must be "paper", "demo", or "live".`,
+      message: `Invalid mode "${rawMode}". Must be "demo" or "live".`,
     });
   }
 
@@ -105,7 +101,6 @@ export async function loadConfig(
   const rawLogLevel = env.LOG_LEVEL ?? DEFAULT_LOG_LEVEL;
   const logLevel = parseLogLevel(rawLogLevel, errors);
   const reportDir = env.REPORT_DIR ?? DEFAULT_REPORT_DIR;
-  const marketFeedMode = parseMarketFeedMode(env.MARKET_FEED_MODE ?? DEFAULT_MARKET_FEED_MODE, errors);
 
   // ── Validate API keys based on mode ───────────────────────────────
   const bybitApiKey = env.BYBIT_API_KEY ?? "";
@@ -163,7 +158,6 @@ export async function loadConfig(
       configPath,
       cycleIntervalMs,
       logLevel,
-      marketFeedMode,
       reportDir,
       canaryConfig,
     },
@@ -173,7 +167,7 @@ export async function loadConfig(
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function parseMode(raw: string): Mode | undefined {
-  if (raw === "paper" || raw === "demo" || raw === "live") return raw;
+  if (raw === "demo" || raw === "live") return raw;
   return undefined;
 }
 
@@ -187,18 +181,6 @@ function parseLogLevel(raw: string, errors: ConfigError[]): string {
     message: `Invalid log level "${raw}". Must be one of: ${VALID_LOG_LEVELS.join(", ")}.`,
   });
   return DEFAULT_LOG_LEVEL;
-}
-
-function parseMarketFeedMode(raw: string, errors: ConfigError[]): "public" | "synthetic" {
-  if (raw === "public" || raw === "synthetic") {
-    return raw;
-  }
-
-  errors.push({
-    field: "MARKET_FEED_MODE",
-    message: `Invalid market feed mode "${raw}". Must be "public" or "synthetic".`,
-  });
-  return DEFAULT_MARKET_FEED_MODE;
 }
 
 function parsePositiveInt(

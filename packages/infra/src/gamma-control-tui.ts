@@ -34,13 +34,13 @@ export interface GammaControlTuiView {
   footer: string;
 }
 
-export interface GammaPaperLoopRunner {
+export interface GammaLoopRunner {
   start(): void;
   stop(): void;
 }
 
 export interface GammaControlTuiModelOptions {
-  loopRunner?: GammaPaperLoopRunner;
+  loopRunner?: GammaLoopRunner;
 }
 
 const GAMMA_CONTROL_LABELS: Record<GammaControlCommand, string> = {
@@ -158,7 +158,7 @@ function renderGammaCommands(): GammaControlCommandRow[] {
  */
 export class GammaControlTuiModel {
   private lastError: string | undefined;
-  private readonly loopRunner: GammaPaperLoopRunner | undefined;
+  private readonly loopRunner: GammaLoopRunner | undefined;
 
   constructor(
     private readonly session: GammaControlPort,

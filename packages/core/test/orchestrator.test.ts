@@ -143,7 +143,7 @@ describe("AC1: forbidden route enforcement — no direct jump to execution", () 
     }
   });
 
-  test("blocks DETECT_OPPORTUNITY → PAPER_EXECUTING", () => {
+  test("blocks DETECT_OPPORTUNITY → EXECUTING", () => {
     const { orchestrator, graph } = newOrchestrator();
     graph.transition({
       to: "INGEST_MARKET_DATA",
@@ -170,9 +170,9 @@ describe("AC1: forbidden route enforcement — no direct jump to execution", () 
     });
     expect(graph.currentState).toBe("DETECT_OPPORTUNITY");
 
-    // Try to jump to PAPER_EXECUTING — must be blocked.
+    // Try to jump to EXECUTING — must be blocked.
     const outcome = orchestrator.transition({
-      to: "PAPER_EXECUTING",
+      to: "EXECUTING",
       actor: MODULE_ACTORS.executionEngine,
       timestampMs: FIXED_TS,
     });
@@ -242,7 +242,7 @@ describe("AC1: forbidden route enforcement — no direct jump to execution", () 
     expect(graph.currentState).toBe("RISK_CHECKING");
   });
 
-  test("allows the full orchestrator cycle: DEBATING → RISK_CHECKING → APPROVED → PAPER_EXECUTING → RECONCILING → AUDITING → IDLE", () => {
+  test("allows the full orchestrator cycle: DEBATING → RISK_CHECKING → APPROVED → EXECUTING → RECONCILING → AUDITING → IDLE", () => {
     const { orchestrator, graph } = newOrchestrator();
     // Walk to BUILD_ORDER_INTENT.
     graph.transition({
@@ -318,9 +318,9 @@ describe("AC1: forbidden route enforcement — no direct jump to execution", () 
     });
     expect(approved.ok).toBe(true);
 
-    // PAPER_EXECUTING
+    // EXECUTING
     const toPaper = orchestrator.transition({
-      to: "PAPER_EXECUTING",
+      to: "EXECUTING",
       actor: MODULE_ACTORS.executionEngine,
       data: {
         riskDecision: validRiskDecision,
@@ -574,7 +574,7 @@ describe("AC2: per-agent permission enforcement", () => {
     }
   });
 
-  test("an agent without SUBMIT_ORDER cannot enter PAPER_EXECUTING", () => {
+  test("an agent without SUBMIT_ORDER cannot enter EXECUTING", () => {
     const { orchestrator, graph } = newOrchestrator();
     // Walk to APPROVED.
     graph.transition({
@@ -643,7 +643,7 @@ describe("AC2: per-agent permission enforcement", () => {
 
     // audit does NOT have SUBMIT_ORDER.
     const outcome = orchestrator.transition({
-      to: "PAPER_EXECUTING",
+      to: "EXECUTING",
       actor: MODULE_ACTORS.audit,
       data: { riskDecision: { decision: "APPROVE" } },
       timestampMs: FIXED_TS,
@@ -1084,7 +1084,7 @@ describe("Orchestrator states exist in the default graph", () => {
       "RISK_CHECKING",
       "APPROVED",
       "REJECTED",
-      "PAPER_EXECUTING",
+      "EXECUTING",
       "RECONCILING",
       "AUDITING",
     ];
@@ -1100,7 +1100,7 @@ describe("Orchestrator states exist in the default graph", () => {
       "RISK_CHECKING",
       "APPROVED",
       "REJECTED",
-      "PAPER_EXECUTING",
+      "EXECUTING",
       "RECONCILING",
       "AUDITING",
     ];
@@ -1129,7 +1129,7 @@ describe("Orchestrator states exist in the default graph", () => {
       "RISK_CHECKING",
       "APPROVED",
       "REJECTED",
-      "PAPER_EXECUTING",
+      "EXECUTING",
       "RECONCILING",
       "AUDITING",
     ];

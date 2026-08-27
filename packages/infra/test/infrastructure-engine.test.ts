@@ -466,7 +466,7 @@ describe("AC4: Simulated partial failure degrades permissions/exposure, never in
     expect(result.unhealthyComponents).toContain("ws:bybit");
   });
 
-  test("open circuit breaker → at least PAPER_ONLY", () => {
+  test("open circuit breaker → at least SIGNAL_ONLY", () => {
     const engine = new InfrastructureEngine(config(), () => NOW_MS);
     engine.registerComponent(health());
     for (let i = 0; i < 3; i++) engine.recordBackup(backup({ backupId: `b${i}` }));
@@ -474,7 +474,7 @@ describe("AC4: Simulated partial failure degrades permissions/exposure, never in
     for (let i = 0; i < 5; i++) engine.recordFailure("ws:bybit");
 
     const result = engine.evaluateDegradation("NORMAL", NOW_MS);
-    expect(result.resultingMode).toBe("PAPER_ONLY");
+    expect(result.resultingMode).toBe("SIGNAL_ONLY");
     expect(result.modeDowngraded).toBe(true);
     expect(result.openBreakers).toContain("ws:bybit");
   });
@@ -527,20 +527,20 @@ describe("AC4: Simulated partial failure degrades permissions/exposure, never in
     for (let i = 0; i < 5; i++) engine.recordFailure("ws:bybit"); // open breaker
 
     const result = engine.evaluateDegradation("NORMAL", NOW_MS);
-    // Open breaker is more restrictive than unhealthy, so PAPER_ONLY.
-    expect(result.resultingMode).toBe("PAPER_ONLY");
+    // Open breaker is more restrictive than unhealthy, so SIGNAL_ONLY.
+    expect(result.resultingMode).toBe("SIGNAL_ONLY");
   });
 
   // ── SAFETY INVARIANT: mode never goes UP ──────────────────────
 
-  test("SAFETY: never upgrades mode from PAPER_ONLY to less restrictive", () => {
+  test("SAFETY: never upgrades mode from SIGNAL_ONLY to less restrictive", () => {
     const engine = new InfrastructureEngine(config(), () => NOW_MS);
     engine.registerComponent(health());
     for (let i = 0; i < 3; i++) engine.recordBackup(backup({ backupId: `b${i}` }));
 
-    const result = engine.evaluateDegradation("PAPER_ONLY", NOW_MS);
-    expect(result.resultingMode).toBe("PAPER_ONLY");
-    expect(modeIndex(result.resultingMode)).toBeGreaterThanOrEqual(modeIndex("PAPER_ONLY"));
+    const result = engine.evaluateDegradation("SIGNAL_ONLY", NOW_MS);
+    expect(result.resultingMode).toBe("SIGNAL_ONLY");
+    expect(modeIndex(result.resultingMode)).toBeGreaterThanOrEqual(modeIndex("SIGNAL_ONLY"));
   });
 
   test("SAFETY: never upgrades mode from REDUCE_ONLY", () => {

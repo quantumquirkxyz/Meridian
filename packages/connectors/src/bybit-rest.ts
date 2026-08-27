@@ -7,7 +7,7 @@
  * - Rate limit handling with exponential backoff on 429
  * - Configurable testnet vs mainnet base URL
  *
- * Paper mode: all methods work; API keys are passed through even in paper
+ * All methods work; API keys are passed through even in demo
  * mode so the signing logic can be validated offline. Actual request
  * dispatch is mockable via the `fetchFn` constructor parameter.
  */

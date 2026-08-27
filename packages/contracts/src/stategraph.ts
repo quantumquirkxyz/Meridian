@@ -39,7 +39,7 @@ export const STATE_NAMES = [
   "RISK_CHECKING",
   "APPROVED",
   "REJECTED",
-  "PAPER_EXECUTING",
+  "EXECUTING",
   "RECONCILING",
   "AUDITING",
   // Defensive states

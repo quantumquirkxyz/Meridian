@@ -13,7 +13,9 @@ import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
 function env(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return {
-    MODE: "paper",
+    MODE: "demo",
+    BYBIT_API_KEY: "test-key",
+    BYBIT_API_SECRET: "test-secret",
     ...overrides,
   };
 }
@@ -49,31 +51,30 @@ async function withTmpJsonFile(
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe("loadConfig", () => {
-  test("paper mode succeeds without any API keys", async () => {
+  test("demo mode defaults to demo when no MODE set", async () => {
     const result = await loadConfig({ env: env() });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.config.mode).toBe("paper");
-      expect(result.config.bybitApiKey).toBe("");
-      expect(result.config.bybitApiSecret).toBe("");
+      expect(result.config.mode).toBe("demo");
     }
   });
 
-  test("paper mode succeeds with empty API keys", async () => {
+  test("demo mode succeeds with empty API keys", async () => {
     const result = await loadConfig({
-      env: env({ BYBIT_API_KEY: "", BYBIT_API_SECRET: "" }),
+      env: env({ MODE: "demo", BYBIT_API_KEY: "", BYBIT_API_SECRET: "" }),
     });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.config.mode).toBe("paper");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const keyError = result.errors.find((e) => e.field === "BYBIT_API_KEY");
+      expect(keyError).toBeDefined();
     }
   });
 
   test("demo mode requires Bybit API key", async () => {
     const result = await loadConfig({
-      env: env({ MODE: "demo", BYBIT_API_SECRET: "demo-secret" }),
+      env: env({ MODE: "demo", BYBIT_API_KEY: "", BYBIT_API_SECRET: "demo-secret" }),
     });
 
     expect(result.ok).toBe(false);
@@ -86,7 +87,7 @@ describe("loadConfig", () => {
 
   test("demo mode requires Bybit API secret", async () => {
     const result = await loadConfig({
-      env: env({ MODE: "demo", BYBIT_API_KEY: "demo-key" }),
+      env: env({ MODE: "demo", BYBIT_API_KEY: "demo-key", BYBIT_API_SECRET: "" }),
     });
 
     expect(result.ok).toBe(false);
@@ -127,7 +128,7 @@ describe("loadConfig", () => {
 
   test("live mode fails without BYBIT_API_KEY", async () => {
     const result = await loadConfig({
-      env: env({ MODE: "live", BYBIT_API_SECRET: "secret-123" }),
+      env: env({ MODE: "live", BYBIT_API_KEY: "", BYBIT_API_SECRET: "secret-123" }),
     });
 
     expect(result.ok).toBe(false);
@@ -140,7 +141,7 @@ describe("loadConfig", () => {
 
   test("live mode fails without BYBIT_API_SECRET", async () => {
     const result = await loadConfig({
-      env: env({ MODE: "live", BYBIT_API_KEY: "key-123" }),
+      env: env({ MODE: "live", BYBIT_API_KEY: "key-123", BYBIT_API_SECRET: "" }),
     });
 
     expect(result.ok).toBe(false);
@@ -153,7 +154,7 @@ describe("loadConfig", () => {
 
   test("live mode fails with both keys missing", async () => {
     const result = await loadConfig({
-      env: env({ MODE: "live" }),
+      env: env({ MODE: "live", BYBIT_API_KEY: "", BYBIT_API_SECRET: "" }),
     });
 
     expect(result.ok).toBe(false);
@@ -206,33 +207,7 @@ describe("loadConfig", () => {
     if (result.ok) {
       expect(result.config.cycleIntervalMs).toBe(5_000);
       expect(result.config.logLevel).toBe("info");
-      expect(result.config.marketFeedMode).toBe("public");
       expect(result.config.reportDir).toBe("./reports");
-    }
-  });
-
-  test("paper market feed can be selected explicitly from env", async () => {
-    const result = await loadConfig({
-      env: env({ MARKET_FEED_MODE: "synthetic" }),
-    });
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.config.marketFeedMode).toBe("synthetic");
-    }
-  });
-
-  test("invalid MARKET_FEED_MODE reports error", async () => {
-    const result = await loadConfig({
-      env: env({ MARKET_FEED_MODE: "simulated" }),
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      const err = result.errors.find((e) => e.field === "MARKET_FEED_MODE");
-      expect(err).toBeDefined();
-      expect(err!.message).toContain("public");
-      expect(err!.message).toContain("synthetic");
     }
   });
 
@@ -299,7 +274,6 @@ describe("loadConfig", () => {
     if (!result.ok) {
       const err = result.errors.find((e) => e.field === "MODE");
       expect(err).toBeDefined();
-      expect(err!.message).toContain("paper");
       expect(err!.message).toContain("demo");
       expect(err!.message).toContain("live");
     }
@@ -544,7 +518,7 @@ describe("formatConfigErrors", () => {
 
   test("formats single error", () => {
     const errors: ConfigError[] = [
-      { field: "MODE", message: 'Invalid mode "test". Must be "paper", "demo", or "live".' },
+      { field: "MODE", message: 'Invalid mode "test". Must be "demo" or "live".' },
     ];
 
     const msg = formatConfigErrors(errors);

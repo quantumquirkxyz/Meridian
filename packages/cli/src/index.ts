@@ -7,7 +7,7 @@
  * Usage: `bun run start [options]`
  *
  * Flags:
- *   --mode paper|demo|live     System mode (default: paper)
+ *   --mode demo|live            System mode (default: demo)
  *   --config <path>            JSON config override path
  *   --dry-run                  Skip order submission
  *   --cycle-interval <ms>      Override cycle frequency
@@ -127,73 +127,6 @@ function printSessionSummary(
 // ── Mode Dispatch ─────────────────────────────────────────────────────
 
 /**
- * Run paper mode using PaperRunner. Connects to Bybit public WS,
- * feeds market data into GammaSession, simulates fills, and produces
- * audit trail + session report. No API keys required.
- */
-async function runPaperMode(
-  opts: RunOptions,
-  paths: SessionPaths,
-): Promise<{ exitCode: number }> {
-  const { PaperRunner } = await import("@agenttrading/core");
-
-  const runner = new PaperRunner({
-    symbols: ["BTCUSDT"],
-    cycleIntervalMs: opts.cycleIntervalMs,
-    canaryConfig: opts.config.canaryConfig,
-    auditLogPath: paths.auditLogPath,
-    summaryPath: paths.summaryPath,
-    sessionId: paths.sessionId,
-    marketFeedMode: opts.config.marketFeedMode,
-  });
-
-  const manifest = new ManifestWriter({
-    sessionId: paths.sessionId,
-    startedAtMs: Date.now(),
-  });
-  manifest.track("audit-log", paths.auditLogPath);
-
-  await runner.start();
-
-  // Graceful shutdown (AC11)
-  await new Promise<void>((resolve) => {
-    let shutdownDone = false;
-
-    const shutdown = () => {
-      if (shutdownDone) return;
-      shutdownDone = true;
-
-      process.removeListener("SIGINT", shutdown);
-      process.removeListener("SIGTERM", shutdown);
-
-      console.log("\n[paper] Shutting down...");
-      const artifacts = runner.stop();
-
-      if (artifacts) {
-        writePaperPromotionEvidence(paths.evidencePath, artifacts.evidence);
-        manifest.track("promotion-evidence", paths.evidencePath);
-      }
-
-      manifest.track("summary", paths.summaryPath);
-
-      shutdownObservability({
-        runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
-        paths,
-        config: opts.config,
-        manifest,
-      });
-
-      resolve();
-    };
-
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-  });
-
-  return { exitCode: 0 };
-}
-
-/**
  * Run live mode using LiveRunner. Connects to Bybit private+public WS,
  * places real orders through LiveExecutionEngine with canary limits,
  * confirms fills via WS, reconciles, and produces full audit trail.
@@ -254,7 +187,7 @@ async function runLiveMode(
 }
 
 /**
- * Demo mode is intentionally separated from paper and live. Until a Bybit
+ * Demo mode is intentionally separated from live. Until a Bybit
  * Demo Trading runner exists, starting this mode must fail closed instead of
  * falling through to the live runner with virtual-capital credentials.
  */
@@ -300,20 +233,6 @@ function shutdownObservability(opts: {
 
   // AC10: Write manifest at shutdown
   manifest.writeManifest(paths.manifestPath);
-}
-
-/** Write promotion evidence JSON for paper-mode validation. */
-export function writePaperPromotionEvidence(
-  path: string,
-  evidence: import("@agenttrading/core").PaperPromotionEvidence,
-): void {
-  const dir = dirname(path);
-  try {
-    mkdirSync(dir, { recursive: true });
-  } catch {
-    // Directory may already exist.
-  }
-  writeFileSync(path, JSON.stringify(evidence, null, 2) + "\n", "utf-8");
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
@@ -381,9 +300,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   };
 
   let exitCode: number;
-  if (config.mode === "paper") {
-    exitCode = (await runPaperMode(runOpts, paths)).exitCode;
-  } else if (config.mode === "demo") {
+  if (config.mode === "demo") {
     exitCode = (await runDemoMode()).exitCode;
   } else {
     exitCode = (await runLiveMode(runOpts, paths)).exitCode;

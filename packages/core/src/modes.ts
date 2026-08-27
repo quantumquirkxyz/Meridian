@@ -10,8 +10,7 @@ import { type SystemMode } from "@agenttrading/contracts";
 export const SIGNAL_MODES: readonly SystemMode[] = [
   "NORMAL",
   "SIGNAL_ONLY",
-  "PAPER_ONLY",
 ];
 
-/** Modes in which execution states may run (paper execution only in Alpha). */
-export const EXECUTION_MODES: readonly SystemMode[] = ["NORMAL", "PAPER_ONLY"];
+/** Modes in which execution states may run. */
+export const EXECUTION_MODES: readonly SystemMode[] = ["NORMAL"];

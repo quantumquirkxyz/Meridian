@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PaperAuditLogger, generateSessionId } from "@agenttrading/core";
+import { AuditLogger, generateSessionId } from "@agenttrading/core";
 import { StatusDisplay, type CycleStatusInput, type KillSwitchTriggerInput } from "../src/status-display.ts";
 import { ManifestWriter, type ManifestData } from "../src/manifest.ts";
 
@@ -23,15 +23,15 @@ function cleanTmpDir(): void {
   }
 }
 
-// ── PaperAuditLogger sessionId Tests ─────────────────────────────────
+// ── AuditLogger sessionId Tests ─────────────────────────────────────
 
-describe("PaperAuditLogger — sessionId", () => {
+describe("AuditLogger — sessionId", () => {
   beforeEach(() => createTmpDir());
   afterEach(() => cleanTmpDir());
 
   test("generates sessionId automatically when not provided", () => {
     const filePath = join(tmpDir, "test.jsonl");
-    const logger = new PaperAuditLogger({ filePath, nowMs: () => 1000 });
+    const logger = new AuditLogger({ filePath, nowMs: () => 1000 });
 
     expect(logger.sessionId).toBeTruthy();
     expect(logger.sessionId).toMatch(/^sess-/);
@@ -39,7 +39,7 @@ describe("PaperAuditLogger — sessionId", () => {
 
   test("uses provided sessionId", () => {
     const filePath = join(tmpDir, "test.jsonl");
-    const logger = new PaperAuditLogger({
+    const logger = new AuditLogger({
       filePath,
       sessionId: "my-session-123",
       nowMs: () => 1000,
@@ -50,7 +50,7 @@ describe("PaperAuditLogger — sessionId", () => {
 
   test("AC2: every JSONL line includes sessionId", () => {
     const filePath = join(tmpDir, "test.jsonl");
-    const logger = new PaperAuditLogger({
+    const logger = new AuditLogger({
       filePath,
       sessionId: "test-sess",
       nowMs: () => 1000,
@@ -77,7 +77,7 @@ describe("PaperAuditLogger — sessionId", () => {
 
   test("AC2: each line has timestamp, event type, payload, session id", () => {
     const filePath = join(tmpDir, "test.jsonl");
-    const logger = new PaperAuditLogger({
+    const logger = new AuditLogger({
       filePath,
       sessionId: "sess-abc",
       nowMs: () => 5000,
@@ -121,10 +121,10 @@ describe("StatusDisplay", () => {
   });
 
   test("AC3: printCycleStatus shows mode, regime, PnL, open orders, kill switch", () => {
-    const display = new StatusDisplay({ mode: "paper" });
+    const display = new StatusDisplay({ mode: "demo" });
 
     const status: CycleStatusInput = {
-      mode: "paper",
+      mode: "demo",
       cycleCount: 5,
       regime: "trend",
       regimeConfidence: 0.85,
@@ -140,7 +140,7 @@ describe("StatusDisplay", () => {
 
     expect(capturedLogs.length).toBe(1);
     const output = capturedLogs[0];
-    expect(output).toContain("paper");
+    expect(output).toContain("demo");
     expect(output).toContain("Cycle 5");
     expect(output).toContain("regime=trend");
     expect(output).toContain("(85%)");
@@ -174,7 +174,7 @@ describe("StatusDisplay", () => {
   });
 
   test("AC4: printRegimeChange shows timestamp and regime transition", () => {
-    const display = new StatusDisplay({ mode: "paper" });
+    const display = new StatusDisplay({ mode: "demo" });
 
     display.printRegimeChange({
       fromRegime: "low_vol",
@@ -191,7 +191,7 @@ describe("StatusDisplay", () => {
   });
 
   test("AC5: printOrderEvent shows submitted order", () => {
-    const display = new StatusDisplay({ mode: "paper" });
+    const display = new StatusDisplay({ mode: "demo" });
 
     display.printOrderEvent({
       orderId: "ord-1",

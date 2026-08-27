@@ -30,7 +30,7 @@ export interface BetaControlStatus {
   mode: SystemMode;
   state: StateName;
   killSwitchActive: boolean;
-  openPaperOrders: number;
+  openOrders: number;
   reportCount: number;
 }
 
@@ -47,7 +47,7 @@ export const isBetaControlStatus: Validator<BetaControlStatus> = isObjectOf({
   mode: isSystemMode,
   state: isStateName,
   killSwitchActive: isBoolean,
-  openPaperOrders: isNumber,
+  openOrders: isNumber,
   reportCount: isNumber,
 });
 
@@ -57,7 +57,7 @@ export const isBetaControlResult: Validator<BetaControlResult> = isObjectOf({
   mode: isSystemMode,
   state: isStateName,
   killSwitchActive: isBoolean,
-  openPaperOrders: isNumber,
+  openOrders: isNumber,
   reportCount: isNumber,
 });
 
@@ -66,7 +66,7 @@ export function parseBetaControlCommand(value: unknown): BetaControlCommand {
 }
 
 /**
- * Port through which operator UIs control the Beta paper session.
+ * Port through which operator UIs control the Beta session.
  * Lives in contracts so the wiring layer can import core to construct
  * the session while infra imports only this port type.
  */

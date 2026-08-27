@@ -1,8 +1,8 @@
 /**
  * Shared slippage computation utility.
  *
- * SP1 (review fix): Extract computeSlippageBps from paper-runner.ts and
- * live-runner.ts into a single shared function. Used by both paper and
+ * SP1 (review fix): Extract computeSlippageBps from
+ * live-runner.ts into a single shared function. Used by both
  * live runners to compute dynamic slippage based on order size and
  * available liquidity depth.
  */

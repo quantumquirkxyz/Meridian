@@ -1,7 +1,7 @@
 /**
  * Shared MarketState type for bundled market data.
  *
- * S2 (review fix): Both PaperRunner and LiveRunner track bid, ask, mid,
+ * S2 (review fix): Both LiveRunner track bid, ask, mid,
  * and liquidityUsd together. This type bundles them to avoid data clumps.
  */
 

@@ -14,24 +14,15 @@ function argv(...args: string[]): string[] {
 // ── Arg Parsing Tests ────────────────────────────────────────────────
 
 describe("parseCliArgs", () => {
-  test("no args defaults to paper mode", () => {
+  test("no args defaults to demo mode", () => {
     const result = parseCliArgs(argv());
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.args.mode).toBe("paper");
+      expect(result.args.mode).toBe("demo");
       expect(result.args.configPath).toBeUndefined();
       expect(result.args.dryRun).toBe(false);
       expect(result.args.cycleIntervalMs).toBeUndefined();
-    }
-  });
-
-  test("--mode paper is accepted", () => {
-    const result = parseCliArgs(argv("--mode", "paper"));
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.args.mode).toBe("paper");
     }
   });
 
@@ -70,7 +61,6 @@ describe("parseCliArgs", () => {
       const err = result.errors.find((e) => e.field === "mode");
       expect(err).toBeDefined();
       expect(err!.message).toContain("Invalid mode");
-      expect(err!.message).toContain("paper");
       expect(err!.message).toContain("demo");
       expect(err!.message).toContain("live");
     }
@@ -118,36 +108,6 @@ describe("parseCliArgs", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.args.cycleIntervalMs).toBe(10_000);
-    }
-  });
-
-  test("--market-feed flag is parsed", () => {
-    const result = parseCliArgs(argv("--market-feed", "synthetic"));
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.args.marketFeedMode).toBe("synthetic");
-    }
-  });
-
-  test("--market-feed defaults to undefined", () => {
-    const result = parseCliArgs(argv());
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.args.marketFeedMode).toBeUndefined();
-    }
-  });
-
-  test("--market-feed with invalid value returns error", () => {
-    const result = parseCliArgs(argv("--market-feed", "simulated"));
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      const err = result.errors.find((e) => e.field === "market-feed");
-      expect(err).toBeDefined();
-      expect(err!.message).toContain("public");
-      expect(err!.message).toContain("synthetic");
     }
   });
 
@@ -232,21 +192,12 @@ describe("parseCliArgs", () => {
 // ── Mode Dispatch Tests ──────────────────────────────────────────────
 
 describe("mode dispatch", () => {
-  test("default mode is paper", () => {
+  test("default mode is demo", () => {
     const result = parseCliArgs(argv());
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.args.mode).toBe("paper");
-    }
-  });
-
-  test("explicit paper mode", () => {
-    const result = parseCliArgs(argv("--mode", "paper"));
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.args.mode).toBe("paper");
+      expect(result.args.mode).toBe("demo");
     }
   });
 

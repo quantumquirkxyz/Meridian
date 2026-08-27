@@ -68,7 +68,6 @@ describe("Learning loop contracts", () => {
     expect(PROMOTION_STAGES).toEqual([
       "hypothesis",
       "backtest",
-      "paper",
       "review",
       "canary",
       "scale",
@@ -78,16 +77,14 @@ describe("Learning loop contracts", () => {
   test("stageIndex returns correct indices", () => {
     expect(stageIndex("hypothesis")).toBe(0);
     expect(stageIndex("backtest")).toBe(1);
-    expect(stageIndex("paper")).toBe(2);
-    expect(stageIndex("review")).toBe(3);
-    expect(stageIndex("canary")).toBe(4);
-    expect(stageIndex("scale")).toBe(5);
+    expect(stageIndex("review")).toBe(2);
+    expect(stageIndex("canary")).toBe(3);
+    expect(stageIndex("scale")).toBe(4);
   });
 
   test("nextStage returns the next stage or null", () => {
     expect(nextStage("hypothesis")).toBe("backtest");
-    expect(nextStage("backtest")).toBe("paper");
-    expect(nextStage("paper")).toBe("review");
+    expect(nextStage("backtest")).toBe("review");
     expect(nextStage("review")).toBe("canary");
     expect(nextStage("canary")).toBe("scale");
     expect(nextStage("scale")).toBeNull();
@@ -513,7 +510,7 @@ describe("PromotionPipeline", () => {
     const updated = pipeline.advanceStage(record.promotionId);
     expect(updated.currentStage).toBe("backtest");
 
-    // Advance from backtest to paper (with passing performance).
+    // Advance from backtest to review (with passing performance).
     const updated2 = pipeline.advanceStage(record.promotionId, {
       performance: {
         strategyId: "alpha",
@@ -531,7 +528,7 @@ describe("PromotionPipeline", () => {
         windowEndMs: FIXED_TS + 3_600_000,
       },
     });
-    expect(updated2.currentStage).toBe("paper");
+    expect(updated2.currentStage).toBe("review");
   });
 
   test("advanceStage rejects when gate criteria fail", () => {
@@ -544,7 +541,7 @@ describe("PromotionPipeline", () => {
     const record = pipeline.createPromotion("alpha", "Test promotion");
     pipeline.advanceStage(record.promotionId); // hypothesis → backtest
 
-    // Try to advance to paper with insufficient data.
+    // Try to advance to review with insufficient data.
     const updated = pipeline.advanceStage(record.promotionId);
     expect(updated.currentStage).toBe("backtest"); // Still at backtest
     expect(updated.active).toBe(false); // Rejected
@@ -582,8 +579,7 @@ describe("PromotionPipeline", () => {
 
     const record = pipeline.createPromotion("alpha", "Test");
     pipeline.advanceStage(record.promotionId); // hypothesis -> backtest
-    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> paper
-    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // paper -> review
+    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> review
 
     // Try to advance without approval.
     const updated = pipeline.advanceStage(record.promotionId);
@@ -623,8 +619,7 @@ describe("PromotionPipeline", () => {
 
     const record = pipeline.createPromotion("alpha", "Test");
     pipeline.advanceStage(record.promotionId); // hypothesis -> backtest
-    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> paper
-    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // paper -> review
+    pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> review
     pipeline.approveReview(record.promotionId, true, "LGTM");
 
     const updated = pipeline.advanceStage(record.promotionId, {
@@ -669,11 +664,7 @@ describe("PromotionPipeline", () => {
     pipeline.advanceStage(record.promotionId);
     expect(record.currentStage).toBe("backtest");
 
-    // backtest → paper
-    pipeline.advanceStage(record.promotionId, { performance: passingPerf });
-    expect(record.currentStage).toBe("paper");
-
-    // paper → review
+    // backtest → review
     pipeline.advanceStage(record.promotionId, { performance: passingPerf });
     expect(record.currentStage).toBe("review");
 

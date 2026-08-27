@@ -50,8 +50,8 @@ import {
   type CanaryPreCheckResult,
 } from "./live-execution-engine.ts";
 import {
-  type PaperOrderSnapshot,
-} from "../execution/paper-execution-engine.ts";
+  type OrderSnapshot,
+} from "../execution/simulated-execution-engine.ts";
 import { type TradeJournal } from "./trade-journal.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export interface CanaryOrderRecord {
   orderId: string;
   intent: OrderIntent;
   riskDecision?: RiskDecision;
-  execution?: PaperOrderSnapshot;
+    execution?: OrderSnapshot;
   preCheck?: CanaryPreCheckResult;
   submittedAtMs: number;
   symbol: string;
@@ -260,7 +260,7 @@ export class CanarySession {
     submittedAtMs?: number,
   ): {
     preCheck: CanaryPreCheckResult;
-    execution?: PaperOrderSnapshot;
+  execution?: OrderSnapshot;
   } {
     const ts = submittedAtMs ?? this.now();
 

@@ -1,5 +1,5 @@
 /**
- * LiveExecutionEngine: wraps the PaperExecutionEngine and adds canary
+ * LiveExecutionEngine: wraps the SimulatedExecutionEngine and adds canary
  * enforcement: capital limits, per-trade/day/venue/token/chain limits,
  * withdrawal disabling, order count limits, and no-automatic-scaling.
  *
@@ -10,7 +10,7 @@
  *   - Read and trading keys are separate; withdrawals disabled.
  *
  * The engine is deterministic — no LLM, no I/O. It evaluates canary
- * constraints and delegates actual execution to the paper execution
+ * constraints and delegates actual execution to the simulated execution
  * engine (for simulation) or a future live connector.
  */
 
@@ -20,11 +20,11 @@ import {
   type RiskDecision,
 } from "@agenttrading/contracts";
 import {
-  PaperExecutionEngine,
-  type PaperExecutionSubmitInput,
-  type PaperMarketSnapshot,
-  type PaperOrderSnapshot,
-} from "../execution/paper-execution-engine.ts";
+  SimulatedExecutionEngine,
+  type ExecutionSubmitInput,
+  type MarketSnapshot,
+  type OrderSnapshot,
+} from "../execution/simulated-execution-engine.ts";
 
 // ── Canary Order Tracking ────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ export interface CanaryPreCheckResult {
 
 /**
  * LiveExecutionEngine: enforces canary constraints on top of the
- * PaperExecutionEngine. Each order must pass all canary limits before
+ * SimulatedExecutionEngine. Each order must pass all canary limits before
  * being submitted.
  *
  * The engine maintains no internal state between calls — all cumulative
@@ -119,11 +119,11 @@ export interface CanaryPreCheckResult {
  */
 export class LiveExecutionEngine {
   private readonly config: CanaryConfig;
-  private readonly paperEngine: PaperExecutionEngine;
+  private readonly paperEngine: SimulatedExecutionEngine;
 
   constructor(
     config: CanaryConfig,
-    paperEngine: PaperExecutionEngine = new PaperExecutionEngine(),
+    paperEngine: SimulatedExecutionEngine = new SimulatedExecutionEngine(),
   ) {
     this.config = { ...config };
     this.paperEngine = paperEngine;
@@ -299,9 +299,9 @@ export class LiveExecutionEngine {
    * pre-check. Only callable if preCheck returned allowed: true.
    */
   submit(
-    input: PaperExecutionSubmitInput,
+    input: ExecutionSubmitInput,
     preCheck: CanaryPreCheckResult,
-  ): PaperOrderSnapshot {
+  ): OrderSnapshot {
     if (!preCheck.allowed) {
       throw new Error(
         `canary pre-check failed: ${preCheck.blockReason} — ${preCheck.reason}`,
@@ -345,12 +345,12 @@ export class LiveExecutionEngine {
   /**
    * Get pending order snapshots.
    */
-  pendingSnapshots(): PaperOrderSnapshot[] {
+  pendingSnapshots(): OrderSnapshot[] {
     return this.paperEngine.pendingSnapshots();
   }
 
   /** Expose the underlying paper engine for reconciliation. */
-  get paperEngineRef(): PaperExecutionEngine {
+  get paperEngineRef(): SimulatedExecutionEngine {
     return this.paperEngine;
   }
 }

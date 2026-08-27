@@ -6,7 +6,7 @@ import {
 } from "@agenttrading/contracts";
 
 /**
- * PaperExecutionEngine: a deterministic, asynchronous execution simulator.
+ * SimulatedExecutionEngine: a deterministic, asynchronous execution simulator.
  *
  * The seam is deliberately narrow:
  * - only risk-approved intents may be submitted
@@ -18,7 +18,7 @@ import {
  * order creation, acceptance, and final fill are separate observations.
  */
 
-export const PAPER_ORDER_STATES = [
+export const ORDER_STATES = [
   "SUBMITTED",
   "ACCEPTED",
   "PARTIALLY_FILLED",
@@ -28,12 +28,12 @@ export const PAPER_ORDER_STATES = [
   "EXPIRED",
 ] as const;
 
-export type PaperOrderState = (typeof PAPER_ORDER_STATES)[number];
+export type OrderState = (typeof ORDER_STATES)[number];
 
-export const PAPER_ORDER_TYPES = ["LIMIT", "MARKET"] as const;
-export type PaperOrderType = (typeof PAPER_ORDER_TYPES)[number];
+export const ORDER_TYPES = ["LIMIT", "MARKET"] as const;
+export type OrderType = (typeof ORDER_TYPES)[number];
 
-export interface PaperMarketSnapshot {
+export interface MarketSnapshot {
   bid: number;
   ask: number;
   mid: number;
@@ -42,11 +42,11 @@ export interface PaperMarketSnapshot {
   latencyMs?: number;
 }
 
-export interface PaperExecutionSubmitInput {
+export interface ExecutionSubmitInput {
   intent: OrderIntent;
   riskDecision: RiskDecision;
-  orderType?: PaperOrderType;
-  market: PaperMarketSnapshot;
+  orderType?: OrderType;
+  market: MarketSnapshot;
   submittedAtMs: number;
   acceptAfterMs?: number;
   fillAfterMs?: number;
@@ -59,7 +59,7 @@ export interface PaperExecutionSubmitInput {
   fundingCostUsd?: number;
 }
 
-export interface PaperOrderFill {
+export interface OrderFill {
   filledQuantity: number;
   fillPrice: number;
   slippageBps: number;
@@ -68,19 +68,19 @@ export interface PaperOrderFill {
   notionalUsd: number;
 }
 
-export interface PaperOrderEvent {
+export interface OrderEvent {
   orderId: string;
   occurredAtMs: number;
-  state: PaperOrderState;
-  previousState?: PaperOrderState;
+  state: OrderState;
+  previousState?: OrderState;
   note: string;
 }
 
-export interface PaperOrderSnapshot {
+export interface OrderSnapshot {
   orderId: string;
   intent: OrderIntent;
-  orderType: PaperOrderType;
-  state: PaperOrderState;
+  orderType: OrderType;
+  state: OrderState;
   submittedAtMs: number;
   approvedQuantity: number;
   acceptedAtMs?: number;
@@ -94,12 +94,12 @@ export interface PaperOrderSnapshot {
   totalFeesUsd: number;
   totalFundingCostUsd: number;
   riskDecision: RiskDecision;
-  events: readonly PaperOrderEvent[];
+  events: readonly OrderEvent[];
 }
 
 interface PendingOrder {
-  snapshot: PaperOrderSnapshot;
-  market: PaperMarketSnapshot;
+  snapshot: OrderSnapshot;
+  market: MarketSnapshot;
   acceptAfterMs: number;
   fillAfterMs: number;
   fillDelayMs: number;
@@ -122,8 +122,8 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function appendEvent(
-  snapshot: PaperOrderSnapshot,
-  state: PaperOrderState,
+  snapshot: OrderSnapshot,
+  state: OrderState,
   occurredAtMs: number,
   note: string,
 ): void {
@@ -141,9 +141,9 @@ function appendEvent(
 }
 
 function deriveFillPrice(
-  orderType: PaperOrderType,
+  orderType: OrderType,
   intent: OrderIntent,
-  market: PaperMarketSnapshot,
+  market: MarketSnapshot,
   slippageBps: number,
 ): number {
   if (orderType === "LIMIT") {
@@ -158,17 +158,26 @@ function deriveFillPrice(
 function deriveFillQuantity(
   approvedQuantity: number,
   intent: OrderIntent,
-  market: PaperMarketSnapshot,
+  market: MarketSnapshot,
   remainingQuantity: number,
 ): number {
   const maxLiquidQuantity = market.liquidityUsd / intent.price;
   return Math.max(0, Math.min(remainingQuantity, approvedQuantity, maxLiquidQuantity));
 }
 
-export class PaperExecutionEngine {
+export class SimulatedExecutionEngine {
   private readonly pending = new Map<string, PendingOrder>();
+  private readonly completed = new Map<string, PendingOrder>();
 
-  submit(input: PaperExecutionSubmitInput): PaperOrderSnapshot {
+  private archive(orderId: string): void {
+    const order = this.pending.get(orderId);
+    if (order) {
+      this.pending.delete(orderId);
+      this.completed.set(orderId, order);
+    }
+  }
+
+  submit(input: ExecutionSubmitInput): OrderSnapshot {
     const acceptAfterMs =
       input.acceptAfterMs ?? input.submittedAtMs + (input.market.latencyMs ?? 0);
     const fillDelayMs = input.fillDelayMs ?? 2 * (input.market.latencyMs ?? 0);
@@ -177,7 +186,7 @@ export class PaperExecutionEngine {
 
     if (!executableRiskDecision(input.riskDecision)) {
       const orderId = input.intent.idempotencyKey;
-      const snapshot: PaperOrderSnapshot = {
+      const snapshot: OrderSnapshot = {
         orderId,
         intent: input.intent,
         orderType: input.orderType ?? "LIMIT",
@@ -202,7 +211,7 @@ export class PaperExecutionEngine {
     }
 
     if (input.intent.expiresAtMs <= input.submittedAtMs) {
-      const snapshot: PaperOrderSnapshot = {
+      const snapshot: OrderSnapshot = {
         orderId: input.intent.idempotencyKey,
         intent: input.intent,
         orderType: input.orderType ?? "LIMIT",
@@ -228,7 +237,7 @@ export class PaperExecutionEngine {
     }
 
     const orderId = input.intent.idempotencyKey;
-    const snapshot: PaperOrderSnapshot = {
+    const snapshot: OrderSnapshot = {
       orderId,
       intent: input.intent,
       orderType: input.orderType ?? "LIMIT",
@@ -266,8 +275,8 @@ export class PaperExecutionEngine {
     return snapshot;
   }
 
-  poll(nowMs: number): PaperOrderEvent[] {
-    const emitted: PaperOrderEvent[] = [];
+  poll(nowMs: number): OrderEvent[] {
+    const emitted: OrderEvent[] = [];
     for (const [orderId, pending] of this.pending) {
       const { snapshot } = pending;
       if (snapshot.state === "SUBMITTED" && nowMs >= pending.acceptAfterMs) {
@@ -281,14 +290,14 @@ export class PaperExecutionEngine {
         nowMs >= pending.fillAfterMs
       ) {
         appendEvent(snapshot, "REJECTED", pending.fillAfterMs, pending.rejectReason);
-        this.pending.delete(orderId);
+        this.archive(orderId);
         emitted.push(snapshot.events.at(-1)!);
         continue;
       }
 
       if (nowMs >= pending.expiryAtMs && snapshot.state !== "FILLED") {
         appendEvent(snapshot, "EXPIRED", pending.expiryAtMs, "order expired before complete fill");
-        this.pending.delete(orderId);
+        this.archive(orderId);
         emitted.push(snapshot.events.at(-1)!);
         continue;
       }
@@ -300,7 +309,7 @@ export class PaperExecutionEngine {
         snapshot.state !== "CANCELLED"
       ) {
         appendEvent(snapshot, "CANCELLED", pending.cancelAfterMs, "order cancelled by caller");
-        this.pending.delete(orderId);
+        this.archive(orderId);
         emitted.push(snapshot.events.at(-1)!);
         continue;
       }
@@ -318,7 +327,7 @@ export class PaperExecutionEngine {
         );
         if (fillQty <= 0) {
           appendEvent(snapshot, "REJECTED", pending.fillAfterMs, "insufficient liquidity");
-          this.pending.delete(orderId);
+          this.archive(orderId);
           emitted.push(snapshot.events.at(-1)!);
           continue;
         }
@@ -358,7 +367,7 @@ export class PaperExecutionEngine {
             pending.fillAfterMs,
             `filled ${fillQty} at ${fillPrice.toFixed(4)} with ${slippageBps}bps slippage`,
           );
-          this.pending.delete(orderId);
+          this.archive(orderId);
         }
         emitted.push(snapshot.events.at(-1)!);
       }
@@ -366,16 +375,16 @@ export class PaperExecutionEngine {
     return emitted;
   }
 
-  cancel(orderId: string, cancelledAtMs: number): PaperOrderSnapshot | undefined {
+  cancel(orderId: string, cancelledAtMs: number): OrderSnapshot | undefined {
     const pending = this.pending.get(orderId);
     if (!pending) return undefined;
     appendEvent(pending.snapshot, "CANCELLED", cancelledAtMs, "order cancelled by caller");
-    this.pending.delete(orderId);
+    this.archive(orderId);
     return pending.snapshot;
   }
 
-  cancelAll(cancelledAtMs: number): PaperOrderSnapshot[] {
-    const cancelled: PaperOrderSnapshot[] = [];
+  cancelAll(cancelledAtMs: number): OrderSnapshot[] {
+    const cancelled: OrderSnapshot[] = [];
     for (const orderId of [...this.pending.keys()]) {
       const snapshot = this.cancel(orderId, cancelledAtMs);
       if (snapshot !== undefined) {
@@ -385,7 +394,7 @@ export class PaperExecutionEngine {
     return cancelled;
   }
 
-  pendingSnapshots(): PaperOrderSnapshot[] {
+  pendingSnapshots(): OrderSnapshot[] {
     return [...this.pending.values()].map((pending) => pending.snapshot);
   }
 
@@ -393,7 +402,7 @@ export class PaperExecutionEngine {
     return this.pending.size;
   }
 
-  snapshot(orderId: string): PaperOrderSnapshot | undefined {
-    return this.pending.get(orderId)?.snapshot;
+  snapshot(orderId: string): OrderSnapshot | undefined {
+    return this.pending.get(orderId)?.snapshot ?? this.completed.get(orderId)?.snapshot;
   }
 }

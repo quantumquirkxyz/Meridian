@@ -14,7 +14,7 @@ const { version: CLI_VERSION } = require("../../../package.json") as {
 };
 
 /** Valid system mode. */
-export type Mode = "paper" | "demo" | "live";
+export type Mode = "demo" | "live";
 
 /** Parsed CLI arguments. */
 export interface CliArgs {
@@ -22,7 +22,6 @@ export interface CliArgs {
   configPath: string | undefined;
   dryRun: boolean;
   cycleIntervalMs: number | undefined;
-  marketFeedMode: "public" | "synthetic" | undefined;
 }
 
 /** Error returned when CLI args are invalid. */
@@ -58,7 +57,7 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
         mode: {
           type: "string",
           short: "m",
-          default: "paper",
+          default: "demo",
         },
         config: {
           type: "string",
@@ -69,9 +68,6 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
           default: false,
         },
         "cycle-interval": {
-          type: "string",
-        },
-        "market-feed": {
           type: "string",
         },
         help: {
@@ -107,12 +103,12 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
   }
 
   // Parse and validate --mode
-  const rawMode = String(parsed.values.mode ?? "paper");
+  const rawMode = String(parsed.values.mode ?? "demo");
   const mode = parseMode(rawMode);
   if (mode === undefined) {
     errors.push({
       field: "mode",
-      message: `Invalid mode "${rawMode}". Must be "paper", "demo", or "live".`,
+      message: `Invalid mode "${rawMode}". Must be "demo" or "live".`,
     });
   }
 
@@ -131,20 +127,6 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
     }
   }
 
-  let marketFeedMode: "public" | "synthetic" | undefined;
-  if (parsed.values["market-feed"] !== undefined) {
-    const raw = String(parsed.values["market-feed"]);
-    const parsedMode = parseMarketFeedMode(raw);
-    if (parsedMode === undefined) {
-      errors.push({
-        field: "market-feed",
-        message: `Invalid market feed "${raw}". Must be "public" or "synthetic".`,
-      });
-    } else {
-      marketFeedMode = parsedMode;
-    }
-  }
-
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -156,7 +138,6 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
       configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
       dryRun: (parsed.values["dry-run"] as boolean) ?? false,
       cycleIntervalMs,
-      marketFeedMode,
     },
   };
 }
@@ -164,37 +145,29 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function parseMode(raw: string): Mode | undefined {
-  if (raw === "paper" || raw === "demo" || raw === "live") return raw;
-  return undefined;
-}
-
-function parseMarketFeedMode(raw: string): "public" | "synthetic" | undefined {
-  if (raw === "public" || raw === "synthetic") return raw;
+  if (raw === "demo" || raw === "live") return raw;
   return undefined;
 }
 
 function printHelp(): void {
   console.log(
-    `AgentTrading CLI — start a paper, demo, or live trading session.
+    `AgentTrading CLI — start a demo or live trading session.
 
 Usage:
   bun run start [options]
 
 Options:
-  -m, --mode <paper|demo|live>  System mode (default: paper)
+  -m, --mode <demo|live>        System mode (default: demo)
   -c, --config <path>           Path to JSON config override
       --dry-run                 Run full cycle but skip order submission
       --cycle-interval <ms>     Override cycle frequency (ms)
-      --market-feed <public|synthetic>
-                                Paper market feed selector
   -h, --help                    Show this help message
   -V, --version                 Show version number
 
 Examples:
-  bun run start                          # Paper mode, defaults
-  bun run start --mode paper --dry-run   # Paper mode, dry run
-  bun run start --mode demo              # Bybit Demo Trading gate
-  bun run start --config ./config.json   # Paper mode with config override
+  bun run start                          # Demo mode, defaults
+  bun run start --mode demo --dry-run    # Demo mode, dry run
+  bun run start --config ./config.json   # Demo mode with config override
   bun run start --mode live --config ./live.json  # Live mode`,
   );
 }
