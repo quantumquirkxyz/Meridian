@@ -260,3 +260,26 @@ export function parseGraphUpdatedPayload(value: unknown): MarketGraphSnapshot {
 export function makeEventId(segments: readonly (string | number)[]): string {
   return segments.join(":");
 }
+
+/** Operator-initiated halt request — emitted by TUI (packages/infra/), never mutates mode directly (ADR-0010). */
+export const OPERATOR_HALT_REQUESTED = "OPERATOR_HALT_REQUESTED" as const;
+
+export interface OperatorHaltRequested {
+  type: typeof OPERATOR_HALT_REQUESTED;
+  requestedAtMs: number;
+  source: string;
+}
+
+export const isOperatorHaltRequested: Validator<OperatorHaltRequested> = (v): v is OperatorHaltRequested => {
+  if (!v || typeof v !== "object") return false;
+  if ((v as any).type !== OPERATOR_HALT_REQUESTED) return false;
+  const obj = v as Record<string, unknown>;
+  if (typeof obj.requestedAtMs !== "number") return false;
+  if (typeof obj.source !== "string") return false;
+  return true;
+};
+
+export function parseOperatorHaltRequested(value: unknown): OperatorHaltRequested {
+  if (isOperatorHaltRequested(value)) return value;
+  throw new Error("OperatorHaltRequested: invalid shape");
+}
