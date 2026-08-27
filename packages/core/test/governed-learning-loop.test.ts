@@ -554,9 +554,7 @@ describe("PromotionPipeline", () => {
       promotionMinBacktestTrades: 1,
       promotionBacktestMinWinRate: 0.0,
       promotionBacktestMinSharpe: 0.0,
-      promotionMinPaperTrades: 1,
       promotionMinCanaryTrades: 1,
-      promotionCanaryMinWinRate: 0.0,
     });
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
@@ -594,9 +592,7 @@ describe("PromotionPipeline", () => {
       promotionMinBacktestTrades: 1,
       promotionBacktestMinWinRate: 0.0,
       promotionBacktestMinSharpe: 0.0,
-      promotionMinPaperTrades: 1,
       promotionMinCanaryTrades: 1,
-      promotionCanaryMinWinRate: 0.0,
     });
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
@@ -635,7 +631,6 @@ describe("PromotionPipeline", () => {
       promotionMinBacktestTrades: 5,
       promotionBacktestMinWinRate: 0.5,
       promotionBacktestMinSharpe: 0.0,
-      promotionMinPaperTrades: 5,
       promotionMinCanaryTrades: 5,
       promotionCanaryMinWinRate: 0.5,
     });

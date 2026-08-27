@@ -95,7 +95,7 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
   console.log(
     `║  Cycle:         ${cycleIntervalMs}ms${" ".repeat(Math.max(0, 40 - String(cycleIntervalMs).length - 2))}║`,
   );
-  console.log(`║  Feed:          ${config.marketFeedMode.padEnd(40)}║`);
+  console.log(`║  Feed:          ${"—".padEnd(40)}║`);
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log();
 }
@@ -257,7 +257,6 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     env: {
       ...(Bun.env as Record<string, string | undefined>),
       MODE: cliArgs.mode,
-      ...(cliArgs.marketFeedMode !== undefined ? { MARKET_FEED_MODE: cliArgs.marketFeedMode } : {}),
     },
   });
 

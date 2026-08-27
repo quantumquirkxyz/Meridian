@@ -525,7 +525,7 @@ export class CanarySession {
     this.running = false;
     this.paused = false;
     this.cancelAllOpenOrders();
-    this.currentMode = "PAPER_ONLY";
+    this.currentMode = "HALT";
     this.recordAudit("CANARY_STOPPED", {});
     return { ...this.status, command: "stop", ok: true };
   }

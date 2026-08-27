@@ -8,13 +8,13 @@ import {
   BetaControlTuiModel,
   commandForHotkey,
   type BetaControlCommandRow,
-  type BetaPaperLoopRunner,
+  type BetaLoopRunner,
   type BetaControlStatusRow,
 } from "./control-tui.ts";
 
 export interface BetaControlInkTuiProps {
   session: BetaControlPort;
-  loopRunner?: BetaPaperLoopRunner;
+  loopRunner?: BetaLoopRunner;
   onDispatch?: (result: BetaControlResult) => void;
   onError?: (error: Error) => void;
   onExit?: () => void;
