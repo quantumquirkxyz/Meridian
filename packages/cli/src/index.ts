@@ -141,6 +141,7 @@ async function runLiveMode(
     ),
     bybitApiKey: opts.config.bybitApiKey,
     bybitApiSecret: opts.config.bybitApiSecret,
+    bybitEndpoints: opts.config.bybitEndpoints,
     cycleIntervalMs: opts.cycleIntervalMs,
     canaryConfig: opts.config.canaryConfig,
     auditLogPath: paths.auditLogPath,
@@ -191,12 +192,25 @@ async function runLiveMode(
  * Demo Trading runner exists, starting this mode must fail closed instead of
  * falling through to the live runner with virtual-capital credentials.
  */
-async function runDemoMode(): Promise<{ exitCode: number }> {
-  console.error("[demo] Bybit Demo Trading runner is not implemented yet.");
-  console.error("[demo] Required boundary: demo REST/WS endpoints, runtime demo-key prompt,");
-  console.error("[demo] order lifecycle validation, reconciliation, risk limits, and audit.");
-  console.error("[demo] Refusing to start so demo credentials cannot route through live execution.");
-  return { exitCode: 1 };
+async function runDemoMode(
+  opts: RunOptions,
+  paths: SessionPaths,
+): Promise<{ exitCode: number }> {
+  const runner = new LiveRunner({
+    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
+      t.replace("/", ""),
+    ),
+    bybitApiKey: opts.config.bybitApiKey,
+    bybitApiSecret: opts.config.bybitApiSecret,
+    bybitEndpoints: opts.config.bybitEndpoints,
+    cycleIntervalMs: opts.cycleIntervalMs,
+    canaryConfig: opts.config.canaryConfig,
+    auditLogPath: paths.auditLogPath,
+    sessionId: paths.sessionId,
+  });
+
+  await runner.start();
+  return { exitCode: 0 };
 }
 
 // ── Exchange connectivity check (SP2) ─────────────────────────────────
@@ -300,7 +314,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 
   let exitCode: number;
   if (config.mode === "demo") {
-    exitCode = (await runDemoMode()).exitCode;
+    exitCode = (await runDemoMode(runOpts, paths)).exitCode;
   } else {
     exitCode = (await runLiveMode(runOpts, paths)).exitCode;
   }

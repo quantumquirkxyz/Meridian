@@ -13,20 +13,31 @@
 import { parseCanaryConfig } from "@agenttrading/contracts";
 import type { CanaryConfig } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
+import { DEMO_BASE_URL, DEMO_WS_URL } from "@agenttrading/connectors";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 /** System mode: Bybit Demo Trading or live capital. */
 export type Mode = "demo" | "live";
 
+/** Bybit endpoint pair for a given mode. */
+export interface BybitEndpoints {
+  /** REST base URL. */
+  restUrl: string;
+  /** WebSocket URL. */
+  wsUrl: string;
+}
+
 /** Validated runtime configuration for the CLI. */
 export interface AppConfig {
   /** Active system mode. */
   mode: Mode;
-  /** API key for Bybit (live mode only). */
+  /** API key for Bybit (demo or live). */
   bybitApiKey: string;
-  /** API secret for Bybit (live mode only). */
+  /** API secret for Bybit (demo or live). */
   bybitApiSecret: string;
+  /** Bybit REST + WS endpoints for the current mode. */
+  bybitEndpoints: BybitEndpoints;
   /** Path to JSON config override file (optional). */
   configPath?: string;
   /** Cycle interval in milliseconds. */
@@ -37,6 +48,7 @@ export interface AppConfig {
   reportDir: string;
   /** Merged canary config (defaults + JSON overrides). */
   canaryConfig: CanaryConfig;
+
 }
 
 /** Single field validation error. */
@@ -149,17 +161,24 @@ export async function loadConfig(
     return { ok: false, errors };
   }
 
+  const bybitEndpoints: BybitEndpoints =
+    mode === "demo"
+      ? { restUrl: DEMO_BASE_URL, wsUrl: DEMO_WS_URL }
+      : { restUrl: "https://api.bybit.com", wsUrl: "wss://stream.bybit.com" };
+
   return {
     ok: true,
     config: {
       mode: mode!,
       bybitApiKey,
       bybitApiSecret,
+      bybitEndpoints,
       configPath,
       cycleIntervalMs,
       logLevel,
       reportDir,
       canaryConfig,
+
     },
   };
 }
@@ -279,3 +298,5 @@ export function formatConfigErrors(errors: ConfigError[]): string {
   const lines = errors.map((e) => `  - ${e.field}: ${e.message}`);
   return `Configuration validation failed:\n${lines.join("\n")}`;
 }
+
+

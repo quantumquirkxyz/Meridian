@@ -50,10 +50,12 @@ import { StatusDisplay } from "./status-display.ts";
 export interface LiveRunnerConfig {
   /** Symbols to trade (e.g. ["BTCUSDT"]). */
   symbols: string[];
-  /** Bybit API key (required for live mode). */
+  /** Bybit API key. */
   bybitApiKey: string;
-  /** Bybit API secret (required for live mode). */
+  /** Bybit API secret. */
   bybitApiSecret: string;
+  /** Bybit REST + WS endpoints — same runner, different endpoints per mode. */
+  bybitEndpoints: { restUrl: string; wsUrl: string };
   /** Cycle interval in milliseconds. */
   cycleIntervalMs: number;
   /** Canary config override. */
@@ -119,6 +121,7 @@ export class LiveRunner {
       | "symbols"
       | "bybitApiKey"
       | "bybitApiSecret"
+      | "bybitEndpoints"
       | "cycleIntervalMs"
       | "reconciliationIntervalMs"
       | "orderCategory"
@@ -173,6 +176,7 @@ export class LiveRunner {
       symbols: config.symbols ?? DEFAULT_SYMBOLS,
       bybitApiKey: config.bybitApiKey,
       bybitApiSecret: config.bybitApiSecret,
+      bybitEndpoints: config.bybitEndpoints,
       cycleIntervalMs: config.cycleIntervalMs,
       canaryConfig: config.canaryConfig ?? DEFAULT_CANARY_CONFIG,
       auditLogPath: config.auditLogPath ?? DEFAULT_AUDIT_LOG_PATH,
@@ -206,6 +210,7 @@ export class LiveRunner {
     this.restClient = new BybitRESTClient({
       apiKey: this.config.bybitApiKey,
       apiSecret: this.config.bybitApiSecret,
+      baseUrl: this.config.bybitEndpoints.restUrl,
     });
 
     this.wsClient = new BybitWebSocketClient({
@@ -213,6 +218,8 @@ export class LiveRunner {
       apiSecret: this.config.bybitApiSecret,
       symbols: this.config.symbols,
       nowMs: this.nowMs,
+      publicWsUrl: this.config.bybitEndpoints.wsUrl,
+      privateWsUrl: this.config.bybitEndpoints.wsUrl,
     });
 
     // Wire WS events (AC1, AC2)

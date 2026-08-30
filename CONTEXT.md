@@ -216,6 +216,8 @@ _Avoid_: treating demo trading as if it were live capital, or treating it as a p
 Bybit's real trading environment with real balances, real API keys, and capital at risk. It is the final phase after demo trading has been validated.
 _Avoid_: any mode that can be used without real exchange credentials or without capital exposure.
 
+**Seam (unified runner)**: `LiveRunner` receives `bybitEndpoints` from `AppConfig`. `MODE=demo` → `restUrl=api-demo.bybit.com`, `wsUrl=stream-demo.bybit.com`; `MODE=live` → mainnet endpoints. No parallel runner or agent exists; `AgentAdapter` (LLM) is identical across modes.
+
 **Phase**:
 A roadmap milestone with an exit criterion defined by eliminated risk: Phase Zero (contracts and invariants), Alpha (data, graph, and harness), Beta (loops, orchestration, agents, risk, and demo trading), Gamma (live canary, adaptation, and hardening).
 _Avoid_: advancing by feature count instead of by eliminated risk.

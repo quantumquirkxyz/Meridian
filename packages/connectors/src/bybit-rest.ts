@@ -90,6 +90,8 @@ interface RateLimitState {
 
 // ── Constants ────────────────────────────────────────────────────────
 
+export const DEMO_BASE_URL = "https://api-demo.bybit.com";
+export const DEMO_WS_URL = "wss://stream-demo.bybit.com";
 const DEFAULT_BASE_URL = "https://api.bybit.com";
 const DEFAULT_RECV_WINDOW = 5_000;
 const DEFAULT_MAX_RETRIES = 3;
