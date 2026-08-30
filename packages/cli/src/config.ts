@@ -48,7 +48,10 @@ export interface AppConfig {
   reportDir: string;
   /** Merged canary config (defaults + JSON overrides). */
   canaryConfig: CanaryConfig;
-
+  /** LLM base URL for agent reasoning (e.g. OpenRouter endpoint). */
+  llmBaseUrl: string;
+  /** LLM API key for agent reasoning. */
+  llmApiKey: string;
 }
 
 /** Single field validation error. */
@@ -178,7 +181,8 @@ export async function loadConfig(
       logLevel,
       reportDir,
       canaryConfig,
-
+      llmBaseUrl: env.LLM_BASE_URL ?? "https://openrouter.ai/api/v1",
+      llmApiKey: env.LLM_API_KEY ?? "",
     },
   };
 }

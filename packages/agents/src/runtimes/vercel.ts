@@ -24,11 +24,11 @@ import type { AgentConfig } from "../config.ts";
  * Vercel AI SDK adapter configuration.
  */
 export interface VercelAdapterConfig {
-  /** API key for the Vercel AI SDK provider. */
+  /** API key for the LLM provider. */
   apiKey?: string;
   /** Default model to use if not overridden per agent. */
   defaultModel?: string;
-  /** Base URL for API calls (for self-hosted or proxy setups). */
+  /** Base URL for API calls (for OpenRouter, self-hosted, or proxy setups). */
   baseUrl?: string;
 }
 
@@ -43,6 +43,7 @@ export type VercelGenerateFn = (options: {
   messages: Array<{ role: string; content: string }>;
   temperature?: number;
   maxTokens?: number;
+  baseUrl?: string;
 }) => Promise<{
   text?: string;
   object?: Record<string, unknown>;
@@ -71,16 +72,19 @@ export class VercelAISDKAdapter extends BaseAgentAdapter {
   private readonly generateFn: VercelGenerateFn;
   private readonly configs: ReadonlyMap<string, AgentConfig>;
   private readonly defaultModel: string;
+  private readonly baseUrl?: string;
 
   constructor(options: {
     generateFn: VercelGenerateFn;
     configs: ReadonlyMap<string, AgentConfig>;
     defaultModel?: string;
+    baseUrl?: string;
   }) {
     super();
     this.generateFn = options.generateFn;
     this.configs = options.configs;
-    this.defaultModel = options.defaultModel ?? "gpt-4o";
+    this.defaultModel = options.defaultModel ?? "gpt-4o-mini";
+    this.baseUrl = options.baseUrl;
   }
 
   /**
@@ -126,11 +130,18 @@ export class VercelAISDKAdapter extends BaseAgentAdapter {
       const model = config.modelOverride ?? this.defaultModel;
       const maxTokens = input.tokenBudget?.maxOutputTokens ?? config.policy.tokenBudget.maxOutputTokens;
 
-      const result = await this.generateFn({
+      const generateOptions: Parameters<VercelGenerateFn>[0] = {
         model,
         messages,
         maxTokens,
-      });
+      };
+
+      // Pass baseUrl to generateFn so it can route to OpenRouter or any custom endpoint
+      if (this.baseUrl) {
+        (generateOptions as Record<string, unknown>).baseUrl = this.baseUrl;
+      }
+
+      const result = await this.generateFn(generateOptions);
 
       // Parse the output
       const outputPayload = result.object ?? this.parseTextOutput(result.text ?? "");
