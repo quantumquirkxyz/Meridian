@@ -1,0 +1,15 @@
+{
+  "id": "cf5b93a2-3daa-4153-8c4c-e865d5761254",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-08-27T08:29:53.582Z",
+  "finishedAt": "2026-08-27T08:29:53.583Z",
+  "contextPack": "platform-semantic",
+  "status": "pass",
+  "warnings": [
+    "tdd: write-code skill marked low risk"
+  ],
+  "errors": [],
+  "markdownFiles": 98,
+  "skills": 59
+}

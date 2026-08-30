@@ -19,4 +19,3 @@ Use this skill to make Skill runs observable without leaking sensitive data.
 - the execution record is redacted
 - the run is traceable
 - the record links to outputs or validation evidence
-

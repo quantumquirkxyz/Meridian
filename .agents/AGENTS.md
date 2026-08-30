@@ -8,4 +8,4 @@ is compatible with Codex-style Agent Skills and Claude Code.
 - `skills-lock.json` records upstream provenance, revisions, and hashes.
 - `.claude/skills/` is only a compatibility view made of relative symlinks.
 
-Use the root `AGENTS.md` for ARIES-specific repository guidance and routing.
+Use the root `AGENTS.md` for repository-specific guidance and routing.

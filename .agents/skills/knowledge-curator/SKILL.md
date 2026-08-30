@@ -2,6 +2,23 @@
 name: knowledge-curator
 description: Keep context, ADRs, registry entries, and research coherent over time.
 disable-model-invocation: true
+version: 1
+capabilities:
+  - curate-context
+  - curate-adrs
+  - curate-registry
+  - curate-research
+inputs:
+  - candidate updates
+  - existing context
+  - existing ADRs
+outputs:
+  - minimal durable update
+dependencies: []
+sideEffects:
+  - write-docs
+stopCondition: The durable knowledge set is consistent, stale/duplicate material is rejected or merged, update is minimal and durable, contradictions resolved or flagged.
+risk: low
 ---
 
 # Knowledge Curator

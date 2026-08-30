@@ -1,0 +1,18 @@
+{
+  "id": "1a27117a-235b-4ecd-8d10-4bc99e5c2a26",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-08-27T08:49:20.998Z",
+  "finishedAt": "2026-08-27T08:49:20.999Z",
+  "contextPack": "platform-semantic",
+  "status": "fail",
+  "warnings": [],
+  "errors": [
+    "implement-review-fixes: lock hash is stale",
+    "plan-review-fixes: lock hash is stale",
+    "to-spec: lock hash is stale",
+    "to-tickets: lock hash is stale"
+  ],
+  "markdownFiles": 122,
+  "skills": 59
+}

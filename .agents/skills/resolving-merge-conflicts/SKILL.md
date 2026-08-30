@@ -1,6 +1,6 @@
 ---
 name: resolving-merge-conflicts
-description: "Use when you need to resolve an in-progress git merge/rebase conflict without merging the pull request itself."
+description: "Use when you need to resolve a conflicted or blocked branch state: in-progress git merge/rebase conflicts, PR branch conflicts, or the most reasonable branch-side correction needed to keep a PR's changes intact while it moves forward, without merging the pull request itself."
 version: 1
 capabilities:
   - resolve-merge-conflicts
@@ -8,24 +8,26 @@ capabilities:
 inputs:
   - conflicted files
   - merge goal
+  - review request context
+  - branch-side correction context
 outputs:
   - conflict resolution
-  - validated merge state
+  - validated branch state
 dependencies: []
 sideEffects:
   - write-code
-stopCondition: The merge or rebase is resolved without inventing new behavior.
+stopCondition: The blocked branch state is resolved in the most reasonable way without inventing new behavior or distorting the PR's changes.
 risk: medium
 ---
 
-1. **See the current state** of the merge/rebase. Check git history, and the conflicting files.
+1. **See the current state** of the branch. Check git history, the conflicting files, and whether the block came from a merge/rebase, from changes made while answering review requests on a PR branch, or from a branch-side correction needed to keep the PR moving.
 
-2. **Find the primary sources** for each conflict. Understand deeply why each change was made, and what the original intent was. Read the commit messages, check the PRs, check original issues/tickets.
+2. **Find the primary sources** for each conflict. Understand deeply why each change was made, and what the original intent was. Read the commit messages, the PR and review-request history, the review comments, and the original issues/tickets.
 
-3. **Resolve each hunk.** Preserve both intents where possible. Where incompatible, pick the one matching the merge's stated goal and note the trade-off. Do **not** invent new behaviour. Always resolve; never `--abort`.
+3. **Resolve each hunk.** Preserve both intents where possible. Where incompatible, pick the one matching the branch goal and note the trade-off. Prefer the most reasonable correction that preserves the PR's changes and surrounding intent. Do **not** invent new behaviour. Always resolve; never `--abort`.
 
-4. Discover the project's **automated checks** and run them — typically typecheck, then tests, then format. Fix anything the merge broke.
+4. Discover the project's **automated checks** and run them — typically typecheck, then tests, then format. Fix anything the branch-state resolution broke.
 
-5. **Finish the merge/rebase.** Stage everything and commit. If rebasing, continue the rebase process until all commits are rebased.
+5. **Finish the branch-state resolution.** Stage everything and commit. If rebasing, continue the rebase process until all commits are rebased.
 
-6. **Do not merge the PR here.** This skill resolves the conflicted branch state only; PR merge/close happens in the dedicated ship workflow after the branch is clean.
+6. **Do not merge the PR here.** This skill resolves the branch-side problem only; PR merge/close happens in the dedicated ship workflow after the branch is clean.

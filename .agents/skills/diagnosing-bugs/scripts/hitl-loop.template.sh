@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Human-in-the-loop reproduction loop.
-# Copy this file, edit the steps below, and run it.
+# Copy this file, replace the scenario-specific placeholders below, and run it.
 # The agent runs the script; the user follows prompts in their terminal.
 #
 # Usage:
@@ -28,14 +28,25 @@ capture() {
 
 # --- edit below ---------------------------------------------------------
 
-step "Open the app at http://localhost:3000 and sign in."
+capture SCENARIO "Name the scenario being reproduced:"
 
-capture ERRORED "Click the 'Export' button. Did it throw an error? (y/n)"
+capture ENVIRONMENT "Describe the environment, version, account type, device, or browser:"
 
-capture ERROR_MSG "Paste the error message (or 'none'):"
+step "Prepare the system under the exact conditions described in the bug report."
+
+step "Perform the first reproduction action."
+
+capture EXPECTED "What did you expect to happen at this point?"
+
+capture ACTUAL "What actually happened?"
+
+capture EVIDENCE "Paste the error, screenshot path, log excerpt, or 'none':"
 
 # --- edit above ---------------------------------------------------------
 
 printf '\n--- Captured ---\n'
-printf 'ERRORED=%s\n' "$ERRORED"
-printf 'ERROR_MSG=%s\n' "$ERROR_MSG"
+printf 'SCENARIO=%s\n' "$SCENARIO"
+printf 'ENVIRONMENT=%s\n' "$ENVIRONMENT"
+printf 'EXPECTED=%s\n' "$EXPECTED"
+printf 'ACTUAL=%s\n' "$ACTUAL"
+printf 'EVIDENCE=%s\n' "$EVIDENCE"

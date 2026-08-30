@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a pull request against the fixed point the user supplies, separating Standards and Spec findings into distinct axes, and publish the findings back to the PR with exact file/line references and an explanation of each defect. Use when the user wants a PR review specifically, or asks to review a PR branch against `main`, a base branch, a commit SHA, a tag, or another fixed point.
+description: Review a pull request against the fixed point the user supplies, separating Standards and Spec findings into distinct axes, and publish the findings back to the PR with exact file/line references and an explanation of each defect. Use when the user wants a PR review specifically, or asks to review a PR branch against `main`, a base branch, a commit SHA, a tag, or another fixed point; if the branch is conflicted, route that branch-state problem to `resolving-merge-conflicts` first.
 version: 1
 capabilities:
   - review-diff
@@ -29,7 +29,7 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-The issue tracker should have been provided to you — run `/setup-matt-pocock-skills` if `docs/agents/issue-tracker.md` is missing.
+The issue tracker should have been provided to you — run `/setup-qquirk-skills` if `docs/agents/issue-tracker.md` is missing.
 
 ## Process
 
@@ -40,6 +40,7 @@ Whatever the user said is the fixed point — a commit SHA, branch name, tag, `m
 Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
 
 Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside two parallel sub-agents.
+If the branch is in a conflicted state from a merge/rebase or from review-request follow-up work, stop and route that state to `resolving-merge-conflicts` first; do not turn the conflict itself into Standards or Spec findings.
 
 ### 2. Identify the spec source
 
@@ -80,6 +81,8 @@ When a finding is real enough to report, it must include:
 - the repo rule, spec line, or smell name that justifies the finding,
 - a concrete explanation of what breaks, regresses, or becomes ambiguous,
 - and, when operating on a GitHub PR, a published PR review comment or inline comment that points the author directly to the error.
+
+If the branch already has unresolved review history, check that history before duplicating an existing concern with new wording.
 
 The goal is not a summary of the PR. The goal is to identify defects in the applied changes and leave a review trail in the PR itself that explains where the error is and why it is wrong.
 
@@ -128,3 +131,10 @@ Reporting them separately stops one axis from masking the other.
 
 When reviewing a spec or ADR, keep the spec axis aligned to `CONTEXT.md` and the repo's ADRs so findings use the project's canonical architecture and domain vocabulary.
 When the review is attached to a tracker-backed PR, treat the linked issue metadata as part of the review surface: the published review should preserve traceability to the issue labels and milestone, following [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) for any metadata references you include in the PR review body.
+
+## Review quality bar
+
+- Prefer the smallest exact file or hunk that proves the failure.
+- If a standards finding is only a smell, say so explicitly.
+- If a spec finding is really a missing requirement from the spec source, say that instead of upgrading it into a bug.
+- If a PR is already obviously broken by compile or test failure, name the failing command or observable symptom first.

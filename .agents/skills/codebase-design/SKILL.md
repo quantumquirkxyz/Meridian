@@ -32,6 +32,8 @@ Design **deep modules**: a lot of behaviour behind a small interface, placed at 
 - Scope: design the shape of the module, not the full implementation.
 - Rule: prefer one external seam and make its responsibility explicit.
 - Rule: do not add a seam unless something actually varies across it.
+- Rule: distinguish the external seam from any internal helper seams the implementation may use.
+- Rule: if the recommended seam would force callers to know too much, the module is too shallow.
 
 ## Glossary
 
@@ -145,3 +147,4 @@ Good interfaces make testing natural:
 - the seam choice is justified by depth, leverage, and locality
 - any adapter role is explicit
 - the recommendation is concrete enough to test against
+- the recommendation names what stays hidden behind the interface

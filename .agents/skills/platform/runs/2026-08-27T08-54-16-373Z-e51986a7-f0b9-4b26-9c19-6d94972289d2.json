@@ -1,0 +1,13 @@
+{
+  "id": "e51986a7-f0b9-4b26-9c19-6d94972289d2",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-08-27T08:54:16.373Z",
+  "finishedAt": "2026-08-27T08:54:16.374Z",
+  "contextPack": "platform-semantic",
+  "status": "pass",
+  "warnings": [],
+  "errors": [],
+  "markdownFiles": 122,
+  "skills": 59
+}

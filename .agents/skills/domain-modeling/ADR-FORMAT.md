@@ -9,18 +9,33 @@ Create the `docs/adr/` directory lazily — only when the first ADR is needed.
 ```md
 # {Short title of the decision}
 
-{1-3 sentences: what's the context, what did we decide, and why.}
+Status: proposed | accepted | superseded | deprecated
+Date: YYYY-MM-DD
+
+## Context
+
+{What force, constraint, or trade-off made this decision necessary?}
+
+## Decision
+
+{What did we decide? State one decision, not a broad design narrative.}
+
+## Consequences
+
+- Positive: {benefit or desired system property}
+- Negative: {cost, limitation, migration burden, or risk}
+- Follow-up: {confirmation, metric, migration, or review point, or "None"}
 ```
 
-That's it. An ADR can be a single paragraph. The value is in recording *that* a decision was made and *why* — not in filling out sections.
+Keep ADRs short. The value is in recording *that* a decision was made, *why*, and what trade-off the team accepted. If a decision is genuinely trivial, skip the ADR instead of publishing a hollow record.
 
 ## Optional sections
 
 Only include these when they add genuine value. Most ADRs won't need them.
 
-- **Status** frontmatter (`proposed | accepted | deprecated | superseded by ADR-NNNN`) — useful when decisions are revisited
+- **Decision makers** — only when ownership or approval matters later
 - **Considered Options** — only when the rejected alternatives are worth remembering
-- **Consequences** — only when non-obvious downstream effects need to be called out
+- **Confirmation** — only when the decision needs a later metric, migration, or review checkpoint
 
 ## Numbering
 

@@ -1,0 +1,18 @@
+{
+  "id": "e15bd10d-9417-45ad-a512-c0f493af6035",
+  "skill": "skill-audit",
+  "tool": "skills:validate",
+  "startedAt": "2026-08-27T07:53:21.895Z",
+  "finishedAt": "2026-08-27T07:53:21.896Z",
+  "contextPack": "platform-default",
+  "status": "fail",
+  "warnings": [
+    "lockfile missing local entry for ask-matt",
+    "lockfile missing local entry for setup-matt-pocock-skills"
+  ],
+  "errors": [
+    "missing SKILL.md for ask-matt",
+    "missing SKILL.md for setup-matt-pocock-skills"
+  ],
+  "skills": 38
+}

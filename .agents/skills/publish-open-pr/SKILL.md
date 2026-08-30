@@ -12,7 +12,6 @@ outputs:
   - open pull request
 dependencies:
   - implement
-  - review-pr
 sideEffects:
   - push-branch
   - create-pr
@@ -22,7 +21,7 @@ risk: medium
 
 # Publish Open PR
 
-Publish one completed Meridian subissue, including a corrective subissue, from a local checkout to GitHub as an open pull request after `implement` has finished.
+Publish one completed repository-local subissue, including a corrective subissue, from a local checkout to GitHub as an open pull request after `implement` has finished.
 Keep the diff tight and leave a reviewer with a short body that explains what changed and why in this repo's terms.
 Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-prepared branch.
 The linked issue's metadata is the source of truth for labels and milestone. Follow [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when carrying metadata into the PR.
@@ -57,7 +56,9 @@ The linked issue's metadata is the source of truth for labels and milestone. Fol
     - If GitHub rejects the non-draft PR path with a diff-resolution error for this prepared branch, retry the same PR as `--draft` rather than stopping.
    - Use a title that matches the subissue and the actual diff.
 6. Hand off to the next workflow.
-   - After the PR opens, the next workflow is `review-pr`, then `ship-subissue` for merge/close.
+   - After the PR opens, the next workflow is `review-pr`.
+   - If review finds defects, hand off to `review-fix-loop`.
+   - When the latest review is clean, hand off to `ship-subissue` for merge and issue completion.
 
 ## Guardrails
 

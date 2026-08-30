@@ -1,0 +1,15 @@
+{
+  "id": "478764bf-3719-432c-ab4b-b0d2f2c828be",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-08-27T08:51:43.901Z",
+  "finishedAt": "2026-08-27T08:51:43.901Z",
+  "contextPack": "platform-semantic",
+  "status": "fail",
+  "warnings": [],
+  "errors": [
+    "ask-to: lock hash is stale"
+  ],
+  "markdownFiles": 122,
+  "skills": 59
+}

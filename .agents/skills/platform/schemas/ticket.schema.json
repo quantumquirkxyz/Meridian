@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qquirk Ticket Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["parent", "metadata", "outcome", "acceptanceCriteria", "validation", "blockedBy"],
+  "properties": {
+    "parent": { "type": ["string", "null"] },
+    "metadata": { "type": "object" },
+    "outcome": { "type": "string", "minLength": 1 },
+    "acceptanceCriteria": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "validation": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "blockedBy": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

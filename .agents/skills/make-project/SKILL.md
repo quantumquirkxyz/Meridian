@@ -38,18 +38,18 @@ The exact queries and mutations live in [`references/graphql.md`](references/gra
 - Rule: never create a board that already exists under the same title.
 - Rule: item field values are set only after the item is added — you cannot add and update an item in one call.
 
-## Meridian context
+## Repo Context
 
-This repo is **Meridian** — a multi-venue crypto trading system. When creating boards for this project, use domain-appropriate fields:
+Use the current repository's `CONTEXT.md`, `docs/agents/domain.md`, and issue tracker configuration when naming fields, views, and items. Default to portable project fields unless the repo already declares stronger domain fields:
 
-- **Venue** — Bybit, Binance, Coinbase, DEX, bridge, or other execution venue
-- **Instrument** — spot, perpetual, option, route, or other tradable/integration target
-- **Mode** — paper, demo, live
-- **Phase** — planning, implementation, validation, review, ship
-- **Risk Level** — low, medium, high, critical
-- **Status** — matching the triage labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix
+- **Work Type** — feature, bug, chore, docs, research, release, review-fix
+- **Repo Scope** — the repository, package, app, service, or module that owns the item
+- **Phase** — spec, tickets, ready-for-agent, in-progress, review, blocked, done
+- **Priority** — low, medium, high, urgent
+- **Risk** — low, medium, high
+- **Release Train** — the milestone, train, or target version when the repo uses one
 
-Use the project's domain glossary from `CONTEXT.md` when naming fields and items. Avoid synonyms the glossary explicitly rejects.
+Use the project's domain glossary when adding domain-specific fields. Avoid synonyms the glossary explicitly rejects.
 
 ## Steps
 

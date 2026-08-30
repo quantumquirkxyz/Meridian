@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qquirk Spec Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "problemStatement", "goals", "solution", "acceptanceCriteria"],
+  "properties": {
+    "metadata": { "$ref": "#/$defs/workItemMetadata" },
+    "problemStatement": { "type": "string", "minLength": 1 },
+    "goals": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "nonGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "solution": { "type": "string", "minLength": 1 },
+    "functionalRequirements": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "implementationDecisions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "testingDecisions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "acceptanceCriteria": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "outOfScope": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "risksAndOpenQuestions": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "$defs": {
+    "workItemMetadata": {
+      "type": "object",
+      "required": ["labels", "workType", "repoScope", "phase", "priority", "risk"],
+      "properties": {
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "milestone": { "type": ["string", "null"] },
+        "project": { "type": ["string", "null"] },
+        "workType": { "type": "string" },
+        "repoScope": { "type": "string" },
+        "phase": { "type": "string" },
+        "priority": { "type": "string" },
+        "risk": { "type": "string" }
+      }
+    }
+  }
+}

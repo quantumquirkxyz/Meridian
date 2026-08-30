@@ -18,7 +18,7 @@ sideEffects:
   - write-tests
   - write-code
 stopCondition: One behavior slice is green at a public seam.
-risk: low
+risk: medium
 ---
 
 # Test-Driven Development

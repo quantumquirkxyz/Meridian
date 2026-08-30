@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qquirk Release Decision Record Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["releaseCandidate", "changeSet", "requiredGates", "decision", "rollbackAuthority"],
+  "properties": {
+    "releaseCandidate": { "type": "string", "minLength": 1 },
+    "changeSet": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "requiredGates": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "advisoryGates": { "type": "array", "items": { "type": "string" } },
+    "decision": { "type": "string", "enum": ["ship", "pause", "rollback", "forward-fix"] },
+    "rollbackAuthority": { "type": "string", "minLength": 1 },
+    "evidence": { "type": "array", "items": { "type": "string" } }
+  }
+}

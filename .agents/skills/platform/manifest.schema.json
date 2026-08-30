@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ARIES Skill Manifest",
+  "title": "qquirk Skill Manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "description", "invocation", "version", "capabilities", "outputs"],
@@ -42,4 +42,3 @@
     "risk": { "type": "string", "enum": ["low", "medium", "high"] }
   }
 }
-

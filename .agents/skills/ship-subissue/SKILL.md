@@ -23,7 +23,7 @@ risk: medium
 
 # Ship Subissue
 
-Merge one approved Meridian subissue PR, including a corrective subissue PR, mark the subissue as completed, and close out the linked issue when needed.
+Merge one approved repository-local subissue PR, including a corrective subissue PR, mark the subissue as completed, and close out the linked issue when needed.
 Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when deciding what metadata to preserve: linked-issue labels and milestone are the source of truth, and the completion note should not introduce conflicting tracker metadata.
 
 ## Workflow
@@ -32,9 +32,10 @@ Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../
    - Read the open PR with `gh pr view`.
    - Confirm the PR still belongs to the current branch and subissue.
    - Confirm the linked issue reference is clear.
+   - Confirm the branch is clean and no conflicted branch state remains from merge/rebase or review-request follow-up work; if it is conflicted, return to `resolving-merge-conflicts` before shipping.
 2. Confirm review is clean.
    - Only proceed if the last `review-pr` pass was clean on both Standards and Spec.
-   - If review is not clean, stop and return to `publish-open-pr`.
+   - If review is not clean, stop and return to `review-fix-loop`.
 3. Merge the PR.
    - Use `gh pr merge <number>` with the repository's accepted merge strategy.
    - Delete the branch if the repository convention allows it.

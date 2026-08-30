@@ -1,0 +1,32 @@
+{
+  "id": "greenfield-saas-standard",
+  "title": "Greenfield SaaS project from idea to ship",
+  "userRequest": "I want to build a standard SaaS web app from a rough idea and eventually ship it through a reviewed PR workflow.",
+  "expectedRoute": [
+    "setup-qquirk-skills",
+    "ask-to",
+    "grill-with-docs",
+    "to-spec",
+    "to-tickets",
+    "implement",
+    "publish-open-pr",
+    "review-pr",
+    "review-fix-loop",
+    "ship-subissue"
+  ],
+  "checks": [
+    {
+      "skill": "ask-to",
+      "mustMention": ["main flow", "publish-open-pr", "review-pr", "review-fix-loop", "ship-subissue"],
+      "forbid": ["ask-matt", "ship-review-fix-loop", "doc-draft-pr"]
+    },
+    {
+      "skill": "to-spec",
+      "mustMention": ["Goals", "Non-goals", "Acceptance Criteria", "Risks and Open Questions"]
+    },
+    {
+      "skill": "to-tickets",
+      "mustMention": ["Acceptance criteria", "Validation", "Blocked by"]
+    }
+  ]
+}

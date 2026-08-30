@@ -1,0 +1,110 @@
+{
+  "id": "bf800685-d33b-4b9b-a950-1d5c3efa6d2a",
+  "skill": "evaluate-skill",
+  "tool": "skills:evaluate-scenarios",
+  "startedAt": "2026-08-27T08:49:21.155Z",
+  "finishedAt": "2026-08-27T08:49:21.156Z",
+  "contextPack": "platform-scenarios",
+  "status": "fail",
+  "warnings": [],
+  "errors": [
+    "greenfield-saas-standard: to-spec missing phrase \"Goals\"",
+    "greenfield-saas-standard: to-spec missing phrase \"Non-goals\"",
+    "greenfield-saas-standard: to-spec missing phrase \"Acceptance Criteria\"",
+    "greenfield-saas-standard: to-spec missing phrase \"Risks and Open Questions\"",
+    "greenfield-saas-standard: to-tickets missing phrase \"Acceptance criteria\"",
+    "greenfield-saas-standard: to-tickets missing phrase \"Validation\"",
+    "pr-review-fix-loop-standard: plan-review-fixes missing phrase \"Severity\"",
+    "pr-review-fix-loop-standard: plan-review-fixes missing phrase \"Scope guard\"",
+    "pr-review-fix-loop-standard: implement-review-fixes missing phrase \"Scope Notes\"",
+    "pr-review-fix-loop-standard: implement-review-fixes missing phrase \"Status: implemented\""
+  ],
+  "scenarios": 5,
+  "results": [
+    {
+      "id": "critical-bug-standard",
+      "checks": [
+        {
+          "skill": "diagnosing-bugs",
+          "status": "checked"
+        },
+        {
+          "skill": "tdd",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "database-migration-standard",
+      "checks": [
+        {
+          "skill": "database-migrations",
+          "status": "checked"
+        },
+        {
+          "skill": "postgres",
+          "status": "checked"
+        },
+        {
+          "skill": "deployment",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "greenfield-saas-standard",
+      "checks": [
+        {
+          "skill": "ask-to",
+          "status": "checked"
+        },
+        {
+          "skill": "to-spec",
+          "status": "checked"
+        },
+        {
+          "skill": "to-tickets",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "pr-review-fix-loop-standard",
+      "checks": [
+        {
+          "skill": "review-pr",
+          "status": "checked"
+        },
+        {
+          "skill": "plan-review-fixes",
+          "status": "checked"
+        },
+        {
+          "skill": "implement-review-fixes",
+          "status": "checked"
+        },
+        {
+          "skill": "ship-subissue",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "release-ops-standard",
+      "checks": [
+        {
+          "skill": "release-management",
+          "status": "checked"
+        },
+        {
+          "skill": "deployment",
+          "status": "checked"
+        },
+        {
+          "skill": "monitoring-alerting",
+          "status": "checked"
+        }
+      ]
+    }
+  ]
+}

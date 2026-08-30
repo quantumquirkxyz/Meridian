@@ -1,0 +1,16 @@
+{
+  "id": "ee2c0aab-06eb-48d5-9a00-8089ed9ea7c4",
+  "skill": "skill-audit",
+  "tool": "skills:validate",
+  "startedAt": "2026-08-27T07:52:11.145Z",
+  "finishedAt": "2026-08-27T07:52:11.153Z",
+  "contextPack": "platform-default",
+  "status": "fail",
+  "warnings": [
+    "lockfile missing local entry for ship-review-fix-loop"
+  ],
+  "errors": [
+    "missing SKILL.md for ship-review-fix-loop"
+  ],
+  "skills": 39
+}

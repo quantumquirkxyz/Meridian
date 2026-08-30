@@ -1,0 +1,99 @@
+{
+  "id": "5ae3d79b-024a-489a-becb-a14d31f8257d",
+  "skill": "evaluate-skill",
+  "tool": "skills:evaluate-scenarios",
+  "startedAt": "2026-08-27T09:10:30.102Z",
+  "finishedAt": "2026-08-27T09:10:30.103Z",
+  "contextPack": "platform-scenarios",
+  "status": "pass",
+  "warnings": [],
+  "errors": [],
+  "scenarios": 5,
+  "results": [
+    {
+      "id": "critical-bug-standard",
+      "checks": [
+        {
+          "skill": "diagnosing-bugs",
+          "status": "checked"
+        },
+        {
+          "skill": "tdd",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "database-migration-standard",
+      "checks": [
+        {
+          "skill": "database-migrations",
+          "status": "checked"
+        },
+        {
+          "skill": "postgres",
+          "status": "checked"
+        },
+        {
+          "skill": "deployment",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "greenfield-saas-standard",
+      "checks": [
+        {
+          "skill": "ask-to",
+          "status": "checked"
+        },
+        {
+          "skill": "to-spec",
+          "status": "checked"
+        },
+        {
+          "skill": "to-tickets",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "pr-review-fix-loop-standard",
+      "checks": [
+        {
+          "skill": "review-pr",
+          "status": "checked"
+        },
+        {
+          "skill": "plan-review-fixes",
+          "status": "checked"
+        },
+        {
+          "skill": "implement-review-fixes",
+          "status": "checked"
+        },
+        {
+          "skill": "ship-subissue",
+          "status": "checked"
+        }
+      ]
+    },
+    {
+      "id": "release-ops-standard",
+      "checks": [
+        {
+          "skill": "release-management",
+          "status": "checked"
+        },
+        {
+          "skill": "deployment",
+          "status": "checked"
+        },
+        {
+          "skill": "monitoring-alerting",
+          "status": "checked"
+        }
+      ]
+    }
+  ]
+}

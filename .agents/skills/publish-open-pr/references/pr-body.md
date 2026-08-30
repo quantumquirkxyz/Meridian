@@ -18,10 +18,13 @@ Use this as the source of truth for the pull request body.
 <why this subissue needed the change>
 
 ## Impact
-<who benefits and what changes for them>
+<who benefits, what behavior changes, and any compatibility or migration impact>
 
 ## Validation
-<tests, checks, or manual verification performed>
+<tests, checks, or manual verification performed; include skipped checks with reasons>
+
+## Review Focus
+<specific files, contracts, risk areas, or "Standard review">
 
 ## Notes
 <follow-ups, trade-offs, or known limitations>
@@ -45,4 +48,5 @@ Include this section only when a traceable issue reference is already clear from
 - Use the current branch and latest commit to ground the summary.
 - Copy the validation text from the actual checks you ran.
 - If there are known limitations, name them plainly.
+- If no special review focus exists, write `Standard review`.
 - Include a closing keyword when the linked issue is known so GitHub populates the PR Development sidebar.

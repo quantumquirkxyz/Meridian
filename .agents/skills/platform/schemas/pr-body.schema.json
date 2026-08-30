@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qquirk Pull Request Body Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "why", "impact", "validation", "reviewFocus"],
+  "properties": {
+    "summary": { "type": "string", "minLength": 1 },
+    "why": { "type": "string", "minLength": 1 },
+    "impact": { "type": "string", "minLength": 1 },
+    "validation": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "reviewFocus": { "type": "string", "minLength": 1 },
+    "notes": { "type": "string" },
+    "development": { "type": "string" }
+  }
+}

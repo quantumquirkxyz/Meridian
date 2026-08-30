@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qquirk Implementation Note Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "completed", "validation", "remaining", "scopeNotes"],
+  "properties": {
+    "status": { "type": "string", "enum": ["implemented", "blocked", "partial"] },
+    "completed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "validation": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "remaining": { "type": "string", "minLength": 1 },
+    "scopeNotes": { "type": "string", "minLength": 1 }
+  }
+}

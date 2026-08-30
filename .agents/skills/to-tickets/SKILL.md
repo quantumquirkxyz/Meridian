@@ -33,7 +33,7 @@ risk: medium
 
 Break a plan, spec, or conversation into a set of **tickets** — tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
-The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
+The issue tracker and triage label vocabulary should have been provided to you — run `/setup-qquirk-skills` if not.
 The canonical work-item metadata shape is documented in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md); follow it so tickets, labels, milestones, and project fields stay aligned with specs and boards.
 
 ## Contract
@@ -106,56 +106,19 @@ For corrective inputs, the user approval step may be skipped only when the audit
 
 ### 5. Publish the tickets to the configured tracker
 
-Publish the approved tickets. **How** depends on the tracker `/setup-matt-pocock-skills` configured — the tickets are the same either way, only the shape of the blocking edges changes:
+Publish the approved tickets. **How** depends on the tracker `/setup-qquirk-skills` configured — the tickets are the same either way, only the shape of the blocking edges changes:
 
-- **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below — one ticket per file, never a single combined file.
+- **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use `references/issue-template.md` for the per-ticket shape — one ticket per file, never a single combined file.
 - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. When the input came from `/to-spec`, create the tickets as subissues of that spec issue so the execution tree stays attached to the published spec. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the tracker defaults from `docs/agents/issue-tracker.md`: for this repo that means `ready-for-agent` plus any justified area or priority labels inherited from the source spec or parent issue. The ticket body itself must also be written in English and should preserve this repo's vocabulary rather than backsliding to generic trading wording.
+
+The ticket template still needs the familiar sections that keep slices actionable:
+
+- Acceptance criteria
+- Validation
+- Blocked by
 
 Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
 
 Do NOT close or modify any parent issue.
 
-<local-ticket-template>
-
-# <NN> — <Ticket title>
-
-**What to build:** the end-to-end behaviour this ticket makes work, from the user's perspective — not a layer-by-layer implementation list.
-
-**Blocked by:** the numbers/titles of the tickets that gate this one, or "None — can start immediately".
-
-**Status:** ready-for-agent
-
-- [ ] Acceptance criterion 1
-- [ ] Acceptance criterion 2
-
-</local-ticket-template>
-
-<issue-template>
-
-## Parent
-
-A reference to the parent issue on the tracker (if the source was an existing issue, otherwise omit this section).
-
-## What to build
-
-The end-to-end behaviour this ticket makes work, from the user's perspective — not layer-by-layer implementation.
-
-## Metadata
-
-- Labels: `ready-for-agent` plus justified area or dependency labels
-- Milestone: <phase milestone or none>
-- Project: <project board or none>
-- Fields: Work Type = Ticket; Repo Scope = <scope>; Phase = <state>; Priority = <P0-P3>; Risk = <risk>; Sprint = <sprint or none>; Release Train = <train or none>
-
-## Acceptance criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
-
-## Blocked by
-
-- A reference to each blocking ticket, or "None — can start immediately".
-
-</issue-template>
-
-In either form, avoid specific file paths or code snippets — they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+See `references/issue-template.md` for the canonical ticket shape.

@@ -2,6 +2,23 @@
 name: capability-router
 description: Route work to the best matching Skill using declared capabilities and compatibility.
 disable-model-invocation: true
+version: 1
+capabilities:
+  - route-work
+  - match-capabilities
+inputs:
+  - task intent
+  - required artifact type
+  - available skills registry
+outputs:
+  - selected skill name
+  - rationale
+  - fallback options
+dependencies: []
+sideEffects:
+  - recommend-only
+stopCondition: A selected Skill is named with explicit rationale and fallback options noted.
+risk: low
 ---
 
 # Capability Router

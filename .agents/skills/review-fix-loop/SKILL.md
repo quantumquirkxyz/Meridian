@@ -1,6 +1,6 @@
 ---
 name: review-fix-loop
-description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply the plan, then repeat until Standards and Spec are clean or the loop is blocked. Use for PRs that should automatically cycle through review-driven fixes before ship-subissue."
+description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply the plan, then repeat until Standards and Spec are clean or the loop is blocked. Use for PRs that should automatically cycle through review-driven fixes before ship-subissue, including the re-review that happens after a conflicted branch state is resolved."
 version: 1
 capabilities:
   - orchestrate-review-fixes
@@ -30,6 +30,7 @@ Do not merge, close, or delete branches here; this skill coordinates the loop on
 
 Coordinate review, planning, and implementation without diluting any one skill's responsibility. The review remains the measurement instrument; this skill decides whether to plan fixes, implement them, repeat, or hand off to ship-subissue.
 Use the canonical work-item metadata format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) as the source of truth for labels, milestone, and project metadata when preserving the loop state in comments or handoffs.
+Keep the loop tight: if the same review-fix plan would be posted again without a new finding, stop rather than restating the same repair in different words.
 
 ## Contract
 
@@ -57,6 +58,8 @@ If the fixed point is missing, ask for it before starting. If the PR is missing,
    - If Standards and Spec both have no findings, stop the loop and tell the user the PR is ready for ship-subissue.
    - If either axis has findings, continue.
    - If the same blocking condition repeats for three consecutive loop passes, stop and report the blocker instead of looping indefinitely.
+   - If the latest review changes only wording but not substance, treat it as the same blocker.
+   - If a conflicted branch state was resolved, rerun review-pr on the cleaned branch before deciding whether to plan more fixes or hand off to ship-subissue.
 
 3. Plan.
    - Use plan-review-fixes to turn the review findings into a PR comment headed `## Review Fix Plan`.
@@ -65,10 +68,12 @@ If the fixed point is missing, ask for it before starting. If the PR is missing,
 4. Implement.
    - Use implement-review-fixes to apply the latest planned fixes.
    - Require local validation or an explicit explanation of skipped validation before the next review pass.
+   - If the branch is conflicted, resolve that branch state first with `resolving-merge-conflicts`, then return here and continue the review-fix plan.
 
 5. Repeat.
    - Run review-pr again against the same fixed point.
    - Continue until clean or blocked.
+   - Do not widen scope during a repeat pass unless a new review finding makes it unavoidable.
 
 ## Loop State
 
