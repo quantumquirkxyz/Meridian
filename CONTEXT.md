@@ -216,7 +216,13 @@ _Avoid_: treating demo trading as if it were live capital, or treating it as a p
 Bybit's real trading environment with real balances, real API keys, and capital at risk. It is the final phase after demo trading has been validated.
 _Avoid_: any mode that can be used without real exchange credentials or without capital exposure.
 
-**Seam (unified runner)**: `LiveRunner` receives `bybitEndpoints` from `AppConfig`. `MODE=demo` → `restUrl=api-demo.bybit.com`, `wsUrl=stream-demo.bybit.com`; `MODE=live` → mainnet endpoints. No parallel runner or agent exists; `AgentAdapter` (LLM) is identical across modes.
+**Seam (unified runner)**: Confirmed (a) — single `LiveRunner` receives `bybitEndpoints` from `AppConfig`. `MODE=demo` → `restUrl=api-demo.bybit.com`, `wsUrl=stream-demo.bybit.com`; `MODE=live` → mainnet endpoints. No parallel runners. `AgentAdapter` is identical across modes.
+
+**Regime adaptation (confirmed)**: (b) Policy more permissive in `demo` (no real capital → maximize integration stress-testing); `RegimeClassifier` and `RegimePolicyEngine` operate identically in both modes, only execution layer differs.
+
+**Kill switch (confirmed)**: (a) Identical in `demo` and `live` — manual TUI + automatic drawdown must be validated against Bybit Demo before promotion.
+
+**Exit gate `demo` → `live` (confirmed)**: (c) Manual review + documentary evidence required — exported reports (JSON/CSV/TXT), audit reconstruction, loop-stability evidence, and explicit operator approval; not just automated metrics.
 
 **Phase**: Only `demo` (Bybit Demo Trading, virtual assets, exchange-integrated) and `live` (real capital, bounded canary). The internal `SimulatedExecutionEngine` is the execution layer for both; `demo` validates it against Bybit Demo endpoints, `live` uses it with real keys and canary limits.
 
