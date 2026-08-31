@@ -81,8 +81,6 @@ export function resolveCanaryConfig(
   canaryConfig?: CanaryConfig,
 ): CanaryConfig {
   if (mode === "demo") {
-    // Demo: bypass capital limits to exercise the full integration surface.
-    // Risk rules (slippage, gas, latency, data quality) still apply.
     return {
       ...DEFAULT_CANARY_CONFIG,
       capitalLimits: {
@@ -92,7 +90,7 @@ export function resolveCanaryConfig(
         maxWeeklyLossUsd: Infinity,
       },
       maxOrderNotionalUsd: Infinity,
-    };
+    } as CanaryConfig;
   }
   return canaryConfig ?? DEFAULT_CANARY_CONFIG;
 }

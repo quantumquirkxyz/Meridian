@@ -188,13 +188,9 @@ describe("LiveRunner factory injection", () => {
 
   test("factory injection for REST client", async () => {
     const mockRest = makeMockRESTClient();
-    LiveRunner.createRESTClient = () => mockRest as unknown as import("@agenttrading/connectors").BybitRESTClient;
-
-    const runner = new LiveRunner(makeDemoConfig());
-
-    // Inject mock WS client factory
+    LiveRunner.createRESTClient = () => mockRest ; // type: BybitRESTClient
     LiveRunner.createWSClient = () => makeMockWSClient();
-
+    const runner = new LiveRunner(makeDemoConfig());
     await runner.connect();
 
     expect(runner.status.state).toBe("authenticated");
@@ -220,6 +216,7 @@ describe("LiveRunner connect/disconnect", () => {
 
   test("connect twice is idempotent", async () => {
     const runner = new LiveRunner(makeDemoConfig());
+    LiveRunner.createRESTClient = () => makeMockRESTClient() as any;
     LiveRunner.createWSClient = () => makeMockWSClient();
     await runner.connect();
     await runner.connect(); // Should be no-op
@@ -229,6 +226,7 @@ describe("LiveRunner connect/disconnect", () => {
 
   test("disconnect sets state to disconnected", async () => {
     const runner = new LiveRunner(makeDemoConfig());
+    LiveRunner.createRESTClient = () => makeMockRESTClient() as any;
     LiveRunner.createWSClient = () => makeMockWSClient();
     await runner.connect();
     runner.disconnect();
@@ -258,9 +256,9 @@ describe("LiveRunner connect/disconnect", () => {
 
   test("submitOrder when halted returns error", async () => {
     const runner = new LiveRunner(makeDemoConfig());
+    LiveRunner.createRESTClient = () => makeMockRESTClient() as any;
     LiveRunner.createWSClient = () => makeMockWSClient();
     await runner.connect();
-    // Manually halt (inject via mock if needed; here just verify the gate)
     const intent = {
       idempotencyKey: "test-1",
       opportunityId: "opp-1",
@@ -290,7 +288,7 @@ describe("LiveRunner static factories", () => {
   });
 
   test("can assign factory", () => {
-    const factory = () => null as unknown as import("@agenttrading/connectors").BybitRESTClient;
+    const factory = () => null as any;
     LiveRunner.createRESTClient = factory;
     expect(LiveRunner.createRESTClient).not.toBeNull();
     LiveRunner.createRESTClient = null;

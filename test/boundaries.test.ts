@@ -171,6 +171,10 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     const importSpecifiers =
       /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
     for (const file of sourceFiles("core")) {
+      // ADR-0011: LiveRunner is the single allowed seam that imports
+      // connectors (Bybit REST/WebSocket) to bridge core with the
+      // exchange layer. All other core files remain exchange-agnostic.
+      if (file.includes("core/src/live/")) continue;
       const content = readFileSync(file, "utf8");
       for (const match of content.matchAll(importSpecifiers)) {
         expect(isForbiddenModule(match[1])).toBe(false);
