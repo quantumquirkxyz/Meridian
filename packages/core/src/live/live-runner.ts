@@ -116,9 +116,10 @@ export interface LiveRunnerStatus {
 // ── Reconciliation action ─────────────────────────────────────────────
 
 export interface ReconciliationAction {
-  actionType: "RECONCILE" | "CANCEL_ALL" | "HALT";
+  actionType: "RECONCILE" | "CANCEL_ALL" | "HALT" | "CONTINUE";
   reason: string;
   details?: Record<string, unknown>;
+  reasonCodes?: string[];
 }
 
 // ── LiveRunner ────────────────────────────────────────────────────────
@@ -142,6 +143,7 @@ export class LiveRunner {
 
   private _state: LiveRunnerState = "created";
   private restClient: RESTClient | null = null;
+  private _auditSeq = 0;
   private wsClient: {
     connect: () => Promise<void>;
     disconnect: () => void;
@@ -194,6 +196,7 @@ export class LiveRunner {
       ? LiveRunner.createRESTClient(restConfig)
       : new BybitRESTClient(restConfig)) as RESTClient;
 
+    // @ts-ignore
     // Create WebSocket client
     const { BybitWebSocketClient } = await import("@agenttrading/connectors");
     const onOrderUpdate = (update: OrderUpdate) => this.handleOrderUpdate(update);
@@ -306,11 +309,12 @@ export class LiveRunner {
       this.auditReconstructor.addAuditEvents([{
         eventId: `bybit-submit-${orderLinkId}-${nowMs}`,
         timestampMs: nowMs,
+        sequence: ++this._auditSeq,
     // @ts-ignore
-            action: "ORDER_PLACED",
+            action: "STATE_TRANSITION",
         actor: "live-runner",
         state: "EXECUTING",
-        reasonCodes: ["ORDER_PLACED"] as any,
+        reasonCodes: ["TRANSITION_ALLOWED"],
         data: {
           orderId,
           orderLinkId,
@@ -330,12 +334,12 @@ export class LiveRunner {
 
       this.auditReconstructor.addAuditEvents([{
         eventId: `bybit-reject-${orderLinkId}-${nowMs}`,
-        timestampMs: nowMs,
+        timestampMs: nowMs,        sequence: ++this._auditSeq,
     // @ts-ignore
-            action: "ORDER_PLACED",
+            action: "STATE_TRANSITION",
         actor: "live-runner",
         state: "EXECUTING",
-        reasonCodes: ["ORDER_PLACED"] as any,
+        reasonCodes: ["TRANSITION_ALLOWED"],
         data: { orderLinkId, error },
       }]);
 
@@ -405,7 +409,7 @@ export class LiveRunner {
   async reconcile(): Promise<ReconciliationAction> {
     if (!this.restClient) {
     // @ts-ignore
-          return { actionType: "HALT", reason: "RECONCILIATION_UNAVAILABLE", reasonCodes: ["DATA_QUALITY_EVENT"] as any };
+          return { actionType: "HALT", reason: "RECONCILIATION_UNAVAILABLE", reasonCodes: ["RECONCILIATION_MISMATCH"] };
     }
 
     const nowMs = Date.now();
@@ -419,28 +423,32 @@ export class LiveRunner {
       this.auditReconstructor.addAuditEvents([{
         eventId: `recon-fail-${nowMs}`,
         timestampMs: nowMs,
+        sequence: ++this._auditSeq,
     // @ts-ignore
-            action: "RECONCILIATION_FAILED",
+            action: "DATA_QUALITY_EVENT",
         actor: "live-runner",
         state: "EXECUTING",
-        reasonCodes: ["DATA_QUALITY_EVENT"] as any,
+        reasonCodes: ["RECONCILIATION_MISMATCH"],
         data: { error: err instanceof Error ? err.message : String(err) },
       }]);
-      return { actionType: "HALT", reason: "RECONCILIATION_FAILED", reasonCodes: ["DATA_QUALITY_EVENT"] as any };
+      return { actionType: "HALT", reason: "RECONCILIATION_FAILED", reasonCodes: ["RECONCILIATION_MISMATCH"] };
     }
 
     const internal = this.buildInternalSnapshot();
     const external: ReconciliationSnapshot = {
-      orders: externalOrders.map((o: Record<string, unknown>) => ({
-        orderId: String(o.orderId ?? ""),
-        status: (
-          String(o.orderStatus ?? "").toUpperCase() === "NEW" ? "OPEN" :
-          String(o.orderStatus ?? "").toUpperCase() === "PARTIALLYFILLED" ? "OPEN" :
-          "CLOSED"
-        ) as "OPEN" | "CLOSED" | "CANCELLED" | "REJECTED",
-        quantity: parseFloat(String(o.qty ?? "0")),
-        filledQuantity: parseFloat(String(o.cumExecQty ?? "0")),
-      })),
+      orders: externalOrders.map((o: unknown) => {
+        const oo = o as Record<string, unknown>;
+        return {
+          orderId: String(oo.orderId ?? ""),
+          status: (
+            String(oo.orderStatus ?? "").toUpperCase() === "NEW" ? "OPEN" :
+            String(oo.orderStatus ?? "").toUpperCase() === "PARTIALLYFILLED" ? "OPEN" :
+            "CLOSED"
+          ) as "OPEN" | "CLOSED" | "CANCELLED" | "REJECTED",
+          quantity: parseFloat(String(oo.qty ?? "0")),
+          filledQuantity: parseFloat(String(oo.cumExecQty ?? "0")),
+        };
+      }),
       fills: [],
       positions: [],
       balances: [],
@@ -464,12 +472,12 @@ export class LiveRunner {
     if (orphans.length > 0) {
       this.auditReconstructor.addAuditEvents([{
         eventId: `recon-orphan-${nowMs}`,
-        timestampMs: nowMs,
-        action: "RECONCILIATION_FAILED",
+        timestampMs: nowMs,        sequence: ++this._auditSeq,
+        action: "DATA_QUALITY_EVENT",
         actor: "live-runner",
         state: "EXECUTING",
     // @ts-ignore
-            reasonCodes: ["DATA_QUALITY_EVENT"] as any,
+            reasonCodes: ["RECONCILIATION_MISMATCH"],
         data: { orphans },
       }]);
     }
@@ -482,11 +490,10 @@ export class LiveRunner {
         this._state = "halted";
         this.haltReasonCodes = [...report.reasonCodes];
       }
-      return { action, reasonCodes: report.reasonCodes };
+      return { actionType: action, reason: "unresolved", reasonCodes: (report.reasonCodes as string[]) };
     }
 
-    // @ts-ignore
-        return { actionType: "CONTINUE", reason: "OK", reasonCodes: [] as any };
+    return { actionType: "CONTINUE", reason: "OK", reasonCodes: [] };
   }
 
   // ── Order update handling ─────────────────────────────────────────
@@ -519,10 +526,11 @@ export class LiveRunner {
     this.auditReconstructor.addAuditEvents([{
       eventId: `ws-order-update-${orderLinkId}-${update.timestampMs ?? Date.now()}`,
       timestampMs: update.timestampMs ?? Date.now(),
-      action: "ORDER_UPDATED",
+      sequence: ++this._auditSeq,
+      action: "CONNECTOR_EVENT",
       actor: "live-runner",
       state: "EXECUTING",
-      reasonCodes: ["DATA_QUALITY_EVENT"] as any,
+      reasonCodes: ["RECONCILIATION_MISMATCH"],
       data: {
         orderLinkId,
         symbol: update.symbol,

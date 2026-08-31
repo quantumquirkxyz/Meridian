@@ -1,0 +1,43 @@
+{
+  "name": "meridian-live-canary",
+  "configId": "canary-live-v1",
+  "capitalLimits": {
+    "maxCapitalUsd": 500,
+    "maxRiskPerTradeUsd": 25,
+    "maxDailyLossUsd": 50,
+    "maxWeeklyLossUsd": 100
+  },
+  "exposureLimits": {
+    "maxExposurePerTokenUsd": 200,
+    "maxExposurePerVenueUsd": 300,
+    "maxExposurePerChainUsd": 300
+  },
+  "orderLimits": {
+    "maxOrdersPerDay": 10,
+    "maxOpenOrders": 2,
+    "maxOrdersPerWeek": 30
+  },
+  "scope": {
+    "allowedStrategyIds": ["trend-follow"],
+    "allowedVenues": ["bybit"],
+    "allowedChains": ["solana"],
+    "allowedTokens": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  },
+  "apiKeys": {
+    "readApiKey": { "keyId": "read-key", "secretRef": "secret-manager" },
+    "tradingApiKey": { "keyId": "trading-key", "secretRef": "secret-manager" },
+    "withdrawalsDisabled": true
+  },
+  "killSwitch": {
+    "autoHaltDailyLossUsd": 50,
+    "autoHaltWeeklyLossUsd": 100,
+    "autoHaltOrdersPerDay": 10,
+    "autoHaltOnOrphans": true,
+    "autoHaltOnReconciliationMismatch": true,
+    "cooldownMs": 300000
+  },
+  "noAutomaticScaling": true,
+  "maxOrderNotionalUsd": 100,
+  "maxSlippageBps": 20,
+  "maxGasUsd": 10
+}
