@@ -199,6 +199,21 @@ export class BybitRESTClient {
   }
 
   /**
+   * Get market ticker (REST fallback for demo mode when WS fails).
+   */
+  async getTicker(symbol: string): Promise<{ bid: string; ask: string; lastPrice: string; time: string }> {
+    const params = new URLSearchParams({ category: "linear", symbol }).toString();
+    const result = await this.requestWithRetry<any>("GET", "/v5/market/tickers", params);
+    const ticker = Array.isArray(result) ? result[0] : result;
+    return {
+      bid: ticker?.bid1Price ?? ticker?.bid ?? "0",
+      ask: ticker?.ask1Price ?? ticker?.ask ?? "0",
+      lastPrice: ticker?.lastPrice ?? ticker?.price ?? "0",
+      time: ticker?.time ?? "",
+    };
+  }
+
+  /**
    * Get wallet balance.
    * GET /v5/account/wallet-balance
    */

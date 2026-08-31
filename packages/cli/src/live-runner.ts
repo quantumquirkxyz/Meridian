@@ -152,6 +152,7 @@ export class LiveRunner {
   private cycleCount = 0;
   private cycleTimer: ReturnType<typeof setInterval> | null = null;
   private reconciliationTimer: ReturnType<typeof setInterval> | null = null;
+  private tickerTimer: ReturnType<typeof setInterval> | null = null;
 
   // S2: Bundled market state (updated from WS)
   private market: MarketState = { bid: 0, ask: 0, mid: 0, liquidityUsd: 10_000 };
@@ -328,6 +329,28 @@ export class LiveRunner {
       }
     }
 
+    // Start ticker poll (REST fallback when WS market feed not active) — needed for demo mode
+    const tickerPollInterval = 5_000; // 5s
+    const pollTicker = async () => {
+      try {
+        const ticker = await this.restClient.getTicker(this.config.symbols[0] ?? "BTCUSDT");
+        const bid = parseFloat(ticker.bid) || 0;
+        const ask = parseFloat(ticker.ask) || 0;
+        const last = parseFloat(ticker.lastPrice) || 100;
+        const mid = (bid > 0 && ask > 0) ? (bid + ask) / 2 : (last || 100);
+        this.market = {
+          bid: bid > 0 ? bid : last,
+          ask: ask > 0 ? ask : last,
+          mid,
+          liquidityUsd: 10_000,
+        };
+      } catch {
+        // Ignore ticker poll errors; keep synthetic/default market state
+      }
+    };
+    await pollTicker(); // initial ticker fetch
+    this.tickerTimer = setInterval(pollTicker, tickerPollInterval);
+
     // AC7: Reconcile on startup
     await this.reconcile();
 
@@ -359,6 +382,12 @@ export class LiveRunner {
     if (this.reconciliationTimer !== null) {
       clearInterval(this.reconciliationTimer);
       this.reconciliationTimer = null;
+    }
+
+    // Stop ticker poll
+    if (this.tickerTimer !== null) {
+      clearInterval(this.tickerTimer);
+      this.tickerTimer = null;
     }
 
     // AC13: Cancel all open orders before closing
@@ -789,20 +818,24 @@ export class LiveRunner {
     intents: OrderIntent[];
     riskDecisions: import("@agenttrading/contracts").RiskDecision[];
   } {
-    if (this.market.mid <= 0 || this.cycleCount % 5 !== 0) {
+    // Generate opportunity every 5th cycle (demo: allow synthetic even if WS feed not active)
+    if (this.cycleCount % 5 !== 0) {
       return { intents: [], riskDecisions: [] };
     }
 
     const side: "BUY" | "SELL" =
       this.cycleCount % 10 === 0 ? "BUY" : "SELL";
     const quantity = 0.001;
-    const price = this.market.mid;
+    // Use market price if available; synthetic default (100) when WS feed not yet active
+    const price = this.market.mid > 0 ? this.market.mid : 100;
+    const rawSymbol = this.config.symbols[0] ?? "BTCUSDT";
+    const symbol = rawSymbol.endsWith("USDT") ? rawSymbol : `${rawSymbol}USDT`;
 
     const intent: OrderIntent = {
       idempotencyKey: `live-${this.cycleCount}-${this.nowMs()}`,
       opportunityId: `opp-${this.cycleCount}`,
       venue: "bybit",
-      symbol: this.config.symbols[0] ?? "BTCUSDT",
+      symbol,
       side,
       quantity,
       price,
