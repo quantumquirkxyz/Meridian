@@ -119,14 +119,14 @@ export interface CanaryPreCheckResult {
  */
 export class LiveExecutionEngine {
   private readonly config: CanaryConfig;
-  private readonly paperEngine: SimulatedExecutionEngine;
+  private readonly simEngine: SimulatedExecutionEngine;
 
   constructor(
     config: CanaryConfig,
-    paperEngine: SimulatedExecutionEngine = new SimulatedExecutionEngine(),
+    simEngine: SimulatedExecutionEngine = new SimulatedExecutionEngine(),
   ) {
     this.config = { ...config };
-    this.paperEngine = paperEngine;
+    this.simEngine = simEngine;
   }
 
   /**
@@ -295,7 +295,7 @@ export class LiveExecutionEngine {
   }
 
   /**
-   * Submit an order through the paper execution engine, after canary
+   * Submit an order through the simulated execution engine, after canary
    * pre-check. Only callable if preCheck returned allowed: true.
    */
   submit(
@@ -318,39 +318,39 @@ export class LiveExecutionEngine {
       } as RiskDecision;
     }
 
-    return this.paperEngine.submit(adjustedInput);
+    return this.simEngine.submit(adjustedInput);
   }
 
   /**
-   * Poll the paper execution engine.
+   * Poll the simulated execution engine.
    */
   poll(nowMs: number) {
-    return this.paperEngine.poll(nowMs);
+    return this.simEngine.poll(nowMs);
   }
 
   /**
-   * Cancel all open paper orders.
+   * Cancel all open simulated orders.
    */
   cancelAll(cancelledAtMs: number) {
-    return this.paperEngine.cancelAll(cancelledAtMs);
+    return this.simEngine.cancelAll(cancelledAtMs);
   }
 
   /**
    * Get current open order count.
    */
   openOrderCount(): number {
-    return this.paperEngine.openOrderCount();
+    return this.simEngine.openOrderCount();
   }
 
   /**
    * Get pending order snapshots.
    */
   pendingSnapshots(): OrderSnapshot[] {
-    return this.paperEngine.pendingSnapshots();
+    return this.simEngine.pendingSnapshots();
   }
 
-  /** Expose the underlying paper engine for reconciliation. */
-  get paperEngineRef(): SimulatedExecutionEngine {
-    return this.paperEngine;
+  /** Expose the underlying simulated execution engine for reconciliation. */
+  get simEngineRef(): SimulatedExecutionEngine {
+    return this.simEngine;
   }
 }

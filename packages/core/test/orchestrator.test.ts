@@ -319,7 +319,7 @@ describe("AC1: forbidden route enforcement — no direct jump to execution", () 
     expect(approved.ok).toBe(true);
 
     // EXECUTING
-    const toPaper = orchestrator.transition({
+    const toSimulated = orchestrator.transition({
       to: "EXECUTING",
       actor: MODULE_ACTORS.executionEngine,
       data: {
@@ -327,7 +327,7 @@ describe("AC1: forbidden route enforcement — no direct jump to execution", () 
       },
       timestampMs: FIXED_TS,
     });
-    expect(toPaper.ok).toBe(true);
+    expect(toSimulated.ok).toBe(true);
 
     // RECONCILING
     const toReconciling = orchestrator.transition({

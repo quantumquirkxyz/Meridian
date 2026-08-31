@@ -138,7 +138,7 @@ describe("SimulatedExecutionEngine", () => {
     expect(engine.snapshot("intent-1")?.state).toBe("CANCELLED");
   });
 
-  test("exposes and cancels all pending paper orders", () => {
+  test("exposes and cancels all pending simulated orders", () => {
     const engine = new SimulatedExecutionEngine();
     engine.submit({
       intent: intent({ idempotencyKey: "intent-1" }),
