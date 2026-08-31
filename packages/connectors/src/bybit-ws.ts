@@ -270,7 +270,8 @@ export class BybitWebSocketClient {
     if (!this.privateWs || this.privateWs.readyState !== WS_OPEN) return;
     if (!this.apiKey || !this.apiSecret) return;
 
-    const expires = this.nowMs() + 10_000; // 10s from now
+    const expires = this.nowMs() + 10_000; // 10s window (Bybit V5 WS auth spec)
+    // Bybit V5 WS auth: HMAC of "GET/realtime" + expires. Args = [key, expires, sig].
     const signPayload = `GET/realtime${expires}`;
     const signature = createHmac("sha256", this.apiSecret)
       .update(signPayload)
@@ -306,7 +307,9 @@ export class BybitWebSocketClient {
 
     // Handle auth response
     if (parsed.op === "auth") {
-      if (parsed.auth) {
+      // Some Bybit responses use "success: true" instead of "auth"
+      const authTrue = (parsed as { auth?: boolean }).auth === true || (parsed as unknown as Record<string, unknown>).success === true;
+      if (authTrue) {
         this.authenticated = true;
         this._state = "connected";
         this.subscribePrivateTopics();
@@ -314,7 +317,8 @@ export class BybitWebSocketClient {
         this.authPromiseResolve = null;
         this.events.onConnected?.();
       } else {
-        const err = new Error(`Auth failed: ${parsed.ret_msg ?? "unknown"}`);
+        const retMsg = (parsed as { ret_msg?: string }).ret_msg ?? (parsed as unknown as Record<string, unknown>).message ?? "unknown";
+        const err = new Error(`Auth failed: ${retMsg}`);
         this.authPromiseReject?.(err);
         this.authPromiseReject = null;
         this.events.onError?.(err);

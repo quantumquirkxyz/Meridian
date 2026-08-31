@@ -1,0 +1,2 @@
+{"timestampMs":1788140465669,"type":"SESSION_STARTED","data":{"symbols":["BTC","ETH","USDT"],"cycleIntervalMs":5000,"mode":"live","reconciliationIntervalMs":30000},"sessionId":"sess-20260831-014105-09436c"}
+{"timestampMs":1788140467786,"type":"AUTH_FAILED","data":{"error":"Auth failed: "},"sessionId":"sess-20260831-014105-09436c"}

@@ -1,0 +1,7 @@
+{"timestampMs":1788140652614,"type":"SESSION_STARTED","data":{"symbols":["BTC","ETH","USDT"],"cycleIntervalMs":5000,"mode":"live","reconciliationIntervalMs":30000},"sessionId":"sess-20260831-014412-9a661d"}
+{"timestampMs":1788140655416,"type":"RECONCILIATION","data":{"unresolved":false,"severity":"NONE","orphanOrders":[],"positionMismatches":[],"balanceMismatches":[]},"sessionId":"sess-20260831-014412-9a661d"}
+{"timestampMs":1788140660419,"type":"REGIME_CHANGED","data":{"cycleCount":1,"regime":"range","confidence":0.5},"sessionId":"sess-20260831-014412-9a661d"}
+{"timestampMs":1788140660419,"type":"CYCLE_COMPLETE","data":{"cycleCount":1,"regime":"range","regimeConfidence":0.5,"submitted":0,"blocked":0,"opportunitiesDetected":0,"ordersFilled":0,"killSwitchActive":false},"sessionId":"sess-20260831-014412-9a661d"}
+{"timestampMs":1788140665418,"type":"CYCLE_COMPLETE","data":{"cycleCount":2,"regime":"range","regimeConfidence":0.5,"submitted":0,"blocked":0,"opportunitiesDetected":0,"ordersFilled":0,"killSwitchActive":false},"sessionId":"sess-20260831-014412-9a661d"}
+{"timestampMs":1788140669482,"type":"CYCLE_COMPLETE","data":{"cycleCount":3,"regime":"range","regimeConfidence":0.5,"submitted":0,"blocked":0,"opportunitiesDetected":0,"ordersFilled":0,"killSwitchActive":false},"sessionId":"sess-20260831-014412-9a661d"}
+{"timestampMs":1788140671621,"type":"SESSION_ENDED","data":{"durationMs":19012,"cycleCount":3,"ordersSubmitted":0,"ordersFilled":0,"tradesCount":0},"sessionId":"sess-20260831-014412-9a661d"}

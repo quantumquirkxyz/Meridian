@@ -140,9 +140,10 @@ async function runLiveMode(
   manifest: ManifestWriter,
 ): Promise<{ exitCode: number }> {
   const runner = new LiveRunner({
-    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
-      t.replace("/", ""),
-    ),
+    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) => {
+      const base = t.replace("/", "");
+      return base.endsWith("USDT") ? base : `${base}USDT`;
+    }),
     bybitApiKey: opts.config.bybitApiKey,
     bybitApiSecret: opts.config.bybitApiSecret,
     bybitEndpoints: opts.config.bybitEndpoints,
@@ -194,9 +195,10 @@ async function runDemoMode(
   paths: SessionPaths,
 ): Promise<{ exitCode: number }> {
   const runner = new LiveRunner({
-    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
-      t.replace("/", ""),
-    ),
+    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) => {
+      const base = t.replace("/", "");
+      return base.endsWith("USDT") ? base : `${base}USDT`;
+    }),
     bybitApiKey: opts.config.bybitApiKey,
     bybitApiSecret: opts.config.bybitApiSecret,
     bybitEndpoints: opts.config.bybitEndpoints,

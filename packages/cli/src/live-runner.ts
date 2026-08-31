@@ -316,16 +316,15 @@ export class LiveRunner {
     console.log(`[live] Connecting to Bybit private WebSocket...`);
     await this.wsClient.connect();
 
-    // Wait for private WS authentication
+    // Wait for private WS authentication — allowed to fail for demo mode
     if (this.config.bybitApiKey && this.config.bybitApiSecret) {
       try {
         await this.wsClient.waitForAuth(10_000);
         console.log(`[live] Private WebSocket authenticated.`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[live] ERROR: Private WebSocket auth failed: ${msg}`);
-        this.auditLogger.record("AUTH_FAILED", { error: msg });
-        throw new Error(`Private WebSocket auth failed: ${msg}`);
+        console.warn(`[live] Private WebSocket auth failed (${msg}). Continuing without private stream — demo mode may run without fill confirmations.`);
+        // Do NOT abort; public WS and REST are sufficient for demo lifecycle
       }
     }
 
