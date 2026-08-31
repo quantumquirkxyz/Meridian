@@ -209,7 +209,7 @@ _Nomenclature rule (resolved 2026-08-27): three explicit namespaces — no lexic
 _Avoid_: trading always active.
 
 **Demo Trading**:
-Bybit's simulated trading environment with public and private API interaction against the demo venue. It is risk-free with virtual assets, but it exercises the exchange integration layer more realistically than internal simulation.
+Bybit's simulated trading environment with public and private API interaction against the demo venue (`https://api-demo.bybit.com`). It is risk-free with virtual assets, but it exercises the exchange integration layer (REST, private WebSocket) more realistically than pure internal simulation. It is the required phase before `Live`; see `OPERATING_FLOW.md`.
 _Avoid_: treating demo trading as if it were live capital, or treating it as a pure internal simulator.
 
 **Live**:
@@ -217,6 +217,8 @@ Bybit's real trading environment with real balances, real API keys, and capital 
 _Avoid_: any mode that can be used without real exchange credentials or without capital exposure.
 
 **Seam (unified runner)**: `LiveRunner` receives `bybitEndpoints` from `AppConfig`. `MODE=demo` → `restUrl=api-demo.bybit.com`, `wsUrl=stream-demo.bybit.com`; `MODE=live` → mainnet endpoints. No parallel runner or agent exists; `AgentAdapter` (LLM) is identical across modes.
+
+**Phase**: Only `demo` (Bybit Demo Trading, virtual assets, exchange-integrated) and `live` (real capital, bounded canary). The internal `SimulatedExecutionEngine` is the execution layer for both; `demo` validates it against Bybit Demo endpoints, `live` uses it with real keys and canary limits.
 
 **Phase**:
 A roadmap milestone with an exit criterion defined by eliminated risk: Phase Zero (contracts and invariants), Alpha (data, graph, and harness), Beta (loops, orchestration, agents, risk, and demo trading), Gamma (live canary, adaptation, and hardening).
