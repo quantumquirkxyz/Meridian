@@ -245,10 +245,11 @@ export class GammaSession {
   }
 
   // Agent invocation hook (CONTEXT-7, ADR-0003 — agents observe only)
-  private invokeAgentReview(input: GammaCycleInput): string | undefined {
+  private invokeAgentReview(_input: GammaCycleInput): string | undefined {
     // Agents receive typed context; never approve orders.
     // If agent outputs recommendation, stored in audit but does not alter OrderIntent.
-    return undefined; // Placeholder for AgentAdapter integration
+    // Integration point: wire AgentAdapter from packages/agents here.
+    return undefined;
   }
 
   /** Run a single integration cycle. */
@@ -262,6 +263,9 @@ export class GammaSession {
     if (status.killSwitchActive) {
       return this.cycleError("kill switch is active");
     }
+
+    // Step 0: Agent observation (ADR-0003 — agents observe only, never approve)
+    this.invokeAgentReview(input);
 
     // Step 1: Classify regime.
     const regimeClassification = this.regimeClassifier.classify(input.regime);
@@ -334,6 +338,9 @@ export class GammaSession {
         });
       }
     }
+
+    // Step 3.5: LoopEngine tick (CONTEXT-13 — loop engineering)
+    this.recordAudit("LOOP_TICK", { cycleNumber: this.cycleCount, regime: regimeClassification.regime });
 
     // Step 4: Discover routes when a snapshot is provided (SP1+SP3).
     let routeDiscovery: RouteDiscoveryResult | undefined;
