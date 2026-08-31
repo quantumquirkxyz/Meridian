@@ -244,6 +244,13 @@ export class GammaSession {
     return this.canarySession.control(command);
   }
 
+  // Agent invocation hook (CONTEXT-7, ADR-0003 — agents observe only)
+  private invokeAgentReview(input: GammaCycleInput): string | undefined {
+    // Agents receive typed context; never approve orders.
+    // If agent outputs recommendation, stored in audit but does not alter OrderIntent.
+    return undefined; // Placeholder for AgentAdapter integration
+  }
+
   /** Run a single integration cycle. */
   runCycle(input: GammaCycleInput): GammaCycleResult {
     if (!this.running) {

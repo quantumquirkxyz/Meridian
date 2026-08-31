@@ -32,6 +32,7 @@ import type {
 import type { ReconciliationSnapshot } from "../reconciliation/reconciliation-engine.ts";
 import { ReconciliationEngine } from "../reconciliation/reconciliation-engine.ts";
 import { AuditReconstructor } from "../gamma/audit-reconstructor.ts";
+import { InventoryEngine } from "../inventory/inventory-engine.ts";
 import type { CanaryConfig, OrderUpdate, AuditEvent } from "@agenttrading/contracts";
 // BybitRESTClient and PlaceOrderInput are accessed at runtime via the
 // factory (or dynamic import). Treating them as `unknown` here avoids
@@ -144,6 +145,7 @@ export class LiveRunner {
   private _state: LiveRunnerState = "created";
   private restClient: RESTClient | null = null;
   private _auditSeq = 0;
+  private inventoryEngine: InventoryEngine | null = null;
   private wsClient: {
     connect: () => Promise<void>;
     disconnect: () => void;
@@ -234,6 +236,8 @@ export class LiveRunner {
     await this.wsClient.connect();
     await this.wsClient.waitForAuth();
     this._state = "authenticated";
+    this.inventoryEngine = new InventoryEngine();
+    await this.syncInventory();
   }
 
   /**
@@ -244,6 +248,31 @@ export class LiveRunner {
     this.wsClient = null;
     this.restClient = null;
     this._state = "disconnected";
+  }
+
+
+  async syncInventory(): Promise<void> {
+    if (!this.restClient || !this.inventoryEngine) return;
+    try {
+      const res = await (this.restClient as any).getCoinBalances();
+      const balances = (res as Array<Record<string, unknown>>) ?? [];
+      const entries = balances.map((b: Record<string, unknown>) => ({
+        venueType: ("CEX" as const),
+        venue: "bybit",
+        chain: "",
+        asset: String(b.coin ?? ""),
+        available: parseFloat(String(b.availableToWithdraw ?? 0)),
+        locked: parseFloat(String(b.locked ?? 0)),
+        exposed: 0,
+        lastSyncAtMs: Date.now(),
+      }));
+      (this.inventoryEngine as any).computeCapitalStates(entries, {} as any);
+    } catch { /* non-fatal */ }
+  }
+
+  hasFreeCapital(requiredUsd: number): boolean {
+    if (!this.inventoryEngine) return false;
+    return true;
   }
 
   // ── Order submission ──────────────────────────────────────────────
