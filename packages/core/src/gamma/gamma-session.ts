@@ -244,11 +244,10 @@ export class GammaSession {
     return this.canarySession.control(command);
   }
 
-  // Agent invocation hook (CONTEXT-7, ADR-0003 — agents observe only)
+  // Integration point: wire AgentAdapter from packages/agents here.
+  // STUB — agents observe only (ADR-0003); never approve orders.
   private invokeAgentReview(_input: GammaCycleInput): string | undefined {
-    // Agents receive typed context; never approve orders.
-    // If agent outputs recommendation, stored in audit but does not alter OrderIntent.
-    // Integration point: wire AgentAdapter from packages/agents here.
+    // TODO(#125): connect AgentAdapter for typed agent observations.
     return undefined;
   }
 

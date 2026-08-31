@@ -241,11 +241,11 @@ export class LiveRunner {
         this.handleOrderUpdate(update);
       },
       onError: (error) => {
-        console.error(`[live] WebSocket error: ${error.message}`);
+        this.auditLogger.record("WS_ERROR", { message: error.message });
         this.events.onError?.(error);
       },
       onDisconnected: (reason) => {
-        console.log(`[live] WebSocket disconnected: ${reason}`);
+        this.auditLogger.record("WS_DISCONNECTED", { reason });
       },
     };
     this.wsClient.on(wsEvents);
@@ -666,8 +666,6 @@ export class LiveRunner {
     // Derive regime input
     const regimeInput = this.deriveRegimeInput();
 
-    // Create synthetic opportunity (for demo purposes; real implementation
-    // would detect opportunities from market data)
     const { intents, riskDecisions } = this.createOpportunity();
 
     // Run GammaSession cycle
@@ -818,7 +816,12 @@ export class LiveRunner {
     intents: OrderIntent[];
     riskDecisions: import("@agenttrading/contracts").RiskDecision[];
   } {
-    // Generate opportunity every 5th cycle (demo: allow synthetic even if WS feed not active)
+    // Require live market data before creating any order intent.
+    // This keeps live/demo runner behavior honest: no fabricated prices.
+    if (this.market.mid <= 0 || this.market.bid <= 0 || this.market.ask <= 0) {
+      return { intents: [], riskDecisions: [] };
+    }
+
     if (this.cycleCount % 5 !== 0) {
       return { intents: [], riskDecisions: [] };
     }
@@ -826,8 +829,7 @@ export class LiveRunner {
     const side: "BUY" | "SELL" =
       this.cycleCount % 10 === 0 ? "BUY" : "SELL";
     const quantity = 0.001;
-    // Use market price if available; synthetic default (100) when WS feed not yet active
-    const price = this.market.mid > 0 ? this.market.mid : 100;
+    const price = this.market.mid;
     const rawSymbol = this.config.symbols[0] ?? "BTCUSDT";
     const symbol = rawSymbol.endsWith("USDT") ? rawSymbol : `${rawSymbol}USDT`;
 

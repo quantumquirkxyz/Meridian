@@ -57,6 +57,7 @@ export const AUDIT_REASON_CODES = [
   "DATA_SOURCE_HALTED",
   "GRAPH_STALE",
   "RECONCILIATION_MISMATCH",
+  "INVENTORY_BLOCKED",
   // Orchestrator reason codes (issue #25)
   "KILL_SWITCH_ACTIVE",
   "KILL_SWITCH_ACTIVATED",

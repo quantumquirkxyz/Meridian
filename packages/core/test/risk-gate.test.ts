@@ -713,16 +713,6 @@ describe("activeRules", () => {
 
 // ── Backward compatibility ──────────────────────────────────────────
 
-describe("RiskGate backward compatibility", () => {
-  test("imported RiskGate value works as a constructor", async () => {
-    const { RiskGate } = await import("../src/risk/risk-gate.ts");
-    const gate = new RiskGate(DEFAULT_RISK_POLICY);
-    expect(gate).toBeInstanceOf(RiskEngine);
-  });
-});
-
-// ── Kill switch (HALT_SYSTEM action) ────────────────────────────────
-
 describe("HALT_SYSTEM action", () => {
   const engine = new RiskEngine(DEFAULT_RISK_POLICY);
 

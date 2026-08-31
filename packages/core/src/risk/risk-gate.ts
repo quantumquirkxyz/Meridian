@@ -318,7 +318,7 @@ export class RiskEngine {
     // Inventory blocks are fail-closed risk decisions.
     if (input.inventoryBlocked) {
       result.decision = "REJECT";
-      result.reasonCodes.push("MIN_LIQUIDITY");
+      result.reasonCodes.push("INVENTORY_BLOCKED");
       result.notes = "inventory blocked execution; no trading allowed";
       return result;
     }
@@ -604,7 +604,4 @@ export function activeRules(policy: RiskPolicy): RiskReasonCode[] {
 // ── Backward compatibility ──────────────────────────────────────────
 
 /**
- * @deprecated Use `RiskEngine` directly. RiskGate is retained as a value
- * alias for backward compatibility with issue #13 imports.
- */
-export const RiskGate = RiskEngine;
+*/
