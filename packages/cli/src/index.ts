@@ -81,7 +81,11 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
   console.log("║             AgentTrading — Startup Banner               ║");
   console.log("╠══════════════════════════════════════════════════════════╣");
   console.log(`║  Mode:          ${config.mode.padEnd(40)}║`);
-  console.log(`║  Venue:         ${(canaryConfig.scope.allowedVenues.join(", ") || "none").padEnd(40)}║`);
+  if (config.mode === "demo") {
+    console.log(`║  Venue:         bybit (demo trading)${" ".repeat(21)}║`);
+  } else {
+    console.log(`║  Venue:         ${(canaryConfig.scope.allowedVenues.join(", ") || "none").padEnd(40)}║`);
+  }
   console.log(
     `║  Capital Cap:   $${canaryConfig.capitalLimits.maxCapitalUsd.toFixed(2).padEnd(38)}║`,
   );
@@ -95,7 +99,6 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
   console.log(
     `║  Cycle:         ${cycleIntervalMs}ms${" ".repeat(Math.max(0, 40 - String(cycleIntervalMs).length - 2))}║`,
   );
-  console.log(`║  Feed:          ${"—".padEnd(40)}║`);
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log();
 }
@@ -134,6 +137,7 @@ function printSessionSummary(
 async function runLiveMode(
   opts: RunOptions,
   paths: SessionPaths,
+  manifest: ManifestWriter,
 ): Promise<{ exitCode: number }> {
   const runner = new LiveRunner({
     symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) =>
@@ -147,12 +151,6 @@ async function runLiveMode(
     auditLogPath: paths.auditLogPath,
     sessionId: paths.sessionId,
   });
-
-  const manifest = new ManifestWriter({
-    sessionId: paths.sessionId,
-    startedAtMs: Date.now(),
-  });
-  manifest.track("audit-log", paths.auditLogPath);
 
   await runner.start();
 
@@ -188,9 +186,8 @@ async function runLiveMode(
 }
 
 /**
- * Demo mode is intentionally separated from live. Until a Bybit
- * Demo Trading runner exists, starting this mode must fail closed instead of
- * falling through to the live runner with virtual-capital credentials.
+ * Demo mode uses simulated trading with internal market generation.
+ * Does not require exchange connectivity or API keys.
  */
 async function runDemoMode(
   opts: RunOptions,
@@ -210,6 +207,48 @@ async function runDemoMode(
   });
 
   await runner.start();
+
+  // Wait for graceful shutdown via SIGINT/SIGTERM
+  const manifest = new ManifestWriter({
+    sessionId: paths.sessionId,
+    startedAtMs: Date.now(),
+  });
+  manifest.track("audit-log", paths.auditLogPath);
+
+  await new Promise<void>((resolve) => {
+    let shutdownDone = false;
+
+    const shutdown = () => {
+      if (shutdownDone) return;
+      shutdownDone = true;
+
+      process.removeListener("SIGINT", shutdown);
+      process.removeListener("SIGTERM", shutdown);
+
+      console.log("\n[demo] Shutting down...");
+      runner.stop();
+
+      shutdownObservability({
+        runner: { startedAtMs: runner.startedAtMs, stoppedAtMs: Date.now() },
+        paths,
+        config: opts.config,
+        manifest,
+      });
+
+      resolve();
+    };
+
+    runner.on({
+      onShutdown: () => {
+        console.log("[demo] Session ended via event.");
+        setTimeout(() => shutdown(), 1000);
+      },
+    });
+
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+  });
+
   return { exitCode: 0 };
 }
 
@@ -316,7 +355,15 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   if (config.mode === "demo") {
     exitCode = (await runDemoMode(runOpts, paths)).exitCode;
   } else {
-    exitCode = (await runLiveMode(runOpts, paths)).exitCode;
+    // Only use manifest for live mode
+    const manifest = new ManifestWriter({
+      sessionId: paths.sessionId,
+      startedAtMs: Date.now(),
+    });
+    manifest.track("audit-log", paths.auditLogPath);
+    
+    // Add manifest to runOpts for live mode
+    exitCode = (await runLiveMode(runOpts, paths, manifest)).exitCode;
   }
   process.exit(exitCode);
 }

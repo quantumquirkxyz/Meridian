@@ -121,7 +121,8 @@ export async function loadConfig(
   const bybitApiKey = env.BYBIT_API_KEY ?? "";
   const bybitApiSecret = env.BYBIT_API_SECRET ?? "";
 
-  if (mode === "demo" || mode === "live") {
+  // Only require API keys for live/demo modes (demo connects to Bybit Demo Trading)
+  if (mode === "live" || mode === "demo") {
     if (!bybitApiKey.trim()) {
       errors.push({
         field: "BYBIT_API_KEY",
@@ -151,7 +152,7 @@ export async function loadConfig(
     canaryConfig = mergeCanaryConfig(DEFAULT_CANARY_CONFIG, loadResult.config);
   }
 
-  // ── Validate canary config for live mode ──────────────────────────
+  // Demo mode connects to Bybit Demo Trading (testnet); only live requires withdrawals disabled
   if (mode === "live" && !canaryConfig.apiKeys.withdrawalsDisabled) {
     errors.push({
       field: "WITHDRAWALS_DISABLED",
