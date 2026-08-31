@@ -13,19 +13,21 @@
 import { parseCanaryConfig } from "@agenttrading/contracts";
 import type { CanaryConfig } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
-import { DEMO_BASE_URL, DEMO_WS_URL } from "@agenttrading/connectors";
+import { DEMO_BASE_URL, DEMO_PUBLIC_WS_URL, DEMO_PRIVATE_WS_URL } from "@agenttrading/connectors";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 /** System mode: Bybit Demo Trading or live capital. */
 export type Mode = "demo" | "live";
 
-/** Bybit endpoint pair for a given mode. */
+/** Bybit endpoints for a given mode (REST + public/private WS). */
 export interface BybitEndpoints {
   /** REST base URL. */
   restUrl: string;
-  /** WebSocket URL. */
-  wsUrl: string;
+  /** Public WebSocket URL (market data). */
+  publicWsUrl: string;
+  /** Private WebSocket URL (orders, positions, executions). */
+  privateWsUrl: string;
 }
 
 /** Validated runtime configuration for the CLI. */
@@ -167,8 +169,8 @@ export async function loadConfig(
 
   const bybitEndpoints: BybitEndpoints =
     mode === "demo"
-      ? { restUrl: DEMO_BASE_URL, wsUrl: DEMO_WS_URL }
-      : { restUrl: "https://api.bybit.com", wsUrl: "wss://stream.bybit.com" };
+      ? { restUrl: DEMO_BASE_URL, publicWsUrl: DEMO_PUBLIC_WS_URL, privateWsUrl: DEMO_PRIVATE_WS_URL }
+      : { restUrl: "https://api.bybit.com", publicWsUrl: "wss://stream.bybit.com/v5/public/linear", privateWsUrl: "wss://stream.bybit.com/v5/private" };
 
   return {
     ok: true,

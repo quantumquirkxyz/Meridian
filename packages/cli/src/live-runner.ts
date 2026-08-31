@@ -55,7 +55,7 @@ export interface LiveRunnerConfig {
   /** Bybit API secret. */
   bybitApiSecret: string;
   /** Bybit REST + WS endpoints — same runner, different endpoints per mode. */
-  bybitEndpoints: { restUrl: string; wsUrl: string };
+  bybitEndpoints: { restUrl: string; publicWsUrl: string; privateWsUrl: string };
   /** Cycle interval in milliseconds. */
   cycleIntervalMs: number;
   /** Canary config override. */
@@ -74,6 +74,8 @@ export interface LiveRunnerConfig {
   nowMs?: () => number;
   /** Optional status display for real-time cycle output. */
   statusDisplay?: StatusDisplay;
+  /** Mode: demo (Bybit Demo Trading) or live. Determines withdrawal-check strictness. */
+  mode?: "demo" | "live";
 }
 
 export interface LiveRunnerEvents {
@@ -126,6 +128,7 @@ export class LiveRunner {
       | "reconciliationIntervalMs"
       | "orderCategory"
       | "feeBps"
+      | "mode"
     >
   > & {
     canaryConfig: CanaryConfig;
@@ -186,6 +189,7 @@ export class LiveRunner {
       feeBps: config.feeBps ?? DEFAULT_FEE_BPS,
       nowMs: this.nowMs,
       statusDisplay: config.statusDisplay,
+      mode: config.mode ?? "live",
     };
 
     // AC8: Validate API keys
@@ -218,8 +222,8 @@ export class LiveRunner {
       apiSecret: this.config.bybitApiSecret,
       symbols: this.config.symbols,
       nowMs: this.nowMs,
-      publicWsUrl: this.config.bybitEndpoints.wsUrl,
-      privateWsUrl: this.config.bybitEndpoints.wsUrl,
+      publicWsUrl: this.config.bybitEndpoints.publicWsUrl,
+      privateWsUrl: this.config.bybitEndpoints.privateWsUrl,
     });
 
     // Wire WS events (AC1, AC2)
@@ -412,7 +416,7 @@ export class LiveRunner {
         "BYBIT_API_SECRET is required for live mode. Refusing to start.",
       );
     }
-    if (!this.config.canaryConfig.apiKeys.withdrawalsDisabled) {
+    if (this.config.mode === "live" && !this.config.canaryConfig.apiKeys.withdrawalsDisabled) {
       throw new Error(
         "Live mode requires withdrawals to be disabled on API keys. Refusing to start.",
       );

@@ -204,6 +204,7 @@ async function runDemoMode(
     canaryConfig: opts.config.canaryConfig,
     auditLogPath: paths.auditLogPath,
     sessionId: paths.sessionId,
+    mode: "demo",
   });
 
   await runner.start();

@@ -27,7 +27,7 @@ function createRunner(overrides?: Record<string, unknown>): LiveRunner {
     symbols: ["BTCUSDT"],
     bybitApiKey: "test-key",
     bybitApiSecret: "test-secret",
-          bybitEndpoints: { restUrl: "https://api.bybit.com", wsUrl: "wss://stream.bybit.com" },
+          bybitEndpoints: { restUrl: "https://api.bybit.com", publicWsUrl: "wss://stream.bybit.com/v5/public/linear", privateWsUrl: "wss://stream.bybit.com/v5/private" },
     cycleIntervalMs: 1000,
     auditLogPath: join(tmpDir, "audit.jsonl"),
     nowMs: () => 1000,
@@ -54,7 +54,7 @@ describe("LiveRunner", () => {
           symbols: ["BTCUSDT"],
           bybitApiKey: "",
           bybitApiSecret: "test-secret",
-          bybitEndpoints: { restUrl: "https://api.bybit.com", wsUrl: "wss://stream.bybit.com" },
+          bybitEndpoints: { restUrl: "https://api.bybit.com", publicWsUrl: "wss://stream.bybit.com/v5/public/linear", privateWsUrl: "wss://stream.bybit.com/v5/private" },
           cycleIntervalMs: 1000,
           auditLogPath: join(tmpDir, "test.jsonl"),
           nowMs: () => 1000,
@@ -69,7 +69,7 @@ describe("LiveRunner", () => {
           symbols: ["BTCUSDT"],
           bybitApiKey: "test-key",
           bybitApiSecret: "",
-          bybitEndpoints: { restUrl: "https://api.bybit.com", wsUrl: "wss://stream.bybit.com" },
+          bybitEndpoints: { restUrl: "https://api.bybit.com", publicWsUrl: "wss://stream.bybit.com/v5/public/linear", privateWsUrl: "wss://stream.bybit.com/v5/private" },
           cycleIntervalMs: 1000,
           auditLogPath: join(tmpDir, "test.jsonl"),
           nowMs: () => 1000,
@@ -84,7 +84,7 @@ describe("LiveRunner", () => {
           symbols: ["BTCUSDT"],
           bybitApiKey: "test-key",
           bybitApiSecret: "test-secret",
-          bybitEndpoints: { restUrl: "https://api.bybit.com", wsUrl: "wss://stream.bybit.com" },
+          bybitEndpoints: { restUrl: "https://api.bybit.com", publicWsUrl: "wss://stream.bybit.com/v5/public/linear", privateWsUrl: "wss://stream.bybit.com/v5/private" },
           cycleIntervalMs: 1000,
           auditLogPath: join(tmpDir, "test.jsonl"),
           nowMs: () => 1000,
@@ -108,6 +108,24 @@ describe("LiveRunner", () => {
     await expect(runner.start()).rejects.toThrow(
       "Failed to verify Bybit API connectivity",
     );
+  });
+
+  test("AC8: demo mode does not require withdrawals to be disabled", () => {
+    const runner = new LiveRunner({
+      symbols: ["BTCUSDT"],
+      bybitApiKey: "test-key",
+      bybitApiSecret: "test-secret",
+      bybitEndpoints: { restUrl: "https://api.bybit.com", publicWsUrl: "wss://stream.bybit.com/v5/public/linear", privateWsUrl: "wss://stream.bybit.com/v5/private" },
+      cycleIntervalMs: 1000,
+      auditLogPath: join(tmpDir, "test.jsonl"),
+      nowMs: () => 1000,
+      mode: "demo",
+      canaryConfig: {
+        ...DEFAULT_CANARY_CONFIG,
+        apiKeys: { ...DEFAULT_CANARY_CONFIG.apiKeys, withdrawalsDisabled: false },
+      },
+    });
+    expect(runner).toBeDefined();
   });
 
   // ── AC11: Audit trail ────────────────────────────────────────────
