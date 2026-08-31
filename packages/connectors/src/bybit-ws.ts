@@ -307,8 +307,9 @@ export class BybitWebSocketClient {
 
     // Handle auth response
     if (parsed.op === "auth") {
-      // Some Bybit responses use "success: true" instead of "auth"
-      const authTrue = (parsed as { auth?: boolean }).auth === true || (parsed as unknown as Record<string, unknown>).success === true;
+      // Bybit V5 auth response: {op:"auth", auth:true} or {op:"auth", auth:{...}} (success) or {op:"auth", success:false, ret_msg:"..."} (fail)
+      const authValue = (parsed as { auth?: unknown }).auth;
+      const authTrue = authValue === true || (typeof authValue === "object" && authValue !== null);
       if (authTrue) {
         this.authenticated = true;
         this._state = "connected";
