@@ -40,7 +40,6 @@ export * from "./gamma/report-generator.ts";
 export * from "./gamma/audit-exporter.ts";
 export * from "./gamma/audit-availability.ts";
 export * from "./gamma/gamma-session.ts";
-export * from "./live/live-runner-types.ts";
 export * from "./utils/slippage.ts";
 export * from "./utils/market-state.ts";
 

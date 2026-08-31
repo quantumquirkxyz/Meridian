@@ -19,8 +19,6 @@ import { parseCliArgs } from "./args.ts";
 import { generateSessionId } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 import { ManifestWriter } from "./manifest.ts";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 
 // ── Re-exports (keep backward-compatible library API) ─────────────────
 
@@ -99,30 +97,6 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
   console.log(
     `║  Cycle:         ${cycleIntervalMs}ms${" ".repeat(Math.max(0, 40 - String(cycleIntervalMs).length - 2))}║`,
   );
-  console.log("╚══════════════════════════════════════════════════════════╝");
-  console.log();
-}
-
-// ── Session Summary ───────────────────────────────────────────────────
-
-/** Produce a final session summary on exit. */
-function printSessionSummary(
-  startTimeMs: number,
-  config: AppConfig,
-  reason: string,
-  completed: boolean,
-): void {
-  const elapsedMs = Date.now() - startTimeMs;
-  const elapsedSec = (elapsedMs / 1000).toFixed(1);
-
-  console.log();
-  console.log("╔══════════════════════════════════════════════════════════╗");
-  console.log("║              Session Summary                            ║");
-  console.log("╠══════════════════════════════════════════════════════════╣");
-  console.log(`║  Mode:          ${config.mode.padEnd(40)}║`);
-  console.log(`║  Duration:      ${elapsedSec}s${" ".repeat(Math.max(0, 42 - elapsedSec.length))}║`);
-  console.log(`║  Stop Reason:   ${reason.padEnd(40)}║`);
-  console.log(`║  Completed:     ${(completed ? "yes" : "no").padEnd(40)}║`);
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log();
 }

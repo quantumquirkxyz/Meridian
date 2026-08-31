@@ -1,6 +1,5 @@
 import {
   isArrayOf,
-  isBoolean,
   isBooleanLiteralFalse,
   isBooleanLiteralTrue,
   isEnumOf,

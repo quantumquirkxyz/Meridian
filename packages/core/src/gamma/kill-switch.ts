@@ -14,7 +14,6 @@
  */
 
 import {
-  type CanaryConfig,
   type CanaryKillSwitchConfig,
 } from "@agenttrading/contracts";
 

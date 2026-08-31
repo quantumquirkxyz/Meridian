@@ -24,7 +24,6 @@ export * from "./events.ts";
 export * from "./loop.ts";
 export * from "./agent.ts";
 export * from "./consultative-agents.ts";
-export * from "./beta-control.ts";
 export * from "./canary-config.ts";
 export * from "./gamma-control.ts";
 export * from "./regime.ts";
