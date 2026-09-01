@@ -285,6 +285,7 @@ export class LiveRunner {
   /** Connect infra layer (DataQualityMonitor + ObservabilityService) — lazy load due to workspace dependency. */
   async connectInfra(): Promise<void> {
     try {
+      // @ts-expect-error - workspace dependency resolved at runtime via bun install
       const infra = await import("@agenttrading/infra");
       this.dataQualityMonitor = new (infra.DataQualityMonitor as new () => unknown)();
       this.observability = new (infra.ObservabilityService as new (cfg: unknown) => unknown)({ sessionId: this.sessionId ?? "live-runner" });
