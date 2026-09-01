@@ -43,8 +43,6 @@ import {
   BybitWebSocketClient,
   type BybitWSClientEvents,
 } from "@agenttrading/connectors";
-import { DataQualityMonitor, ObservabilityService, InfrastructureEngine } from "@agenttrading/infra";
-import { BacktestRunner } from "@agenttrading/harness";
 import { StatusDisplay } from "./status-display.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -144,8 +142,8 @@ export class LiveRunner {
   private readonly session: GammaSession;
   private readonly auditLogger: AuditLogger;
   private readonly reconciliationEngine: ReconciliationEngine;
-  private readonly dataQualityMonitor = new DataQualityMonitor();
-  private readonly observability = new ObservabilityService({ sessionId: "live-runner" });
+  private dataQualityMonitor?: unknown; // connected via connectInfra() — infra observation layer
+  private observability?: unknown; // connected via connectInfra() — health/metrics
 
   // Connectors
   private readonly restClient: BybitRESTClient;
@@ -240,6 +238,9 @@ export class LiveRunner {
           mid: snapshot.mid ?? 0,
           liquidityUsd: snapshot.depth,
         };
+        // Forward to infra observability if connected.
+        (this.observability as { recordMarketData?: (s: unknown) => void } | undefined)
+          ?.recordMarketData?.(snapshot);
       },
       onOrderUpdate: (update) => {
         this.handleOrderUpdate(update);
@@ -279,6 +280,17 @@ export class LiveRunner {
    */
   control(command: GammaControlCommand) {
     return this.session.control(command);
+  }
+
+  /** Connect infra layer (DataQualityMonitor + ObservabilityService) — lazy load due to workspace dependency. */
+  async connectInfra(): Promise<void> {
+    try {
+      const infra = await import("@agenttrading/infra");
+      this.dataQualityMonitor = new (infra.DataQualityMonitor as new () => unknown)();
+      this.observability = new (infra.ObservabilityService as new (cfg: unknown) => unknown)({ sessionId: this.sessionId ?? "live-runner" });
+    } catch {
+      // Infra layer optional at startup — workspace linking may be deferred.
+    }
   }
 
   /** Start the live runner: validate, connect WS, reconcile, start cycles. */
