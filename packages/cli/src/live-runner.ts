@@ -43,6 +43,8 @@ import {
   BybitWebSocketClient,
   type BybitWSClientEvents,
 } from "@agenttrading/connectors";
+import { DataQualityMonitor, ObservabilityService, InfrastructureEngine } from "@agenttrading/infra";
+import { BacktestRunner } from "@agenttrading/harness";
 import { StatusDisplay } from "./status-display.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -142,6 +144,8 @@ export class LiveRunner {
   private readonly session: GammaSession;
   private readonly auditLogger: AuditLogger;
   private readonly reconciliationEngine: ReconciliationEngine;
+  private readonly dataQualityMonitor = new DataQualityMonitor();
+  private readonly observability = new ObservabilityService({ sessionId: "live-runner" });
 
   // Connectors
   private readonly restClient: BybitRESTClient;

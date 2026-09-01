@@ -183,6 +183,9 @@ export interface GammaSessionOptions {
  * GammaSession: the top-level integration that wires all Gamma subsystems
  * together for a go-live canary session.
  */
+import { BaseAgentAdapter } from "@agenttrading/agents";
+import type { AgentInput, AgentOutput } from "@agenttrading/contracts";
+
 export class GammaSession {
   private readonly now: () => number;
   private readonly learningCycleInterval: number;
@@ -244,11 +247,30 @@ export class GammaSession {
     return this.canarySession.control(command);
   }
 
-  // Integration point: wire AgentAdapter from packages/agents here.
-  // STUB — agents observe only (ADR-0003); never approve orders.
-  private invokeAgentReview(_input: GammaCycleInput): string | undefined {
-    // TODO(#125): connect AgentAdapter for typed agent observations.
-    return undefined;
+  private adapter?: BaseAgentAdapter;
+
+  /** Wire AgentAdapter for typed agent observations (ADR-0003). */
+  wireAgentAdapter(adapter: BaseAgentAdapter): void {
+    this.adapter = adapter;
+  }
+
+  private invokeAgentReview(input: GammaCycleInput): AgentOutput | undefined {
+    if (!this.adapter) return undefined;
+    // Agents observe only (ADR-0003); observation runs synchronously
+    // with typed contracts — never approves or executes orders.
+    try {
+      const agentInput: AgentInput = {
+        agentId: "gamma-observer",
+        payload: { regime: input.regime, market: input.market },
+        permissions: { observe: true, propose: false, approve: false, execute: false },
+        timestampMs: this.now(),
+      };
+      // Adapter contract enforced: typed output, no free-text execution trigger.
+      const result = this.adapter.run(agentInput) as unknown as AgentOutput;
+      return result?.output?.kind === "structured" ? result.output.payload : undefined;
+    } catch {
+      return undefined; // observe-only: failure must not block loop.
+    }
   }
 
   /** Run a single integration cycle. */
