@@ -183,7 +183,6 @@ export interface GammaSessionOptions {
  * GammaSession: the top-level integration that wires all Gamma subsystems
  * together for a go-live canary session.
  */
-import { BaseAgentAdapter } from "@agenttrading/agents";
 import type { AgentInput, AgentOutput } from "@agenttrading/contracts";
 
 export class GammaSession {
@@ -247,10 +246,14 @@ export class GammaSession {
     return this.canarySession.control(command);
   }
 
-  private adapter?: BaseAgentAdapter;
+  // AgentAdapter interface contract (isolated from LLM framework).
+  // Use wireAgentAdapter() to connect a concrete adapter at startup.
+  private adapter?: {
+    run(input: AgentInput): AgentOutput;
+  };
 
   /** Wire AgentAdapter for typed agent observations (ADR-0003). */
-  wireAgentAdapter(adapter: BaseAgentAdapter): void {
+  wireAgentAdapter(adapter: { run(input: AgentInput): AgentOutput }): void {
     this.adapter = adapter;
   }
 
@@ -262,12 +265,12 @@ export class GammaSession {
       const agentInput: AgentInput = {
         agentId: "gamma-observer",
         payload: { regime: input.regime, market: input.market },
-        permissions: { observe: true, propose: false, approve: false, execute: false },
+        permissions: ["observe"],
         timestampMs: this.now(),
       };
       // Adapter contract enforced: typed output, no free-text execution trigger.
-      const result = this.adapter.run(agentInput) as unknown as AgentOutput;
-      return (result as { kind?: string }).kind === "structured" ? (result as { payload?: unknown }).payload : undefined;
+      const result = this.adapter.run(agentInput);
+      return (result as { kind?: string }).kind === "structured" ? result : undefined;
     } catch {
       return undefined; // observe-only: failure must not block loop.
     }
