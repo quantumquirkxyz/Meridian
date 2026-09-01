@@ -18,7 +18,7 @@ ARCHIVO / ESTADO / CORRECCIÓN DETALLADA
    - Corrección: Antes de live, validar que onShutdown escriba audit.jsonl y manifest.json; comprobar que no haya orders huérfanos sin reconciliar.
 
 5. packages/core/src/ (GammaSession)
-   - Estado: Demo.ts simulado; sesión real usa session.start/stop.
+   - Estado: Sesión de GammaSession operativa via session.start/stop.
    - Corrección: Verificar que killSwitchActive se active al drawdown; que openOrders esté limitado por maxOpenOrders del canary.
 
 6. REQUISITOS HUMANOS PRE-LIVE (no automáticos)

@@ -7,8 +7,8 @@
 
 ## Context
 
-Issue #33 requires a minimal operator control TUI built with Ink for Beta paper
-trading. The control surface belongs with infrastructure concerns: health,
+Issue #33 requires a minimal operator control TUI built with Ink for Beta
+trading (demo/live phases). The control surface belongs with infrastructure concerns: health,
 failover, circuit breakers, secrets, observability, and operator intervention.
 
 Before this decision, ADR-0008 documented `infra` as depending on

@@ -107,7 +107,7 @@ Record this ADR as the formal completion summary of the Alpha phase. The spec (I
 ## Consequences
 
 - **Issue #9 can be closed.** All 30 user stories and all exit criteria are met.
-- **Beta scope is unblocked.** The contracts, StateGraph, permission model, event bus, graph engine, and harness are the foundation for Beta's loop engineering, agent definitions, paper execution, and full risk engine.
+- **Beta scope is unblocked.** The contracts, StateGraph, permission model, event bus, graph engine, and harness are the foundation for Beta's loop engineering, agent definitions, demo trading integration, and full risk engine.
 - **Boundary test update needed.** `test/boundaries.test.ts` asserts `harness` depends only on `contracts`, but `harness` now legitimately depends on `events` and `graph` (ADR-0007). The test should be updated to match the accepted boundary.
 - **Workspace linking.** Some tests fail with `Cannot find module` errors. Running `bun install` resolves these; they are infrastructure issues, not spec gaps.
 - **Alpha risk retirement.** Data risk is eliminated: normalized observations flow through an idempotent event bus, fold into a versioned graph, produce scored candidates, and are evaluated by a reproducible harness — all without touching real capital.

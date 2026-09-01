@@ -161,8 +161,10 @@ async function runLiveMode(
 }
 
 /**
- * Demo mode uses simulated trading with internal market generation.
- * Does not require exchange connectivity or API keys.
+ * Demo mode connects to Bybit Demo Trading (api-demo.bybit.com,
+ * stream-demo.bybit.com) with virtual balances. It validates the
+ * full execution/ reconciliation/audit pipeline against real
+ * exchange endpoints. Not a pure internal simulation.
  */
 async function runDemoMode(
   opts: RunOptions,

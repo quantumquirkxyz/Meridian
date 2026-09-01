@@ -1,6 +1,6 @@
 # Codebase Dead Code & Redundancy Analysis — Meridian
 
-**Scope:** `packages/{contracts,core,connectors,events,graph,harness,agents,infra,cli}` + root `test/`, `scripts/`, `demo.ts`
+**Scope:** `packages/{contracts,core,connectors,events,graph,harness,agents,infra,cli}` + root `test/`, `scripts/`, `deprecated-demo.ts (reemplazado por integración real)`
 **Method:** `tsc --noUnusedLocals --noUnusedParameters` (intra-file unused imports/locals) + `ts-prune` (cross-file unused exports) + targeted `grep` verification to eliminate ts-prune false positives (barrel re-exports, `export *` surfaces, and TS keyword mis-parses).
 **Note on library packages:** `contracts`, `core`, `connectors`, `events` use `export *` barrels, so every export is "public API." Symbols re-exported but not consumed in-repo are flagged as **disconnected public API**, not deleted blindly.
 
