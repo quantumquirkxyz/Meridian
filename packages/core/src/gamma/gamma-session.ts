@@ -267,7 +267,7 @@ export class GammaSession {
       };
       // Adapter contract enforced: typed output, no free-text execution trigger.
       const result = this.adapter.run(agentInput) as unknown as AgentOutput;
-      return result?.output?.kind === "structured" ? result.output.payload : undefined;
+      return (result as { kind?: string }).kind === "structured" ? (result as { payload?: unknown }).payload : undefined;
     } catch {
       return undefined; // observe-only: failure must not block loop.
     }
