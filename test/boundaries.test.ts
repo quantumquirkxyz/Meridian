@@ -102,9 +102,12 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     }
   });
 
-  test("core depends only on contracts and never on LLMs/connectors", () => {
+  test("core depends only on contracts and graph (never on LLMs/connectors)", () => {
     const { dependencies = {} } = packageJson("core");
-    expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
+    expect(Object.keys(dependencies).sort()).toEqual([
+      "@agenttrading/contracts",
+      "@agenttrading/graph",
+    ]);
     for (const dep of Object.keys(dependencies)) {
       expect(isForbiddenModule(dep)).toBe(false);
     }
