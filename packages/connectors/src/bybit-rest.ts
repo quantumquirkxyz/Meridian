@@ -20,6 +20,8 @@ import {
   type BybitOpenOrdersResult,
   type BybitOrderSide,
   type BybitPlaceOrderResult,
+  type BybitPosition,
+  type BybitPositionResult,
   type BybitTimeInForce,
   type BybitWalletBalanceResult,
 } from "./bybit-types.ts";
@@ -233,6 +235,24 @@ export class BybitRESTClient {
     const wallet = await this.getAccountInfo();
     const account = wallet.list[0];
     return account?.coin ?? [];
+  }
+
+  /**
+   * Get current positions for a category.
+   * GET /v5/position/list
+   */
+  async getPositions(input: {
+    category: "spot" | "linear" | "inverse" | "option";
+    symbol?: string;
+  }): Promise<BybitPosition[]> {
+    const params: Record<string, string> = { category: input.category };
+    if (input.symbol) params.symbol = input.symbol;
+    const result = await this.privateRequest<BybitPositionResult>(
+      "GET",
+      "/v5/position/list",
+      params,
+    );
+    return result.list ?? [];
   }
 
   /**

@@ -6,7 +6,7 @@
  * WebSocket, reconciles internal state with exchange state, and produces
  * full audit trail and reports.
  *
- * Acceptance criteria (issue #77):
+ * ACCEPTANCE CRITERIA (issue #77):
  *   AC1: Connects to Bybit private WebSocket (order, position, execution)
  *   AC2: Connects to Bybit public WebSocket for market data
  *   AC3: Places orders via BybitRESTClient.placeOrder() after canary limit check
@@ -20,13 +20,25 @@
  *   AC11: Audit trail: every order, fill, risk decision logged to JSONL
  *   AC12: Session summary: trades, PnL, fees, regime changes, learning recs
  *   AC13: Graceful shutdown: cancel open orders, close WS, flush logs, print summary
+ *
+ * OPERABILITY ENHANCEMENTS:
+ *   - Real opportunity detection via OpportunityDetector (MarketGraph + RouteEngine)
+ *   - Real RiskEngine evaluation (replaces hardcoded APPROVE)
+ *   - Multi-venue inventory management with real balance queries
+ *   - AgentAdapter wired for consultative observations
+ *   - Demo mode uses Bybit Demo Trading endpoints
  */
 
 import type {
   CanaryConfig,
   GammaControlCommand,
+  MarketDataSnapshot,
   OrderIntent,
   OrderUpdate,
+  RiskDecision,
+  SystemMode,
+  AgentInput,
+  AgentOutput,
 } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import {
@@ -36,11 +48,16 @@ import {
   printSessionReport,
   ReconciliationEngine,
   computeSlippageBps,
+  OpportunityDetector,
+  RiskEngine,
+  DEFAULT_RISK_POLICY,
 } from "@agenttrading/core";
 import type { TradeRecord, MarketState } from "@agenttrading/core";
 import {
   BybitRESTClient,
   BybitWebSocketClient,
+  BinanceRESTClient,
+  buildBinanceSnapshot,
   type BybitWSClientEvents,
 } from "@agenttrading/connectors";
 import { StatusDisplay } from "./status-display.ts";
@@ -56,6 +73,12 @@ export interface LiveRunnerConfig {
   bybitApiSecret: string;
   /** Bybit REST + WS endpoints — same runner, different endpoints per mode. */
   bybitEndpoints: { restUrl: string; publicWsUrl: string; privateWsUrl: string };
+  /** Binance API key for multi-venue price feeds (optional). */
+  binanceApiKey?: string;
+  /** Binance API secret for multi-venue price feeds (optional). */
+  binanceApiSecret?: string;
+  /** Binance base URL (default: mainnet). */
+  binanceBaseUrl?: string;
   /** Cycle interval in milliseconds. */
   cycleIntervalMs: number;
   /** Canary config override. */
@@ -110,9 +133,10 @@ const DEFAULT_FEE_BPS = 2;
  *   2. Check exchange connectivity (AC9)
  *   3. Connect to Bybit public WS (AC2) + private WS (AC1)
  *   4. Reconcile internal vs exchange state on startup (AC7)
- *   5. On cycle tick: classify regime → detect opportunity → canary
- *      pre-check → place order via REST → wait for WS fill confirmation →
- *      reconcile periodically → evaluate kill switch
+ *   5. On cycle tick: classify regime → detect opportunity via MarketGraph
+ *      → RiskEngine approval → canary pre-check → place order via REST
+ *      → wait for WS fill confirmation → reconcile periodically
+ *      → evaluate kill switch
  *   6. On shutdown: cancel all open orders → close WS → flush logs →
  *      print session summary (AC13)
  */
@@ -142,12 +166,15 @@ export class LiveRunner {
   private readonly session: GammaSession;
   private readonly auditLogger: AuditLogger;
   private readonly reconciliationEngine: ReconciliationEngine;
-  private dataQualityMonitor?: unknown; // connected via connectInfra() — infra observation layer
-  private observability?: unknown; // connected via connectInfra() — health/metrics
+  private readonly opportunityDetector: OpportunityDetector;
+  private readonly riskEngine: RiskEngine;
+  private dataQualityMonitor?: unknown;
+  private observability?: unknown;
 
   // Connectors
   private readonly restClient: BybitRESTClient;
   private readonly wsClient: BybitWebSocketClient;
+  private readonly binanceClient?: BinanceRESTClient;
 
   // State
   private running = false;
@@ -160,8 +187,19 @@ export class LiveRunner {
   private market: MarketState = { bid: 0, ask: 0, mid: 0, liquidityUsd: 10_000 };
   private priceHistory: number[] = [];
 
+  // Multi-venue market data snapshots for OpportunityDetector
+  private marketDataSnapshots: Map<string, MarketDataSnapshot> = new Map();
+
   // Order tracking — maps exchange orderId → OrderIntent
   private pendingOrders: Map<string, OrderIntent> = new Map();
+
+  // Inventory tracking
+  private availableCapitalUsd: number = 0;
+  private committedCapitalUsd: number = 0;
+
+  // Agent observation layer
+  private lastAgentObservation: AgentOutput | undefined;
+  private agentObservationCount = 0;
 
   // Tracking
   private trades: TradeRecord[] = [];
@@ -169,6 +207,7 @@ export class LiveRunner {
   private ordersFilled = 0;
   private ordersBlocked = 0;
   private opportunitiesDetected = 0;
+  private opportunitiesRejectedByRisk = 0;
   private regimeChangeCount = 0;
   private lastRegime: string | undefined;
   private learningRecommendationCount = 0;
@@ -213,6 +252,29 @@ export class LiveRunner {
 
     this.reconciliationEngine = new ReconciliationEngine();
 
+    // Real opportunity detection via MarketGraph + RouteEngine
+    this.opportunityDetector = new OpportunityDetector({
+      minNetProfitUsd: 0.1,
+      feeBps: this.config.feeBps,
+      safetyBufferUsd: 0.1,
+      maxRouteLength: 3,
+    }, this.nowMs);
+
+    // Real RiskEngine with policy from canary config
+    this.riskEngine = new RiskEngine({
+      ...DEFAULT_RISK_POLICY,
+      maxRiskPerTradeUsd: this.config.canaryConfig.capitalLimits.maxRiskPerTradeUsd,
+      maxDailyLossUsd: this.config.canaryConfig.capitalLimits.maxDailyLossUsd,
+      maxWeeklyLossUsd: this.config.canaryConfig.capitalLimits.maxWeeklyLossUsd,
+      maxExposurePerTokenUsd: this.config.canaryConfig.exposureLimits.maxExposurePerTokenUsd,
+      maxExposurePerVenueUsd: this.config.canaryConfig.exposureLimits.maxExposurePerVenueUsd,
+      maxExposurePerChainUsd: this.config.canaryConfig.exposureLimits.maxExposurePerChainUsd,
+      maxOpenOrders: this.config.canaryConfig.orderLimits.maxOpenOrders,
+      maxSlippageBps: this.config.canaryConfig.maxSlippageBps,
+      maxGasUsd: this.config.canaryConfig.maxGasUsd,
+      minEdgeUsd: 0.1,
+    });
+
     // Initialize connectors
     this.restClient = new BybitRESTClient({
       apiKey: this.config.bybitApiKey,
@@ -229,18 +291,19 @@ export class LiveRunner {
       privateWsUrl: this.config.bybitEndpoints.privateWsUrl,
     });
 
+    // Initialize Binance connector for multi-venue price feeds
+    if (config.binanceApiKey && config.binanceApiSecret) {
+      this.binanceClient = new BinanceRESTClient({
+        apiKey: config.binanceApiKey,
+        apiSecret: config.binanceApiSecret,
+        baseUrl: config.binanceBaseUrl,
+      });
+    }
+
     // Wire WS events (AC1, AC2)
     const wsEvents: BybitWSClientEvents = {
       onMarketData: (snapshot) => {
-        this.market = {
-          bid: snapshot.bid ?? 0,
-          ask: snapshot.ask ?? 0,
-          mid: snapshot.mid ?? 0,
-          liquidityUsd: snapshot.depth,
-        };
-        // Forward to infra observability if connected.
-        (this.observability as { recordMarketData?: (s: unknown) => void } | undefined)
-          ?.recordMarketData?.(snapshot);
+        this.handleMarketData(snapshot);
       },
       onOrderUpdate: (update) => {
         this.handleOrderUpdate(update);
@@ -305,13 +368,16 @@ export class LiveRunner {
     this.auditLogger.record("SESSION_STARTED", {
       symbols: this.config.symbols,
       cycleIntervalMs: this.config.cycleIntervalMs,
-      mode: "live",
+      mode: this.config.mode,
       reconciliationIntervalMs: this.config.reconciliationIntervalMs,
     });
 
-    console.log(`[live] Starting live runner...`);
+    console.log(`[live] Starting ${this.config.mode} runner...`);
     console.log(`[live] Symbols: ${this.config.symbols.join(", ")}`);
     console.log(`[live] Cycle interval: ${this.config.cycleIntervalMs}ms`);
+    console.log(`[live] REST endpoint: ${this.config.bybitEndpoints.restUrl}`);
+    console.log(`[live] Public WS: ${this.config.bybitEndpoints.publicWsUrl}`);
+    console.log(`[live] Private WS: ${this.config.bybitEndpoints.privateWsUrl}`);
 
     // AC9: Startup check — verify Bybit API connectivity
     console.log(`[live] Verifying Bybit API connectivity...`);
@@ -326,6 +392,12 @@ export class LiveRunner {
       this.running = false;
       throw new Error(`Failed to verify Bybit API connectivity: ${msg}`);
     }
+
+    // Query initial balances for inventory management
+    await this.updateInventory();
+
+    // Wire consultative agent for market observations
+    this.wireConsultativeAgent();
 
     // AC2: Connect to Bybit public WS
     console.log(`[live] Connecting to Bybit public WebSocket...`);
@@ -342,13 +414,11 @@ export class LiveRunner {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`[live] Private WebSocket auth failed (${msg}). In demo mode this must still confirm via REST reconciliation; do not proceed without audit evidence.`);
-        // Even in demo, reconciliation must resolve before continuing.
-        // If auth fails, rely on REST reconciliation and audit reconstruction.
       }
     }
 
-    // Start ticker poll (REST fallback when WS market feed not active) — needed for demo mode
-    const tickerPollInterval = 5_000; // 5s
+    // Start ticker poll (REST fallback when WS market feed not active)
+    const tickerPollInterval = 5_000;
     const pollTicker = async () => {
       try {
         const ticker = await this.restClient.getTicker(this.config.symbols[0] ?? "BTCUSDT");
@@ -362,11 +432,25 @@ export class LiveRunner {
           mid,
           liquidityUsd: 10_000,
         };
+        // Feed ticker data into OpportunityDetector as a snapshot
+        this.ingestMarketDataFromTicker(ticker.bid, ticker.ask, ticker.lastPrice);
       } catch {
         // Ignore ticker poll errors; keep synthetic/default market state
       }
+
+      // Poll Binance for multi-venue price comparison
+      if (this.binanceClient) {
+        try {
+          const binanceTicker = await this.binanceClient.getTicker(this.config.symbols[0] ?? "BTCUSDT");
+          const binanceSnapshot = buildBinanceSnapshot(binanceTicker, "binance-rest-ticker");
+          this.opportunityDetector.ingestMarketData(binanceSnapshot);
+          this.marketDataSnapshots.set(`binance:${binanceSnapshot.symbol}`, binanceSnapshot);
+        } catch {
+          // Ignore Binance errors; Bybit data is sufficient
+        }
+      }
     };
-    await pollTicker(); // initial ticker fetch
+    await pollTicker();
     this.tickerTimer = setInterval(pollTicker, tickerPollInterval);
 
     // AC7: Reconcile on startup
@@ -390,19 +474,16 @@ export class LiveRunner {
     if (!this.running) return;
     this.running = false;
 
-    // Stop cycle loop
     if (this.cycleTimer !== null) {
       clearInterval(this.cycleTimer);
       this.cycleTimer = null;
     }
 
-    // Stop reconciliation timer
     if (this.reconciliationTimer !== null) {
       clearInterval(this.reconciliationTimer);
       this.reconciliationTimer = null;
     }
 
-    // Stop ticker poll
     if (this.tickerTimer !== null) {
       clearInterval(this.tickerTimer);
       this.tickerTimer = null;
@@ -424,6 +505,8 @@ export class LiveRunner {
       cycleCount: this.cycleCount,
       ordersSubmitted: this.ordersSubmitted,
       ordersFilled: this.ordersFilled,
+      opportunitiesDetected: this.opportunitiesDetected,
+      opportunitiesRejectedByRisk: this.opportunitiesRejectedByRisk,
       tradesCount: this.trades.length,
     });
     this.auditLogger.flush();
@@ -449,7 +532,50 @@ export class LiveRunner {
     console.log("[live] Session ended. Goodbye.");
   }
 
-  // ── AC8: Configuration Validation ──────────────────────────────────
+  // ── Consultative Agent ─────────────────────────────────────────────
+
+  /**
+   * Wire a consultative agent that observes market state and provides
+   * structured observations. CONTEXT.md §8: "AI Agents do not replace
+   * deterministic trading logic; they add a cognitive layer for reasoning,
+   * classification, interpretation of context."
+   *
+   * The agent only observes — it never executes or approves risk.
+   */
+  private wireConsultativeAgent(): void {
+    const adapter = {
+      run: (input: AgentInput): AgentOutput => {
+        this.agentObservationCount++;
+        const observation: AgentOutput = {
+          kind: "structured",
+          agentId: "market-observer",
+          payload: {
+            regime: this.lastRegime ?? "unknown",
+            marketMid: this.market.mid,
+            spreadBps: this.market.bid > 0 && this.market.ask > 0
+              ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
+              : 0,
+            dataFreshnessMs: this.nowMs() - (this.marketDataSnapshots.values().next().value?.timestampMs ?? this.nowMs()),
+            availableCapitalUsd: this.availableCapitalUsd,
+            committedCapitalUsd: this.committedCapitalUsd,
+            openOrders: this.pendingOrders.size,
+            opportunitiesDetected: this.opportunitiesDetected,
+            opportunitiesRejectedByRisk: this.opportunitiesRejectedByRisk,
+          },
+          schemaName: "market-observation",
+          timestampMs: this.nowMs(),
+        };
+        this.lastAgentObservation = observation;
+        return observation;
+      },
+    };
+
+    this.session.wireAgentAdapter(adapter);
+    this.auditLogger.record("AGENT_WIRED", {
+      agentId: "market-observer",
+      role: "consultative",
+    });
+  }
 
   private validateConfig(): void {
     if (!this.config.bybitApiKey || !this.config.bybitApiKey.trim()) {
@@ -467,6 +593,56 @@ export class LiveRunner {
         "Live mode requires withdrawals to be disabled on API keys. Refusing to start.",
       );
     }
+  }
+
+  // ── Market Data Ingestion ───────────────────────────────────────────
+
+  /**
+   * Handle incoming market data from WebSocket.
+   * Feeds the OpportunityDetector for real-time arbitrage detection.
+   */
+  private handleMarketData(snapshot: MarketDataSnapshot): void {
+    this.market = {
+      bid: snapshot.bid ?? 0,
+      ask: snapshot.ask ?? 0,
+      mid: snapshot.mid ?? 0,
+      liquidityUsd: snapshot.depth,
+    };
+
+    // Store snapshot for multi-venue comparison
+    const key = `${snapshot.venue}:${snapshot.symbol}`;
+    this.marketDataSnapshots.set(key, snapshot);
+
+    // Feed into OpportunityDetector
+    this.opportunityDetector.ingestMarketData(snapshot);
+
+    // Forward to infra observability if connected.
+    (this.observability as { recordMarketData?: (s: unknown) => void } | undefined)
+      ?.recordMarketData?.(snapshot);
+  }
+
+  /**
+   * Feed REST ticker data into OpportunityDetector when WS is not active.
+   */
+  private ingestMarketDataFromTicker(bid: string, ask: string, lastPrice: string): void {
+    const bidNum = parseFloat(bid) || 0;
+    const askNum = parseFloat(ask) || 0;
+    const lastNum = parseFloat(lastPrice) || 0;
+    const mid = (bidNum > 0 && askNum > 0) ? (bidNum + askNum) / 2 : lastNum;
+
+    const snapshot: MarketDataSnapshot = {
+      venue: "bybit",
+      symbol: this.config.symbols[0] ?? "BTCUSDT",
+      timestampMs: this.nowMs(),
+      bid: bidNum > 0 ? bidNum : lastNum,
+      ask: askNum > 0 ? askNum : lastNum,
+      mid,
+      depth: 10_000,
+      latencyMs: 100,
+      source: "bybit-rest-ticker",
+    };
+
+    this.opportunityDetector.ingestMarketData(snapshot);
   }
 
   // ── AC6: Order Update Handling ─────────────────────────────────────
@@ -511,6 +687,25 @@ export class LiveRunner {
       this.trades.push(trade);
       this.ordersFilled++;
 
+      // Record fill to learning engine for governed learning loop
+      this.session.learning.recordFill({
+        tradeId: orderId,
+        symbol: trade.symbol,
+        side: trade.side,
+        entryPrice: trade.fillPrice,
+        exitPrice: trade.fillPrice,
+        filledQuantity: trade.fillQuantity,
+        feesUsd: trade.feesUsd,
+        enteredAtMs: trade.filledAtMs,
+        exitedAtMs: trade.filledAtMs,
+        strategyId: "arbitrage",
+        regime: this.lastRegime ?? "unknown",
+        venue: "bybit",
+      });
+
+      // Update inventory: release committed capital
+      this.committedCapitalUsd = Math.max(0, this.committedCapitalUsd - notionalUsd);
+
       // Notify the session about the fill
       this.session.notifyOrderResolved(orderId, "FILLED", 0);
 
@@ -535,6 +730,11 @@ export class LiveRunner {
       update.status === "CANCELLED" ||
       update.status === "REJECTED"
     ) {
+      // Release committed capital on cancel/reject
+      const intent = this.pendingOrders.get(orderId);
+      if (intent) {
+        this.committedCapitalUsd = Math.max(0, this.committedCapitalUsd - intent.quantity * intent.price);
+      }
       this.session.notifyOrderResolved(
         orderId,
         update.status === "REJECTED" ? "REJECTED" : "CANCELLED",
@@ -560,6 +760,12 @@ export class LiveRunner {
         }),
       );
 
+      // Internal positions from trade history
+      const internalPositions = this.deriveInternalPositions();
+
+      // Internal balances from inventory
+      const internalBalances = this.deriveInternalBalances();
+
       // SP3: Reconcile all configured symbols, not just the first
       const externalOrders: Array<{
         orderId: string;
@@ -568,6 +774,19 @@ export class LiveRunner {
         filledQuantity: number;
       }> = [];
 
+      const externalPositions: Array<{
+        symbol: string;
+        quantity: number;
+        averagePrice: number;
+      }> = [];
+
+      const externalBalances: Array<{
+        asset: string;
+        available: number;
+        locked: number;
+      }> = [];
+
+      // Query external orders
       for (const symbol of this.config.symbols) {
         const exchangeOpenOrders = await this.restClient.getOpenOrders({
           category: this.config.orderCategory,
@@ -589,19 +808,56 @@ export class LiveRunner {
         }
       }
 
+      // Query external positions
+      try {
+        const exchangePositions = await this.restClient.getPositions({
+          category: this.config.orderCategory,
+        });
+        for (const pos of exchangePositions) {
+          const size = parseFloat(pos.size);
+          if (size > 0) {
+            externalPositions.push({
+              symbol: pos.symbol,
+              quantity: pos.side === "Buy" ? size : -size,
+              averagePrice: parseFloat(pos.avgPrice),
+            });
+          }
+        }
+      } catch {
+        // Position query may fail for spot accounts — non-critical
+      }
+
+      // Query external balances
+      try {
+        const exchangeBalances = await this.restClient.getCoinBalances();
+        for (const coin of exchangeBalances) {
+          const walletBalance = parseFloat(coin.walletBalance ?? "0");
+          const locked = parseFloat(coin.locked ?? "0");
+          if (walletBalance > 0 || locked > 0) {
+            externalBalances.push({
+              asset: coin.coin,
+              available: walletBalance - locked,
+              locked,
+            });
+          }
+        }
+      } catch {
+        // Balance query may fail — non-critical
+      }
+
       // Run reconciliation
       const report = this.reconciliationEngine.reconcile({
         internal: {
           orders: internalOrders,
           fills: [],
-          positions: [],
-          balances: [],
+          positions: internalPositions,
+          balances: internalBalances,
         },
         external: {
           orders: externalOrders,
           fills: [],
-          positions: [],
-          balances: [],
+          positions: externalPositions,
+          balances: externalBalances,
         },
         reconciledAtMs: this.nowMs(),
       });
@@ -612,14 +868,14 @@ export class LiveRunner {
       this.auditLogger.record("RECONCILIATION", {
         unresolved: report.unresolved,
         severity: report.severity,
-        orphanOrders: report.orphanOrders,
-        positionMismatches: report.positionMismatches,
-        balanceMismatches: report.balanceMismatches,
+        orphanOrders: report.orphanOrders.length,
+        positionMismatches: report.positionMismatches.length,
+        balanceMismatches: report.balanceMismatches.length,
       });
 
       if (report.unresolved) {
         console.warn(
-          `[live] Reconciliation unresolved (severity: ${report.severity}). Orphans: ${report.orphanOrders.length}, Position mismatches: ${report.positionMismatches.length}`,
+          `[live] Reconciliation unresolved (severity: ${report.severity}). Orphans: ${report.orphanOrders.length}, Position mismatches: ${report.positionMismatches.length}, Balance mismatches: ${report.balanceMismatches.length}`,
         );
       }
     } catch (err) {
@@ -631,10 +887,52 @@ export class LiveRunner {
     }
   }
 
+  /**
+   * Derive internal positions from trade history.
+   */
+  private deriveInternalPositions(): Array<{ symbol: string; quantity: number; averagePrice: number }> {
+    const positionMap = new Map<string, { quantity: number; totalCost: number }>();
+
+    for (const trade of this.trades) {
+      const existing = positionMap.get(trade.symbol) ?? { quantity: 0, totalCost: 0 };
+      const qty = trade.side === "BUY" ? trade.fillQuantity : -trade.fillQuantity;
+      existing.quantity += qty;
+      existing.totalCost += qty * trade.fillPrice;
+      positionMap.set(trade.symbol, existing);
+    }
+
+    const positions: Array<{ symbol: string; quantity: number; averagePrice: number }> = [];
+    for (const [symbol, pos] of positionMap) {
+      if (Math.abs(pos.quantity) > 1e-12) {
+        positions.push({
+          symbol,
+          quantity: pos.quantity,
+          averagePrice: pos.totalCost / pos.quantity,
+        });
+      }
+    }
+    return positions;
+  }
+
+  /**
+   * Derive internal balances from inventory tracking.
+   */
+  private deriveInternalBalances(): Array<{ asset: string; available: number; locked: number }> {
+    const balances: Array<{ asset: string; available: number; locked: number }> = [];
+
+    // USDT balance from inventory
+    balances.push({
+      asset: "USDT",
+      available: Math.max(0, this.availableCapitalUsd - this.committedCapitalUsd),
+      locked: this.committedCapitalUsd,
+    });
+
+    return balances;
+  }
+
   // ── AC5: Kill Switch ───────────────────────────────────────────────
 
   private cancelAllOpenOrders(): void {
-    // Cancel through REST API
     for (const [orderId, intent] of this.pendingOrders) {
       this.restClient
         .cancelOrder({
@@ -651,9 +949,40 @@ export class LiveRunner {
       this.session.notifyOrderResolved(orderId, "CANCELLED", 0);
     }
     this.pendingOrders.clear();
+    this.committedCapitalUsd = 0;
 
     // Also control through GammaSession
     this.session.control("cancel-all");
+  }
+
+  // ── Inventory Management ───────────────────────────────────────────
+
+  /**
+   * Query real balances from the exchange and update internal inventory state.
+   * CONTEXT.md §18: "The system must know balances on exchanges, wallets..."
+   */
+  private async updateInventory(): Promise<void> {
+    try {
+      const balances = await this.restClient.getCoinBalances();
+      let totalUsd = 0;
+
+      for (const coin of balances) {
+        const walletBalance = parseFloat(coin.walletBalance ?? "0");
+        totalUsd += walletBalance;
+      }
+
+      this.availableCapitalUsd = totalUsd;
+
+      this.auditLogger.record("INVENTORY_UPDATED", {
+        availableCapitalUsd: this.availableCapitalUsd,
+        committedCapitalUsd: this.committedCapitalUsd,
+        freeCapitalUsd: this.availableCapitalUsd - this.committedCapitalUsd,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[live] Failed to query balances: ${msg}`);
+      this.auditLogger.record("INVENTORY_QUERY_FAILED", { error: msg });
+    }
   }
 
   // ── Cycle Loop ─────────────────────────────────────────────────────
@@ -684,9 +1013,35 @@ export class LiveRunner {
     // Derive regime input
     const regimeInput = this.deriveRegimeInput();
 
-    const { intents, riskDecisions } = this.createOpportunity();
+    // REAL OPPORTUNITY DETECTION via OpportunityDetector
+    const opportunities = this.opportunityDetector.detectOpportunities();
+    this.opportunitiesDetected += opportunities.length;
 
-    // Run GammaSession cycle
+    // Evaluate each opportunity through RiskEngine
+    const approvedIntents: OrderIntent[] = [];
+    const approvedRiskDecisions: RiskDecision[] = [];
+    for (const { candidate, intent } of opportunities) {
+      const riskDecision = this.evaluateRisk(intent, candidate.expectedNetProfitUsd);
+
+      if (riskDecision.decision === "APPROVE") {
+        approvedIntents.push(intent);
+        approvedRiskDecisions.push(riskDecision);
+        this.auditLogger.record("OPPORTUNITY_APPROVED", {
+          opportunityId: candidate.id,
+          expectedNetProfitUsd: candidate.expectedNetProfitUsd,
+          route: candidate.route.join("→"),
+        });
+      } else {
+        this.opportunitiesRejectedByRisk++;
+        this.auditLogger.record("OPPORTUNITY_REJECTED_BY_RISK", {
+          opportunityId: candidate.id,
+          decision: riskDecision.decision,
+          reasonCodes: "reasonCodes" in riskDecision ? riskDecision.reasonCodes : [],
+        });
+      }
+    }
+
+    // Run GammaSession cycle with approved intents and their risk decisions
     const result = this.session.runCycle({
       regime: regimeInput,
       market: {
@@ -695,8 +1050,8 @@ export class LiveRunner {
         mid: this.market.mid,
         liquidityUsd: this.market.liquidityUsd,
       },
-      intents,
-      riskDecisions,
+      intents: approvedIntents,
+      riskDecisions: approvedRiskDecisions,
     });
 
     // S5+SP5: Detect and audit regime changes
@@ -717,21 +1072,12 @@ export class LiveRunner {
     this.ordersBlocked += result.blockedCount;
     this.learningRecommendationCount += result.learningRecommendations.length;
 
-    // S6: Track which intents were actually submitted via the session.
-    // The session's runCycle returns submittedCount; we place orders for
-    // the first N intents that were submitted (matching the session's
-    // evaluation order).
+    // AC3: Place orders via REST for submitted intents
     const submittedIntents: OrderIntent[] = [];
-    let regimeBlocked = 0;
-    for (let i = 0; i < intents.length; i++) {
-      if (i < result.submittedCount) {
-        submittedIntents.push(intents[i]);
-      } else if (i < result.submittedCount + result.regimeBlockedCount) {
-        regimeBlocked++;
-      }
+    for (let i = 0; i < approvedIntents.length && i < result.submittedCount; i++) {
+      submittedIntents.push(approvedIntents[i]);
     }
 
-    // AC3: Place orders via REST for submitted intents
     for (const intent of submittedIntents) {
       await this.placeOrder(intent);
     }
@@ -753,7 +1099,8 @@ export class LiveRunner {
       regimeConfidence: result.regimeClassification?.confidence,
       submitted: result.submittedCount,
       blocked: result.blockedCount,
-      opportunitiesDetected: this.opportunitiesDetected,
+      opportunitiesDetected: opportunities.length,
+      opportunitiesRejectedByRisk: opportunities.length - approvedIntents.length,
       ordersFilled: this.ordersFilled,
       killSwitchActive: this.session.status.killSwitchActive,
     });
@@ -766,7 +1113,7 @@ export class LiveRunner {
 
     // AC3: Display cycle status via StatusDisplay if wired
     this.config.statusDisplay?.printCycleStatus({
-      mode: "live",
+      mode: this.config.mode,
       cycleCount: this.cycleCount,
       regime: result.regimeClassification?.regime,
       regimeConfidence: result.regimeClassification?.confidence,
@@ -779,13 +1126,84 @@ export class LiveRunner {
     });
 
     console.log(
-      `[live] Cycle ${this.cycleCount}: regime=${result.regimeClassification?.regime ?? "unknown"} submitted=${result.submittedCount} blocked=${result.blockedCount} trades=${this.trades.length}`,
+      `[live] Cycle ${this.cycleCount}: regime=${result.regimeClassification?.regime ?? "unknown"} opportunities=${opportunities.length} approved=${approvedIntents.length} submitted=${result.submittedCount} blocked=${result.blockedCount} trades=${this.trades.length}`,
     );
+  }
+
+  // ── Risk Engine Evaluation ─────────────────────────────────────────
+
+  /**
+   * Evaluate an OrderIntent through the RiskEngine.
+   * CONTEXT.md §17: "The signal must pass through validation layers."
+   * CONTEXT.md §18: "No OrderIntent exists without Risk Engine approval."
+   */
+  private evaluateRisk(intent: OrderIntent, expectedNetProfitUsd: number): RiskDecision {
+    const mode: SystemMode = this.mapSessionModeToSystemMode();
+
+    return this.riskEngine.evaluate({
+      orderIntent: intent,
+      expectedNetProfitUsd,
+      mode,
+      dataQualityScore: this.estimateDataQuality(),
+      dailyLossUsd: this.session.status.dailyPnlUsd < 0 ? Math.abs(this.session.status.dailyPnlUsd) : 0,
+      openOrderCount: this.pendingOrders.size,
+      slippageBps: intent.limits.maxSlippageBps,
+      reconciliationUnresolved: this.session.status.reconciliationUnresolved,
+      auditUnavailable: false,
+      evaluatedAtMs: this.nowMs(),
+    });
+  }
+
+  /**
+   * Map the session's operational mode to SystemMode for RiskEngine.
+   */
+  private mapSessionModeToSystemMode(): SystemMode {
+    const status = this.session.status;
+    if (!status.running) return "HALT";
+    if (status.killSwitchActive) return "HALT";
+    if (status.reconciliationUnresolved) return "CANCEL_ONLY";
+    return "NORMAL";
+  }
+
+  /**
+   * Estimate data quality from market data freshness.
+   */
+  private estimateDataQuality(): number {
+    const now = this.nowMs();
+    let bestQuality = 0;
+
+    for (const snapshot of this.marketDataSnapshots.values()) {
+      const age = now - snapshot.timestampMs;
+      let quality = 1.0;
+      if (age > 30_000) quality = 0.3;
+      else if (age > 10_000) quality = 0.6;
+      else if (age > 5_000) quality = 0.8;
+
+      if (snapshot.rpcHealth === "degraded") quality *= 0.7;
+      else if (snapshot.rpcHealth === "unavailable") quality *= 0.3;
+
+      if (quality > bestQuality) bestQuality = quality;
+    }
+
+    return bestQuality;
   }
 
   // ── AC3: Order Placement ───────────────────────────────────────────
 
   private async placeOrder(intent: OrderIntent): Promise<void> {
+    // Check inventory: ensure we have enough free capital
+    const notionalUsd = intent.quantity * intent.price;
+    const freeCapital = this.availableCapitalUsd - this.committedCapitalUsd;
+    if (freeCapital < notionalUsd) {
+      console.warn(`[live] Insufficient free capital for order: $${freeCapital.toFixed(2)} available, $${notionalUsd.toFixed(2)} needed`);
+      this.auditLogger.record("ORDER_SKIPPED_INVENTORY", {
+        orderId: intent.idempotencyKey,
+        availableUsd: freeCapital,
+        requiredUsd: notionalUsd,
+      });
+      return;
+    }
+
     this.auditLogger.record("ORDER_PLACING", {
       orderId: intent.idempotencyKey,
       symbol: intent.symbol,
@@ -808,6 +1226,9 @@ export class LiveRunner {
       // Track the pending order (AC6: wait for WS fill confirmation)
       this.pendingOrders.set(result.orderId, intent);
 
+      // Commit capital
+      this.committedCapitalUsd += notionalUsd;
+
       this.auditLogger.record("ORDER_ACCEPTED", {
         orderId: result.orderId,
         clientOrderId: intent.idempotencyKey,
@@ -829,62 +1250,6 @@ export class LiveRunner {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
-
-  private createOpportunity(): {
-    intents: OrderIntent[];
-    riskDecisions: import("@agenttrading/contracts").RiskDecision[];
-  } {
-    // Require live market data before creating any order intent.
-    // This keeps live/demo runner behavior honest: no fabricated prices.
-    if (this.market.mid <= 0 || this.market.bid <= 0 || this.market.ask <= 0) {
-      return { intents: [], riskDecisions: [] };
-    }
-
-    if (this.cycleCount % 5 !== 0) {
-      return { intents: [], riskDecisions: [] };
-    }
-
-    const side: "BUY" | "SELL" =
-      this.cycleCount % 10 === 0 ? "BUY" : "SELL";
-    const quantity = 0.001;
-    const price = this.market.mid;
-    const rawSymbol = this.config.symbols[0] ?? "BTCUSDT";
-    const symbol = rawSymbol.endsWith("USDT") ? rawSymbol : `${rawSymbol}USDT`;
-
-    const intent: OrderIntent = {
-      idempotencyKey: `live-${this.cycleCount}-${this.nowMs()}`,
-      opportunityId: `opp-${this.cycleCount}`,
-      venue: "bybit",
-      symbol,
-      side,
-      quantity,
-      price,
-      quoteCurrency: "USDT",
-      createdAtMs: this.nowMs(),
-      expiresAtMs: this.nowMs() + 60_000,
-      limits: { maxSlippageBps: 10 },
-    };
-
-    const riskDecision: import("@agenttrading/contracts").ApprovedRiskDecision = {
-      decision: "APPROVE",
-      orderIntentIdempotencyKey: intent.idempotencyKey,
-      evaluatedAtMs: this.nowMs(),
-      approvedSize: quantity,
-      approvedLimits: { maxSlippageBps: 10 },
-      expiresAtMs: this.nowMs() + 60_000,
-    };
-
-    this.opportunitiesDetected++;
-    this.auditLogger.record("OPPORTUNITY_DETECTED", {
-      cycleCount: this.cycleCount,
-      opportunityId: intent.opportunityId,
-      symbol: intent.symbol,
-      side,
-      price,
-    });
-
-    return { intents: [intent], riskDecisions: [riskDecision] };
-  }
 
   private deriveRegimeInput(): import("@agenttrading/core").RegimeClassifierInput {
     const spreadBps =

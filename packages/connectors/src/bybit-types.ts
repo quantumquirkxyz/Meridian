@@ -49,6 +49,23 @@ export interface BybitWalletBalanceResult {
   }>;
 }
 
+// ── Positions ───────────────────────────────────────────────────────
+
+export interface BybitPosition {
+  symbol: string;
+  side: string;
+  size: string;
+  avgPrice: string;
+  unrealisedPnl: string;
+  positionIdx: number;
+  createdTime: string;
+  updatedTime: string;
+}
+
+export interface BybitPositionResult {
+  list: BybitPosition[];
+}
+
 // ── Orders ──────────────────────────────────────────────────────────
 
 export type BybitOrderSide = "Buy" | "Sell";
