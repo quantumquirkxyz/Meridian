@@ -9,27 +9,30 @@ No AI agent executes orders. Execution is deterministic and governed by the Risk
 ## System flow
 
 ```
-Market Data Engine
+Market Data Connectors (Bybit REST/WS, Binance REST, PancakeSwap RPC)
     ↓
-Normalizer
+DataQualityMonitor → per-source health tracking
     ↓
-Market Graph Engine
+Normalizer → MarketDataSnapshot
     ↓
-Opportunity Scanner
+Market Graph Engine → versioned MarketGraph with weighted edges
+    ↓
+OpportunityDetector → OpportunityCandidate with full cost stack
     ↓
 StateGraph Orchestrator
     ↓
-AI Advisory Layer  →  only comments/classifies/debates/explains
+AI Advisory Layer → only observes/classifies/debates/explains
+    ↓  (when LLM configured: OpenRouter via Vercel AI SDK)
+    ↓  (without LLM: deterministic behavioral adapters)
+Risk Engine → authority: approve/reject/reduce
     ↓
-Risk Engine        →  authority: approve/reject/reduce
+Execution Engine → the only component that sends approved orders
     ↓
-Execution Engine   →  the only component that sends approved orders
+Reconciliation Engine → internal vs exchange state
     ↓
-Reconciliation Engine
+Audit / Event Store → JSONL + SQLite
     ↓
-Audit / Event Store
-    ↓
-Learning Loop      →  generates hypotheses, does not mutate production
+Learning Loop → generates hypotheses, does not mutate production
 ```
 
 Mandatory flow per signal: **data → graph → candidate signal → agent review → Risk Engine → OrderIntent → Execution Engine → Reconciliation → Audit → Learning**. No step may skip the Risk Engine.
@@ -46,8 +49,8 @@ Base contracts: `StateName`, `StateContext`, `StateNode`, `Transition`, `Transit
 
 1. **Perception** — interpret market state, data quality, liquidity, microstructure (Market Data Sentinel, Graph Builder, Liquidity & Microstructure).
 2. **Analytical** — generate hypotheses (Arbitrage Alpha, Strategy Research, Market Regime, Inventory).
-3. **Deliberative** — compare and debate (Planner/Supervisor, Bull, Bear, Skeptic, Risk Analyst, Execution Advisor).
-4. **Control and audit** — consistency and traceability (Audit, Learning, Memory, Policy, Infrastructure Guardian, Reconciliation).
+3. **Deliberative** — compare and debate (Planner/Supervisor, Bull, Bear, Skeptic, Risk Analyst, Execution Advisor). Activate with LLM (OpenRouter); deterministic fallback without.
+4. **Control and audit** — consistency and traceability (Audit, Learning, Memory, Policy, Infrastructure Guardian, Reconciliation). Behavioral runtimes always available.
 5. **Deterministic non-agentic** — the real authority: Risk Engine, Execution Engine, Reconciliation Engine, Circuit Breakers, Kill Switch.
 
 Data path: `Market data → Graph state → Agent analysis → Candidate signal → Risk decision → Order intent → Execution → Reconciliation → Audit`.
@@ -71,27 +74,38 @@ Data path: `Market data → Graph state → Agent analysis → Candidate signal 
 | DEX / RPC | Disable DEX routes, CEX-only if allowed |
 | CEX API | Block venue, reconcile on recovery |
 | Audit unavailable | Do not trade |
+| No LLM configured | Operate deterministically with behavioral adapters |
 
 ## Monorepo
 
 ```
 packages/
   contracts    types, schemas, events, reason codes (shared frontier)
-  core         StateGraph, Risk, Execution, Reconciliation, Inventory, Loops
+  core         StateGraph, Risk, Execution, Reconciliation, Inventory, Loops, Gamma subsystems
   events       in-memory event bus, SQLite event store, deterministic replay
-  connectors   bybit, pancakeswap-v4, rpc
+  connectors   bybit (REST/WS), binance (REST), pancakeswap-v4 (RPC), dex-executor
   graph        MarketGraph, pathfinder, arbitrage-cycles, systemic-risk
-  harness      backtest, replay, simulators, stress
-  agents       AgentAdapter + runtimes (Vercel AI SDK, Mastra) + agents
-  infra        health, failover, circuit breakers, secrets, control TUI
+  harness      backtest, replay, simulators (fill/gas/funding/latency/failure), stress
+  agents       AgentAdapter + catalog (11 agents) + behavioral runtimes + OpenRouter adapter
+  infra        DataQualityMonitor, ObservabilityService, InfrastructureEngine, GammaControlTUI
+  cli          LiveRunner (demo/live), config, manifest, status display
 ```
 
-Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `connectors` depend only on `contracts`; `harness` depends on `contracts`, `events`, and `graph` (ADR-0007); `infra` depends on `contracts`, `events`, `ink`, and `react` for observability plus the operator control TUI (ADR-0008, ADR-0010).
+Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `connectors` depend only on `contracts`; `harness` depends on `contracts`, `events`, and `graph` (ADR-0007); `infra` depends on `contracts`, `events`, `ink`, and `react` (ADR-0008, ADR-0010); `cli` depends on `contracts`, `core`, `connectors`, `infra`, and `agents` (wiring layer).
 
 ## Persistence
 
-- SQLite (`bun:sqlite`): event store, audit, trade journal (Alpha/Beta). See ADR-0006.
-- In-memory event bus; Redis/NATS/Kafka deferred to Gamma.
+- SQLite (`bun:sqlite`): event store, audit, trade journal. See ADR-0006.
+- In-memory event bus; Redis/NATS/Kafka evaluated if volume or multi-process needs arise.
+- Agent memory: durable JSON storage for behavioral runtime recall.
+
+## LLM Integration
+
+- **Provider:** OpenRouter via OpenAI-compatible API
+- **SDK:** Vercel AI SDK (`ai` package) with `@ai-sdk/openai` provider
+- **Pattern:** `generateFn` injection — agents package never imports `ai` directly
+- **Activation:** When `LLM_API_KEY` is set in `.env`, deliberative agents use real LLM reasoning
+- **Fallback:** Without LLM, behavioral adapters (audit, memory, policy) provide deterministic operation
 
 ## Stack
 
