@@ -21,7 +21,6 @@ import type {
   LearningLoopConfig,
   LearningRecommendation,
   PromotionRecord,
-  StrategyPerformance,
   TradeJournalEntry,
 } from "@agenttrading/contracts";
 import { DEFAULT_LEARNING_LOOP_CONFIG } from "@agenttrading/contracts";

@@ -21,7 +21,6 @@
 
 import type {
   ExportOptions,
-  ExportFormat,
   TradeReport,
   TradeReconstruction,
 } from "@agenttrading/contracts";

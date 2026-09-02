@@ -13,8 +13,8 @@
  * halt the system.
  */
 
-import {
-  type CanaryKillSwitchConfig,
+import type {
+  CanaryKillSwitchConfig,
 } from "@agenttrading/contracts";
 
 // ── Trigger Types ────────────────────────────────────────────────────

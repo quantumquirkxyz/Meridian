@@ -1,6 +1,5 @@
 import {
   type ApprovedRiskDecision,
-  type AuditEvent,
   type AuditReasonCode,
   type CostBreakdown,
   type OpportunityCandidate,

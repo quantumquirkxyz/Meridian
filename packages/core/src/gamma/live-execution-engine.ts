@@ -22,7 +22,6 @@ import {
 import {
   SimulatedExecutionEngine,
   type ExecutionSubmitInput,
-  type MarketSnapshot,
   type OrderSnapshot,
 } from "../execution/simulated-execution-engine.ts";
 

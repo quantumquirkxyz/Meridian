@@ -1,6 +1,5 @@
 import {
   isDataQualityReport,
-  type DataQualityReport,
   type DataQualityState,
   isStateAtLeast,
   SYSTEM_MODES,

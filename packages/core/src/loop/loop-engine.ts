@@ -1,5 +1,4 @@
 import type {
-  AuditReasonCode,
   LoopCycle,
   LoopDefinition,
   LoopName,
