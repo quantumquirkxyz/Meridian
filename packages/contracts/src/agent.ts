@@ -13,7 +13,7 @@ import {
 } from "./schema.ts";
 
 /**
- * Agent adapter contracts (Beta.2, Issue #26).
+ * Agent adapter contracts (Issue #26).
  *
  * The AgentAdapter is the typed contract that isolates the deterministic
  * core from LLM frameworks (Vercel AI SDK, Mastra). The StateGraph only

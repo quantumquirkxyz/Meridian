@@ -1,6 +1,6 @@
 /**
  * CanarySession: the deterministic Live Canary trading session
- * (Gamma.1, issue #34). Orchestrates live canary trading with:
+ * (Issue #34). Orchestrates live canary trading with:
  *
  * - Bounded capital bucket and hard limits per trade/day/venue/token/chain
  * - Manual and automatic kill switch
@@ -23,9 +23,9 @@
  */
 
 import {
-  type GammaControlCommand,
-  type GammaControlResult,
-  type GammaControlStatus,
+  type CanaryControlCommand,
+  type CanaryControlResult,
+  type CanaryControlStatus,
   type SystemMode,
 } from "@agenttrading/contracts";
 import {
@@ -158,7 +158,7 @@ export class CanarySession {
   // ── Public API ───────────────────────────────────────────────────────
 
   /** Current canary status. */
-  get status(): GammaControlStatus {
+  get status(): CanaryControlStatus {
     const nowMs = this.now();
     this.resetCountersIfNeeded(nowMs);
 
@@ -192,7 +192,7 @@ export class CanarySession {
    * Process a control command from the TUI.
    * Returns the full status after the command.
    */
-  control(command: GammaControlCommand): GammaControlResult {
+  control(command: CanaryControlCommand): CanaryControlResult {
     const statusBefore = this.status;
 
     switch (command) {
@@ -504,8 +504,8 @@ export class CanarySession {
   // ── Command Handlers ─────────────────────────────────────────────────
 
   private handleStart(
-    statusBefore: GammaControlStatus,
-  ): GammaControlResult {
+    statusBefore: CanaryControlStatus,
+  ): CanaryControlResult {
     if (this.killSwitchActive) {
       return {
         ...statusBefore,
@@ -521,7 +521,7 @@ export class CanarySession {
     return { ...this.status, command: "start", ok: true };
   }
 
-  private handleStop(statusBefore: GammaControlStatus): GammaControlResult {
+  private handleStop(statusBefore: CanaryControlStatus): CanaryControlResult {
     this.running = false;
     this.paused = false;
     this.cancelAllOpenOrders();
@@ -530,7 +530,7 @@ export class CanarySession {
     return { ...this.status, command: "stop", ok: true };
   }
 
-  private handlePause(statusBefore: GammaControlStatus): GammaControlResult {
+  private handlePause(statusBefore: CanaryControlStatus): CanaryControlResult {
     if (!this.running) {
       return {
         ...statusBefore,
@@ -545,7 +545,7 @@ export class CanarySession {
     return { ...this.status, command: "pause", ok: true };
   }
 
-  private handleResume(statusBefore: GammaControlStatus): GammaControlResult {
+  private handleResume(statusBefore: CanaryControlStatus): CanaryControlResult {
     if (!this.paused) {
       return {
         ...statusBefore,
@@ -569,8 +569,8 @@ export class CanarySession {
   }
 
   private handleCancelAll(
-    statusBefore: GammaControlStatus,
-  ): GammaControlResult {
+    statusBefore: CanaryControlStatus,
+  ): CanaryControlResult {
     this.cancelAllOpenOrders();
     this.recordAudit("CANCEL_ALL", {});
     return { ...this.status, command: "cancel-all", ok: true };
@@ -578,14 +578,14 @@ export class CanarySession {
 
   private handleMode(
     mode: SystemMode,
-    statusBefore: GammaControlStatus,
-  ): GammaControlResult {
+    statusBefore: CanaryControlStatus,
+  ): CanaryControlResult {
     this.currentMode = mode;
     this.recordAudit("MODE_CHANGED", { mode });
     return { ...this.status, command: mode === "CASH_ONLY" ? "cash-only" : "reduce-only", ok: true };
   }
 
-  private handleHalt(statusBefore: GammaControlStatus): GammaControlResult {
+  private handleHalt(statusBefore: CanaryControlStatus): CanaryControlResult {
     const result = this.killSwitch.manualHalt(this.killSwitchActive);
     if (result.shouldHalt) {
       this.killSwitchActive = true;

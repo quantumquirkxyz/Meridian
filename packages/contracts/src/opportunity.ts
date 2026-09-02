@@ -14,7 +14,7 @@ import { isRiskReasonCode, type RiskReasonCode } from "./reason-codes.ts";
 /**
  * OpportunityCandidate: an opportunity hypothesis with expected net profit
  * after the full cost stack, its route, costs, and invalidation reasons
- * (Spec Alpha, user stories 15-17, 29).
+ * (Issue #15).
  */
 
 export const OPPORTUNITY_STATUS = [
@@ -30,7 +30,7 @@ export type OpportunityStatus = (typeof OPPORTUNITY_STATUS)[number];
 /** Named value for the actionable candidate state (avoids indexing OPPORTUNITY_STATUS). */
 export const CANDIDATE_STATUS = "CANDIDATE" as const satisfies OpportunityStatus;
 
-/** Full cost stack from the Spec Alpha net profit formula. */
+/** Full cost stack from the net profit formula. */
 export interface CostBreakdown {
   tradingFeesUsd: number;
   slippageUsd: number;

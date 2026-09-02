@@ -8,7 +8,7 @@ import {
 } from "@agenttrading/contracts";
 
 /**
- * MarketGraph engine (Spec Alpha, user stories 11–18).
+ * MarketGraph engine (Issue #11).
  *
  * Directed, weighted graph of typed nodes (ASSET, VENUE, CHAIN, POOL,
  * ACCOUNT, STRATEGY) and edges (ORDER_BOOK, SWAP, BRIDGE, TRANSFER,

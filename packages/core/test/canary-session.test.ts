@@ -6,9 +6,9 @@ import {
   type CanaryConfig,
   type OrderIntent,
   type RiskDecision,
-  type GammaControlCommand,
+  type CanaryControlCommand,
 } from "@agenttrading/contracts";
-import { isGammaControlCommand, isGammaControlStatus } from "@agenttrading/contracts";
+import { isCanaryControlCommand, isCanaryControlStatus } from "@agenttrading/contracts";
 import { KillSwitch } from "../src/gamma/kill-switch.ts";
 import { LiveExecutionEngine, type CanaryExecutionState } from "../src/gamma/live-execution-engine.ts";
 import { CanarySession } from "../src/gamma/canary-session.ts";
@@ -103,21 +103,21 @@ describe("CanaryConfig contract", () => {
   });
 });
 
-// ── Gamma Control Commands ───────────────────────────────────────────
+// ── Canary Control Commands ───────────────────────────────────────────
 
-describe("GammaControl commands", () => {
+describe("CanaryControl commands", () => {
   test("all expected commands are valid", () => {
-    const commands: GammaControlCommand[] = [
+    const commands: CanaryControlCommand[] = [
       "start", "stop", "cancel-all", "cash-only", "reduce-only",
       "halt", "pause", "resume",
     ];
     for (const cmd of commands) {
-      expect(isGammaControlCommand(cmd)).toBe(true);
+      expect(isCanaryControlCommand(cmd)).toBe(true);
     }
   });
 
   test("invalid command is rejected", () => {
-    expect(isGammaControlCommand("unknown")).toBe(false);
+    expect(isCanaryControlCommand("unknown")).toBe(false);
   });
 });
 
@@ -754,12 +754,12 @@ describe("CanarySession (issue #34)", () => {
   });
 });
 
-// ── GammaControlStatus validator ─────────────────────────────────────
+// ── CanaryControlStatus validator ─────────────────────────────────────
 
-describe("GammaControlStatus contract", () => {
+describe("CanaryControlStatus contract", () => {
   test("validates a complete status", () => {
     expect(
-      isGammaControlStatus({
+      isCanaryControlStatus({
         running: false,
         mode: "NORMAL",
         state: "IDLE",
@@ -779,6 +779,6 @@ describe("GammaControlStatus contract", () => {
   });
 
   test("rejects incomplete status", () => {
-    expect(isGammaControlStatus({ running: false })).toBe(false);
+    expect(isCanaryControlStatus({ running: false })).toBe(false);
   });
 });

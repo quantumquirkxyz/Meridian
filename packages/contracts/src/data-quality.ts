@@ -11,7 +11,7 @@ import {
 } from "./schema.ts";
 
 /**
- * Per-source data quality state (Spec Alpha, user story 17).
+ * Per-source data quality state (Issue #18).
  * HEALTHY: analysis allowed. DEGRADED: observation only.
  * STALE: block dependent strategies. DISCONNECTED: alert + reconnect.
  */

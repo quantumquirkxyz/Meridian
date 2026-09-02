@@ -1,5 +1,5 @@
 /**
- * Harness evidence gate (issue #21 AC4). No hypothesis passes to Beta
+ * Harness evidence gate (issue #21 AC4). No hypothesis passes to production
  * without harness evidence that meets minimum performance criteria.
  *
  * This is the active enforcement layer on top of PerformanceReport:
@@ -43,7 +43,7 @@ const DEFAULT_CRITERIA: Required<HarnessGateCriteria> = {
 
 /**
  * Evaluate whether a PerformanceReport meets minimum harness evidence
- * criteria for promotion to Beta.
+ * criteria for promotion to production.
  *
  * Returns a HarnessGateResult with `approved: true` when all criteria
  * pass, or `approved: false` with a list of specific failures.

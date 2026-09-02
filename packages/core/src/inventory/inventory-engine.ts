@@ -211,7 +211,7 @@ export const DEFAULT_STABLECOIN_ASSETS: readonly string[] = [
   "GUSD",
 ];
 
-/** Default policy with reasonable Beta-level thresholds. */
+/** Default policy with reasonable production thresholds. */
 export const DEFAULT_INVENTORY_POLICY: Required<
   Pick<
     InventoryPolicy,

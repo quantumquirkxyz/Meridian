@@ -14,7 +14,7 @@ import { isPermission, type Permission } from "./stategraph.ts";
 import { isAuditReasonCode, type AuditReasonCode } from "./audit.ts";
 
 /**
- * Loop Engineering contracts (Beta.1, Issue #24).
+ * Loop Engineering contracts (Issue #24).
  *
  * A Loop is a closed perception → decision → action → learning cycle with
  * explicit frequency, inputs, outputs, permissions, and stopping criteria.

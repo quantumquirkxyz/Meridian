@@ -15,7 +15,7 @@ import { isMarketGraphSnapshot, type MarketGraphSnapshot } from "./graph.ts";
 import { isMarketDataSnapshot, type MarketDataSnapshot } from "./market-data.ts";
 
 /**
- * Base events for the in-memory event bus (Spec Alpha, user story 8).
+ * Base events for the in-memory event bus (Issue #8).
  * Components communicate via events; raw and normalized observations both
  * flow through the bus, are persisted to SQLite (bun:sqlite), and are
  * replayed deterministically (ADR-0006).

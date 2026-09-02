@@ -107,7 +107,7 @@ export interface RiskPolicy {
   maxCorrelationConcentration?: number;
 }
 
-/** Default policy — only a few rules enforced at Alpha-level thresholds. */
+/** Default policy — only a few rules enforced at production thresholds. */
 export const DEFAULT_RISK_POLICY: Required<
   Pick<
     RiskPolicy,

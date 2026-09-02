@@ -30,7 +30,7 @@ core imports into `infra`.
 
 ## Consequences
 
-- `infra` can host the Beta operator control TUI without introducing a separate
+- `infra` can host the operator control TUI without introducing a separate
   package for one UI component.
 - Boundary tests must enforce the explicit dependency set rather than the older
   `contracts` + `events` rule.

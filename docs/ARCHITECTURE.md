@@ -48,7 +48,7 @@ Base contracts: `StateName`, `StateContext`, `StateNode`, `Transition`, `Transit
 ## Agent layers
 
 1. **Perception** — interpret market state, data quality, liquidity, microstructure (Market Data Sentinel, Graph Builder, Liquidity & Microstructure).
-2. **Analytical** — generate hypotheses (Arbitrage Alpha, Strategy Research, Market Regime, Inventory).
+2. **Analytical** — generate hypotheses (Arbitrage, Strategy Research, Market Regime, Inventory).
 3. **Deliberative** — compare and debate (Planner/Supervisor, Bull, Bear, Skeptic, Risk Analyst, Execution Advisor). Activate with LLM (OpenRouter); deterministic fallback without.
 4. **Control and audit** — consistency and traceability (Audit, Learning, Memory, Policy, Infrastructure Guardian, Reconciliation). Behavioral runtimes always available.
 5. **Deterministic non-agentic** — the real authority: Risk Engine, Execution Engine, Reconciliation Engine, Circuit Breakers, Kill Switch.
@@ -81,13 +81,13 @@ Data path: `Market data → Graph state → Agent analysis → Candidate signal 
 ```
 packages/
   contracts    types, schemas, events, reason codes (shared frontier)
-  core         StateGraph, Risk, Execution, Reconciliation, Inventory, Loops, Gamma subsystems
+  core         StateGraph, Risk, Execution, Reconciliation, Inventory, Loops, canary subsystems
   events       in-memory event bus, SQLite event store, deterministic replay
   connectors   bybit (REST/WS), binance (REST), pancakeswap-v4 (RPC), dex-executor
   graph        MarketGraph, pathfinder, arbitrage-cycles, systemic-risk
   harness      backtest, replay, simulators (fill/gas/funding/latency/failure), stress
   agents       AgentAdapter + catalog (11 agents) + behavioral runtimes + OpenRouter adapter
-  infra        DataQualityMonitor, ObservabilityService, InfrastructureEngine, GammaControlTUI
+  infra        DataQualityMonitor, ObservabilityService, InfrastructureEngine, CanaryControlTUI
   cli          LiveRunner (demo/live), config, manifest, status display
 ```
 

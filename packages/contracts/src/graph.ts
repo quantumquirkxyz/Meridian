@@ -13,7 +13,7 @@ import {
 } from "./schema.ts";
 
 /**
- * MarketGraph representation (Spec Alpha, user stories 11-18). The market is a
+ * MarketGraph representation (Issue #11). The market is a
  * directed, weighted graph: nodes are assets/venues/chains/pools/accounts/
  * strategies, edges are order books/swaps/bridges/transfers/funding/
  * correlations.
@@ -49,7 +49,7 @@ export interface MarketNode {
   meta?: Record<string, unknown>;
 }
 
-/** Edge weights as defined in the Spec Alpha implementation decisions. */
+/** Edge weights as defined in the implementation decisions. */
 export interface EdgeWeights {
   price?: number;
   fee?: number;

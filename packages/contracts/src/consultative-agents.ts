@@ -53,7 +53,7 @@ export interface PlannerSupervisorOutput extends AgentAnalysisBase {
   recommendedMode: SystemMode;
 }
 
-export interface ArbitrageAlphaOutput extends AgentAnalysisBase {
+export interface ArbitrageOutput extends AgentAnalysisBase {
   agentId: "agent-arbitrage-alpha";
   candidateSignal: string;
   expectedNetProfitUsd: number;
@@ -153,7 +153,7 @@ export interface PolicyAgentOutput extends AgentAnalysisBase {
 
 export type ConsultativeAgentOutput =
   | PlannerSupervisorOutput
-  | ArbitrageAlphaOutput
+  | ArbitrageOutput
   | MarketRegimeOutput
   | BullOutput
   | BearOutput
@@ -180,7 +180,7 @@ const isPlannerSupervisorOutput: Validator<PlannerSupervisorOutput> = isObjectOf
 });
 
 // `invalidationReasons` is intentionally normalized from array shape here.
-const isArbitrageAlphaOutput = isObjectOf({
+const isArbitrageOutput = isObjectOf({
   ...isAgentAnalysisBase,
   agentId: isEnumOf(["agent-arbitrage-alpha"] as const),
   candidateSignal: isString,
@@ -196,7 +196,7 @@ const isArbitrageAlphaOutput = isObjectOf({
     failureRiskUsd: isNumber,
     safetyBufferUsd: isNumber,
   }),
-}) as Validator<ArbitrageAlphaOutput>;
+}) as Validator<ArbitrageOutput>;
 
 const isMarketRegimeOutput: Validator<MarketRegimeOutput> = isObjectOf({
   ...isAgentAnalysisBase,
@@ -311,7 +311,7 @@ const isPolicyAgentOutput: Validator<PolicyAgentOutput> = isObjectOf({
 export const isConsultativeAgentOutput: Validator<ConsultativeAgentOutput> =
   isOneOf<ConsultativeAgentOutput>([
     isPlannerSupervisorOutput,
-    isArbitrageAlphaOutput,
+    isArbitrageOutput,
     isMarketRegimeOutput,
     isBullOutput,
     isBearOutput,

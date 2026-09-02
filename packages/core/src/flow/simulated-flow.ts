@@ -27,7 +27,7 @@ import {
  * (detect opportunity -> build intent -> agent review -> risk gate -> simulate
  * execution -> reconcile -> audit) with NO LLM anywhere, and returns the
  * verifiable audit log. The agent review is a deterministic PASS/FAIL stub and
- * execution is simulated, exactly as Alpha requires.
+ * execution is simulated, exactly as production requires.
  */
 
 /** Scenario inputs for one deterministic opportunity walk. */
@@ -269,7 +269,7 @@ export function runSimulatedOpportunityFlow(
 
   // 6. Deterministic agent review stub (no LLM). The skeleton always passes a
   //    reviewed hypothesis on to the risk gate; the full consultative agents
-  //    ship in Beta (ticket #28).
+  //    ship in production (ticket #28).
   step(
     "RISK_VALIDATE",
     MODULE_ACTORS.agentReview,

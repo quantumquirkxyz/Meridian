@@ -11,7 +11,7 @@ import {
 /**
  * Normalized market observation shared across venues (CEX REST/WebSocket and
  * DEX RPC). Every connector normalizes into this single typed shape so that
- * downstream layers consume one vocabulary (Spec Alpha, user story 3).
+ * downstream layers consume one vocabulary (Issue #3).
  */
 export interface MarketDataSnapshot {
   /** Venue id, e.g. "bybit" or "pancakeswap-v4". */

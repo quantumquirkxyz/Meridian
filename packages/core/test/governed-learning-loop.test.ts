@@ -421,7 +421,7 @@ describe("EdgeDecayDetector", () => {
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const detector = new EdgeDecayDetector(journal, cfg, () => FIXED_TS);
 
-    // Alpha: consistent wins (no decay).
+    // Scenario: consistent wins (no decay).
     for (let i = 0; i < 30; i++) {
       journal.recordFill({
         tradeId: `alpha-${i}`,
@@ -439,7 +439,7 @@ describe("EdgeDecayDetector", () => {
       });
     }
 
-    // Beta: wins then losses (decay).
+    // Scenario: wins then losses (decay).
     for (let i = 0; i < 15; i++) {
       journal.recordFill({
         tradeId: `beta-good-${i}`,
@@ -474,7 +474,7 @@ describe("EdgeDecayDetector", () => {
     }
 
     const signals = detector.detectAll();
-    // Beta should have a decay signal.
+    // a decay signal should exist a decay signal.
     const betaSignal = signals.find((s) => s.strategyId === "beta");
     expect(betaSignal).toBeDefined();
   });

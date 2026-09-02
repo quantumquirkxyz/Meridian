@@ -1,6 +1,6 @@
 /**
  * KillSwitch: manual and automatic kill switch for the Live Canary
- * session (Gamma.1, issue #34).
+ * session (Issue #34).
  *
  * Acceptance criteria (AC3):
  *   - Kill switch (manual and automatic) halts live activity.

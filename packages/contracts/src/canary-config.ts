@@ -11,7 +11,7 @@ import {
 
 /**
  * CanaryConfig: the complete configuration for a Live Canary session
- * (Gamma.1, issue #34). Enforces bounded capital, hard limits, and
+ * (Issue #34). Enforces bounded capital, hard limits, and
  * safety constraints that prevent unbounded risk during live operation.
  *
  * The canary is deliberately conservative: few strategies, few venues,

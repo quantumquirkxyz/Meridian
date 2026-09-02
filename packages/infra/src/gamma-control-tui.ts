@@ -1,49 +1,49 @@
 import {
-  GAMMA_CONTROL_COMMANDS,
-  GAMMA_CONTROL_HOTKEYS,
-  type GammaControlCommand,
-  type GammaControlPort,
-  type GammaControlResult,
-  type GammaControlStatus,
+  CANARY_CONTROL_COMMANDS,
+  CANARY_CONTROL_HOTKEYS,
+  type CanaryControlCommand,
+  type CanaryControlPort,
+  type CanaryControlResult,
+  type CanaryControlStatus,
 } from "@agenttrading/contracts";
 
 export type {
-  GammaControlCommand,
-  GammaControlPort,
-  GammaControlResult as GammaControlPortResult,
-  GammaControlStatus as GammaControlPortStatus,
+  CanaryControlCommand,
+  CanaryControlPort,
+  CanaryControlResult as CanaryControlPortResult,
+  CanaryControlStatus as CanaryControlPortStatus,
 } from "@agenttrading/contracts";
 
-export interface GammaControlCommandRow {
-  command: GammaControlCommand;
+export interface CanaryControlCommandRow {
+  command: CanaryControlCommand;
   hotkey: string;
   label: string;
   dangerous: boolean;
 }
 
-export interface GammaControlStatusRow {
+export interface CanaryControlStatusRow {
   label: string;
   value: string;
   emphasis: "normal" | "warning" | "danger";
 }
 
-export interface GammaControlTuiView {
+export interface CanaryControlTuiView {
   title: string;
-  statusRows: readonly GammaControlStatusRow[];
-  commandRows: readonly GammaControlCommandRow[];
+  statusRows: readonly CanaryControlStatusRow[];
+  commandRows: readonly CanaryControlCommandRow[];
   footer: string;
 }
 
-export interface GammaLoopRunner {
+export interface CanaryLoopRunner {
   start(): void;
   stop(): void;
 }
 
-export interface GammaControlTuiModelOptions {
-  loopRunner?: GammaLoopRunner;
+export interface CanaryControlTuiModelOptions {
+  loopRunner?: CanaryLoopRunner;
 }
 
-const GAMMA_CONTROL_LABELS: Record<GammaControlCommand, string> = {
+const CANARY_CONTROL_LABELS: Record<CanaryControlCommand, string> = {
   start: "Start canary",
   stop: "Stop canary",
   "cancel-all": "Cancel all orders",
@@ -54,30 +54,30 @@ const GAMMA_CONTROL_LABELS: Record<GammaControlCommand, string> = {
   resume: "Resume canary",
 };
 
-export const GAMMA_CONTROL_COMMAND_DESCRIPTORS: readonly GammaControlCommandRow[] =
-  GAMMA_CONTROL_COMMANDS.map((command) => ({
+export const CANARY_CONTROL_COMMAND_DESCRIPTORS: readonly CanaryControlCommandRow[] =
+  CANARY_CONTROL_COMMANDS.map((command) => ({
     command,
-    hotkey: GAMMA_CONTROL_HOTKEYS[command],
-    label: GAMMA_CONTROL_LABELS[command],
+    hotkey: CANARY_CONTROL_HOTKEYS[command],
+    label: CANARY_CONTROL_LABELS[command],
     dangerous: command === "cancel-all" || command === "halt",
   }));
 
 export function gammaCommandForHotkey(
   input: string,
-): GammaControlCommand | undefined {
-  return GAMMA_CONTROL_COMMAND_DESCRIPTORS.find((row) => row.hotkey === input)
+): CanaryControlCommand | undefined {
+  return CANARY_CONTROL_COMMAND_DESCRIPTORS.find((row) => row.hotkey === input)
     ?.command;
 }
 
 function gammaModeEmphasis(
-  status: GammaControlStatus,
-): GammaControlStatusRow["emphasis"] {
+  status: CanaryControlStatus,
+): CanaryControlStatusRow["emphasis"] {
   if (status.killSwitchActive || status.mode === "HALT") return "danger";
   if (status.mode !== "NORMAL") return "warning";
   return "normal";
 }
 
-function renderGammaStatus(status: GammaControlStatus): GammaControlStatusRow[] {
+function renderCanaryStatus(status: CanaryControlStatus): CanaryControlStatusRow[] {
   const mode = gammaModeEmphasis(status);
   const dailyLossWarning =
     status.dailyPnlUsd < 0 ? "warning" : "normal";
@@ -147,42 +147,42 @@ function renderGammaStatus(status: GammaControlStatus): GammaControlStatusRow[] 
   ];
 }
 
-function renderGammaCommands(): GammaControlCommandRow[] {
-  return [...GAMMA_CONTROL_COMMAND_DESCRIPTORS];
+function renderCanaryCommands(): CanaryControlCommandRow[] {
+  return [...CANARY_CONTROL_COMMAND_DESCRIPTORS];
 }
 
 /**
- * Control model for the Gamma Live Canary TUI. It owns operator-visible
+ * Control model for the canary TUI. It owns operator-visible
  * state, command labels, and error containment; trading state changes
  * still flow only through the deterministic control port.
  */
-export class GammaControlTuiModel {
+export class CanaryControlTuiModel {
   private lastError: string | undefined;
-  private readonly loopRunner: GammaLoopRunner | undefined;
+  private readonly loopRunner: CanaryLoopRunner | undefined;
 
   constructor(
-    private readonly session: GammaControlPort,
-    options: GammaControlTuiModelOptions = {},
+    private readonly session: CanaryControlPort,
+    options: CanaryControlTuiModelOptions = {},
   ) {
     this.loopRunner = options.loopRunner;
   }
 
-  get status(): GammaControlStatus {
+  get status(): CanaryControlStatus {
     return this.session.status;
   }
 
-  get view(): GammaControlTuiView {
+  get view(): CanaryControlTuiView {
     return {
       title: "Meridian Live Canary Control",
-      statusRows: renderGammaStatus(this.session.status),
-      commandRows: renderGammaCommands(),
+      statusRows: renderCanaryStatus(this.session.status),
+      commandRows: renderCanaryCommands(),
       footer:
         this.lastError ??
         "Hotkeys: s start, x stop, c cancel-all, r reduce-only, $ cash-only, h halt, p pause, u resume",
     };
   }
 
-  dispatch(command: GammaControlCommand): GammaControlResult {
+  dispatch(command: CanaryControlCommand): CanaryControlResult {
     try {
       const result = this.session.control(command);
       if (command === "start") {

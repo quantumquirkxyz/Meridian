@@ -29,8 +29,8 @@ Additional mode-shape rules locked in by this decision:
 
 - Positive: one code path for execution → integration defects are caught in `demo` before they reach `live`. The runner cannot drift between modes.
 - Positive: the same audit, reconciliation, and kill switch that protect `live` are the ones validated in `demo`.
-- Positive: promotion to `live` is gated on documentary evidence, not just "it ran" — explicit human approval matches the Gamma exit criterion in `ROADMAP.md`.
+- Positive: promotion to `live` is gated on documentary evidence, not just "it ran" — explicit human approval matches the canary exit criterion in `ROADMAP.md`.
 - Negative: `demo` must absorb the cost of running the full reconciler + audit pipeline against Bybit Demo; this is more work than a permissive synthetic-only mode would be.
 - Negative: the runner depends on Bybit Demo availability; if `api-demo.bybit.com` is down, `demo` cannot be exercised (it cannot silently fall back to a synthetic-only mode without breaking the contract).
 - Negative: the `LiveExecutionEngine` must be refactored to delegate to the Bybit connectors instead of wrapping `SimulatedExecutionEngine` as the order path. The simulator remains as a harness/test utility.
-- Follow-up: when `live` is authorized, the same `AppConfig` shape must accept live endpoints and canary limits; the canary limits are not part of this ADR (Gamma.1 territory).
+- Follow-up: when `live` is authorized, the same `AppConfig` shape must accept live endpoints and canary limits; the canary limits are not part of this ADR (canary territory).

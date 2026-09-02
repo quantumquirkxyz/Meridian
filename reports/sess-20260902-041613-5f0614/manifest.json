@@ -1,0 +1,20 @@
+{
+  "sessionId": "sess-20260902-041613-5f0614",
+  "startedAtMs": 1788322579053,
+  "endedAtMs": 1788322663137,
+  "files": [
+    {
+      "category": "audit-log",
+      "path": "./reports/sess-20260902-041613-5f0614/audit.jsonl",
+      "sizeBytes": 0,
+      "writtenAtMs": 1788322579054
+    },
+    {
+      "category": "manifest",
+      "path": "./reports/sess-20260902-041613-5f0614/manifest.json",
+      "sizeBytes": 0,
+      "writtenAtMs": 1788322663137
+    }
+  ],
+  "totalFiles": 2
+}

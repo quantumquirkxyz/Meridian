@@ -1,12 +1,12 @@
 /**
- * GammaSession: the top-level integration that wires all Gamma subsystems
+ * TradingSession: the top-level integration that wires all canary subsystems
  * together for a go-live canary session (issue #40).
  *
  * Acceptance criteria:
- *   AC1: All Gamma subsystems integrate and run together.
+ *   AC1: All canary subsystems integrate and run together.
  *   AC2: A go-live canary session completes within hard limits.
  *   AC3: Every decision/outcome is auditable; failures degrade safely.
- *   AC4: Gamma exit criterion met: live with bounded capital, preserves
+ *   AC4: canary exit criterion met: live with bounded capital, preserves
  *        limits, adapts, learns governed, auditable, scales only with
  *        evidence.
  *
@@ -23,7 +23,7 @@
  *
  * Usage:
  * ```ts
- * const session = new GammaSession({ config: myConfig });
+ * const session = new TradingSession({ config: myConfig });
  * session.start();
  *
  * // Each tick: classify regime → discover routes → submit orders → record fills
@@ -42,7 +42,7 @@
 
 import type {
   CanaryConfig,
-  GammaControlCommand,
+  CanaryControlCommand,
   LearningRecommendation,
   MarketGraphSnapshot,
   OrderIntent,
@@ -69,9 +69,9 @@ import type { TradeJournal } from "./trade-journal.ts";
 // ── Types ────────────────────────────────────────────────────────────
 
 /**
- * Input for a single GammaSession cycle.
+ * Input for a single TradingSession cycle.
  */
-export interface GammaCycleInput {
+export interface TradingCycleInput {
   /** Market signals for regime classification. */
   regime: RegimeClassifierInput;
   /** Market snapshot for order execution. */
@@ -85,9 +85,9 @@ export interface GammaCycleInput {
 }
 
 /**
- * Result of a single GammaSession cycle.
+ * Result of a single TradingSession cycle.
  */
-export interface GammaCycleResult {
+export interface TradingCycleResult {
   /** Whether the cycle ran successfully. */
   ok: boolean;
   /** Error message if the cycle failed. */
@@ -121,7 +121,7 @@ export interface GammaCycleResult {
 /**
  * The complete session summary produced at session end.
  */
-export interface GammaSessionSummary {
+export interface TradingSessionSummary {
   /** Whether the session completed normally. */
   completedNormally: boolean;
   /** Final canary status. */
@@ -168,7 +168,7 @@ export interface GammaSessionSummary {
 
 // ── Session Options ──────────────────────────────────────────────────
 
-export interface GammaSessionOptions {
+export interface TradingSessionOptions {
   /** Injectable clock; defaults to Date.now. */
   now?: () => number;
   /** Custom canary config; defaults to DEFAULT_CANARY_CONFIG. */
@@ -177,15 +177,15 @@ export interface GammaSessionOptions {
   learningCycleInterval?: number;
 }
 
-// ── GammaSession ─────────────────────────────────────────────────────
+// ── TradingSession ─────────────────────────────────────────────────────
 
 /**
- * GammaSession: the top-level integration that wires all Gamma subsystems
+ * TradingSession: the top-level integration that wires all canary subsystems
  * together for a go-live canary session.
  */
 import type { AgentInput, AgentOutput } from "@agenttrading/contracts";
 
-export class GammaSession {
+export class TradingSession {
   private readonly now: () => number;
   private readonly learningCycleInterval: number;
   private cycleCount = 0;
@@ -205,7 +205,7 @@ export class GammaSession {
   private lastRegimeClassification: RegimeClassification | null = null;
   private allRecommendations: LearningRecommendation[] = [];
 
-  constructor(options: GammaSessionOptions = {}) {
+  constructor(options: TradingSessionOptions = {}) {
     this.now = options.now ?? (() => Date.now());
     this.learningCycleInterval = options.learningCycleInterval ?? 10;
 
@@ -226,14 +226,14 @@ export class GammaSession {
 
   // ── Public API ──────────────────────────────────────────────────────
 
-  /** Start the Gamma session. */
+  /** Start the canary session. */
   start(): void {
     if (this.running) return;
     this.running = true;
     this.canarySession.control("start");
   }
 
-  /** Stop the Gamma session and cancel open orders. */
+  /** Stop the canary session and cancel open orders. */
   stop(): void {
     if (!this.running) return;
     this.running = false;
@@ -242,7 +242,7 @@ export class GammaSession {
   }
 
   /** Process a control command (delegates to CanarySession). */
-  control(command: GammaControlCommand) {
+  control(command: CanaryControlCommand) {
     return this.canarySession.control(command);
   }
 
@@ -257,7 +257,7 @@ export class GammaSession {
     this.adapter = adapter;
   }
 
-  private invokeAgentReview(input: GammaCycleInput): AgentOutput | undefined {
+  private invokeAgentReview(input: TradingCycleInput): AgentOutput | undefined {
     if (!this.adapter) return undefined;
     // Agents observe only (ADR-0003); observation runs synchronously
     // with typed contracts — never approves or executes orders.
@@ -277,7 +277,7 @@ export class GammaSession {
   }
 
   /** Run a single integration cycle. */
-  runCycle(input: GammaCycleInput): GammaCycleResult {
+  runCycle(input: TradingCycleInput): TradingCycleResult {
     if (!this.running) {
       return this.cycleError("session is not running");
     }
@@ -401,7 +401,7 @@ export class GammaSession {
       learningCycleRan,
     });
 
-    const result: GammaCycleResult = {
+    const result: TradingCycleResult = {
       ok: true,
       regimeClassification,
       regimePolicy: regimeResult.policy,
@@ -518,9 +518,9 @@ export class GammaSession {
    * AC1: All subsystems integrated — summary includes data from every subsystem.
    * AC2: Session completes within hard limits — summary reports capital and limits.
    * AC3: Every decision auditable — summary includes audit event count and reconstructions.
-   * AC4: Gamma exit criterion — summary reports bounded capital, preserved limits, etc.
+   * AC4: canary exit criterion — summary reports bounded capital, preserved limits, etc.
    */
-  getSessionSummary(): GammaSessionSummary {
+  getSessionSummary(): TradingSessionSummary {
     // Build audit reconstructions from journal entries and audit events.
     // (In a real system, audit events would come from the AuditLog.
     //  Here we feed them from the reconstructor's stored events.)
@@ -589,7 +589,7 @@ export class GammaSession {
   // ── Helpers ──────────────────────────────────────────────────────
 
   /** Shared error-return shape for runCycle early exits (S4). */
-  private cycleError(error: string): GammaCycleResult {
+  private cycleError(error: string): TradingCycleResult {
     return {
       ok: false,
       error,

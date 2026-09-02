@@ -16,7 +16,7 @@
  *   AC7: Reconciliation compares internal vs exchange state on startup & periodically
  *   AC8: Refuses to start if API keys missing/empty or withdrawals not disabled
  *   AC9: Startup check: verify Bybit API connectivity
- *   AC10: Emergency modes: cancel-all, reduce-only, cash-only from GammaControlStatus
+ *   AC10: Emergency modes: cancel-all, reduce-only, cash-only from CanaryControlStatus
  *   AC11: Audit trail: every order, fill, risk decision logged to JSONL
  *   AC12: Session summary: trades, PnL, fees, regime changes, learning recs
  *   AC13: Graceful shutdown: cancel open orders, close WS, flush logs, print summary
@@ -31,7 +31,7 @@
 
 import type {
   CanaryConfig,
-  GammaControlCommand,
+  CanaryControlCommand,
   MarketDataSnapshot,
   OrderIntent,
   OrderUpdate,
@@ -42,7 +42,7 @@ import type {
 } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import {
-  GammaSession,
+  TradingSession,
   AuditLogger,
   buildSessionReport,
   printSessionReport,
@@ -184,7 +184,7 @@ export class LiveRunner {
   private readonly nowMs: () => number;
 
   // Core subsystems
-  private readonly session: GammaSession;
+  private readonly session: TradingSession;
   private readonly auditLogger: AuditLogger;
   private readonly reconciliationEngine: ReconciliationEngine;
   private readonly opportunityDetector: OpportunityDetector;
@@ -266,7 +266,7 @@ export class LiveRunner {
     this.validateConfig();
 
     // Initialize core subsystems
-    this.session = new GammaSession({
+    this.session = new TradingSession({
       canaryConfig: this.config.canaryConfig,
       learningCycleInterval: 10,
       now: this.nowMs,
@@ -367,9 +367,9 @@ export class LiveRunner {
    * Enables emergency modes (cancel-all, reduce-only, cash-only) from
    * the CLI or external callers.
    *
-   * AC10: Emergency modes reachable from GammaControlStatus.
+   * AC10: Emergency modes reachable from CanaryControlStatus.
    */
-  control(command: GammaControlCommand) {
+  control(command: CanaryControlCommand) {
     return this.session.control(command);
   }
 
@@ -1036,7 +1036,7 @@ export class LiveRunner {
     this.pendingOrders.clear();
     this.committedCapitalUsd = 0;
 
-    // Also control through GammaSession
+    // Also control through TradingSession
     this.session.control("cancel-all");
   }
 
@@ -1137,7 +1137,7 @@ export class LiveRunner {
       }
     }
 
-    // Run GammaSession cycle with approved intents and their risk decisions
+    // Run TradingSession cycle with approved intents and their risk decisions
     const result = this.session.runCycle({
       regime: regimeInput,
       market: {

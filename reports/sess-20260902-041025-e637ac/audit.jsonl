@@ -1,0 +1,32 @@
+{"timestampMs":1788322226039,"type":"SESSION_STARTED","data":{"symbols":["BTCUSDT","ETHUSDT","USDT"],"cycleIntervalMs":5000,"mode":"demo","reconciliationIntervalMs":30000},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322227497,"type":"INVENTORY_UPDATED","data":{"availableCapitalUsd":104960.89850536,"committedCapitalUsd":0,"freeCapitalUsd":104960.89850536},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322227498,"type":"INFRA_CONNECTED","data":{"dataQualityMonitor":true},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322227500,"type":"LLM_ADAPTER_WIRED","data":{"provider":"openrouter","model":"openrouter/auto","catalogAgents":11},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322227500,"type":"AGENT_WIRED","data":{"agentId":"market-observer","role":"consultative","catalogAgents":11,"behavioralAdapters":["audit","memory","policy"],"llmEnabled":true},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322231362,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322236366,"type":"CYCLE_HALTED","data":{"cycleCount":1,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322241364,"type":"CYCLE_HALTED","data":{"cycleCount":2,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322246366,"type":"CYCLE_HALTED","data":{"cycleCount":3,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322251366,"type":"CYCLE_HALTED","data":{"cycleCount":4,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322256367,"type":"CYCLE_HALTED","data":{"cycleCount":5,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322261368,"type":"CYCLE_HALTED","data":{"cycleCount":6,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322263017,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322266368,"type":"CYCLE_HALTED","data":{"cycleCount":7,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322271369,"type":"CYCLE_HALTED","data":{"cycleCount":8,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322276376,"type":"CYCLE_HALTED","data":{"cycleCount":9,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322281377,"type":"CYCLE_HALTED","data":{"cycleCount":10,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322286378,"type":"CYCLE_HALTED","data":{"cycleCount":11,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322291378,"type":"CYCLE_HALTED","data":{"cycleCount":12,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322293292,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322296379,"type":"CYCLE_HALTED","data":{"cycleCount":13,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322301380,"type":"CYCLE_HALTED","data":{"cycleCount":14,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322306381,"type":"CYCLE_HALTED","data":{"cycleCount":15,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322311383,"type":"CYCLE_HALTED","data":{"cycleCount":16,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322316383,"type":"CYCLE_HALTED","data":{"cycleCount":17,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322321384,"type":"CYCLE_HALTED","data":{"cycleCount":18,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322323594,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322326385,"type":"CYCLE_HALTED","data":{"cycleCount":19,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322331386,"type":"CYCLE_HALTED","data":{"cycleCount":20,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322336386,"type":"CYCLE_HALTED","data":{"cycleCount":21,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322341387,"type":"CYCLE_HALTED","data":{"cycleCount":22,"reason":"kill switch active"},"sessionId":"sess-20260902-041025-e637ac"}
+{"timestampMs":1788322345335,"type":"SESSION_ENDED","data":{"durationMs":119315,"cycleCount":22,"ordersSubmitted":0,"ordersFilled":0,"opportunitiesDetected":0,"opportunitiesRejectedByRisk":0,"tradesCount":0},"sessionId":"sess-20260902-041025-e637ac"}

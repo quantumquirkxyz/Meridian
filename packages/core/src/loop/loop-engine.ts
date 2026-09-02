@@ -13,7 +13,7 @@ import {
 } from "../reconciliation/reconciliation-engine.ts";
 
 /**
- * LoopEngine: the deterministic orchestrator for Beta.1 Loop Engineering
+ * LoopEngine: the deterministic orchestrator for Loop Engineering
  * (Issue #24). Composes all 8 loops into a closed cycle, records every
  * loop output to audit, and safely halts a loop when its stopping criterion
  * is met.
@@ -36,7 +36,7 @@ export interface LoopEngineOptions {
 }
 
 /**
- * Default loop definitions for the 8 canonical loops (Beta.1, Issue #24).
+ * Default loop definitions for the 8 canonical loops (Issue #24).
  *
  * Each loop has explicit frequency, inputs, outputs, permissions, and a
  * stopping criterion. The loops compose into the full closed cycle:

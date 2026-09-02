@@ -136,7 +136,7 @@ _Avoid_: fixed regime thresholds without adaptation.
 Global permission state: `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. Modes can only reduce activity, never increase it. Defensive states are suffixed (`CASH_ONLY_MODE`, `CANCEL_ONLY_MODE`, `REDUCE_ONLY_MODE`) while modes are not.
 _Avoid_: trading always active; conflating mode names across namespaces.
 
-**GammaSession:**
+**TradingSession:**
 Top-level integration that wires CanarySession, RegimeClassifier, RegimePolicyEngine, LearningEngine, AuditReconstructor, and RouteEngine into a single operational session. Orchestrates the full cycle from regime classification through opportunity detection to audit.
 _Avoid_: treating as a standalone component; bypassing its subsystem wiring.
 

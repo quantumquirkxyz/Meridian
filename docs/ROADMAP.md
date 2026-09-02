@@ -39,7 +39,7 @@ Subprojects:
 
 ## Beta — Perceive, decide, and act in a safe mode (Beta board)
 
-Agents: all Alpha agents + Arbitrage Alpha, Strategy Research, Market Regime, Planner/Supervisor, Bull, Bear, Skeptic, Risk Analyst, Execution Advisor, Reconciliation, Memory, Audit, Infrastructure Guardian.
+Agents: all Alpha agents + Arbitrage, Strategy Research, Market Regime, Planner/Supervisor, Bull, Bear, Skeptic, Risk Analyst, Execution Advisor, Reconciliation, Memory, Audit, Infrastructure Guardian.
 Deterministic modules: Risk Engine, Execution Engine (simulated), Reconciliation Engine, Circuit Breakers, Position Sizing, Inventory Engine.
 
 Subprojects:

@@ -12,7 +12,7 @@ import { isSystemMode, type SystemMode } from "./modes.ts";
 import { isStateName, type StateName } from "./stategraph.ts";
 
 /**
- * Gamma control-surface contract (issue #34). Extends the Beta control
+ * Gamma control-surface contract (issue #34). canary control
  * vocabulary with live-canary-specific commands and status fields.
  *
  * The deterministic canary session and the operator UI both speak this
@@ -25,26 +25,26 @@ import { isStateName, type StateName } from "./stategraph.ts";
  *     from the TUI.
  */
 
-export const GAMMA_CONTROL_COMMANDS = [
+export const CANARY_CONTROL_COMMANDS = [
   "start",
   "stop",
   "cancel-all",
   "cash-only",
   "reduce-only",
   "halt",
-  // Gamma-specific canary commands
+  // canary-specific canary commands
   "pause",
   "resume",
 ] as const;
 
-export type GammaControlCommand = (typeof GAMMA_CONTROL_COMMANDS)[number];
+export type CanaryControlCommand = (typeof CANARY_CONTROL_COMMANDS)[number];
 
 /**
- * Live canary status snapshot. Extends Beta status with canary-specific
+ * Live canary status snapshot. canary status with canary-specific
  * fields: capital deployed, limits hit, orphan detection, kill switch
  * details.
  */
-export interface GammaControlStatus {
+export interface CanaryControlStatus {
   /** Whether the canary session is running. */
   running: boolean;
   /** Current system mode. */
@@ -81,8 +81,8 @@ export interface GammaControlStatus {
  * Result of a gamma control command. Includes the command that was
  * executed plus the full status snapshot after the command.
  */
-export interface GammaControlResult extends GammaControlStatus {
-  command: GammaControlCommand;
+export interface CanaryControlResult extends CanaryControlStatus {
+  command: CanaryControlCommand;
   /** Whether the command succeeded. */
   ok: boolean;
   /** Human-readable error message if the command failed. */
@@ -91,10 +91,10 @@ export interface GammaControlResult extends GammaControlStatus {
 
 // ── Validators ───────────────────────────────────────────────────────
 
-export const isGammaControlCommand: Validator<GammaControlCommand> =
-  isEnumOf(GAMMA_CONTROL_COMMANDS);
+export const isCanaryControlCommand: Validator<CanaryControlCommand> =
+  isEnumOf(CANARY_CONTROL_COMMANDS);
 
-export const isGammaControlStatus: Validator<GammaControlStatus> = isObjectOf({
+export const isCanaryControlStatus: Validator<CanaryControlStatus> = isObjectOf({
   running: isBoolean,
   mode: isSystemMode,
   state: isStateName,
@@ -112,8 +112,8 @@ export const isGammaControlStatus: Validator<GammaControlStatus> = isObjectOf({
   paused: isBoolean,
 });
 
-export const isGammaControlResult: Validator<GammaControlResult> = isObjectOf({
-  command: isGammaControlCommand,
+export const isCanaryControlResult: Validator<CanaryControlResult> = isObjectOf({
+  command: isCanaryControlCommand,
   running: isBoolean,
   mode: isSystemMode,
   state: isStateName,
@@ -133,26 +133,26 @@ export const isGammaControlResult: Validator<GammaControlResult> = isObjectOf({
   error: isOptional(isString),
 });
 
-export function parseGammaControlCommand(value: unknown): GammaControlCommand {
-  return parse(isGammaControlCommand, value, "GammaControlCommand");
+export function parseCanaryControlCommand(value: unknown): CanaryControlCommand {
+  return parse(isCanaryControlCommand, value, "CanaryControlCommand");
 }
 
 /**
- * Port through which operator UIs control the Gamma canary session.
+ * Port through which operator UIs control the canary session.
  * Lives in contracts so the wiring layer can import core to construct
  * the session while infra imports only this port type.
  */
-export interface GammaControlPort {
-  readonly status: GammaControlStatus;
-  control(command: GammaControlCommand): GammaControlResult;
+export interface CanaryControlPort {
+  readonly status: CanaryControlStatus;
+  control(command: CanaryControlCommand): CanaryControlResult;
 }
 
 /**
- * Canonical hotkey-to-command mapping for the Gamma TUI. Both the text
+ * Canonical hotkey-to-command mapping for the canary TUI. Both the text
  * renderer and the Ink input handler derive their bindings from this
  * single source.
  */
-export const GAMMA_CONTROL_HOTKEYS = {
+export const CANARY_CONTROL_HOTKEYS = {
   start: "s",
   stop: "x",
   "cancel-all": "c",
@@ -161,4 +161,4 @@ export const GAMMA_CONTROL_HOTKEYS = {
   halt: "h",
   pause: "p",
   resume: "u",
-} as const satisfies Record<GammaControlCommand, string>;
+} as const satisfies Record<CanaryControlCommand, string>;

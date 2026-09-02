@@ -19,16 +19,16 @@ export { ObservabilityService, OBSERVABILITY_SOURCE, OPPORTUNITY_RECORDER_SOURCE
 export { InfrastructureEngine, modeIndex } from "./infrastructure-engine.ts";
 
 export {
-  GAMMA_CONTROL_COMMAND_DESCRIPTORS,
-  GammaControlTuiModel,
+  CANARY_CONTROL_COMMAND_DESCRIPTORS,
+  CanaryControlTuiModel,
   gammaCommandForHotkey,
-  type GammaControlCommandRow,
-  type GammaControlCommand,
-  type GammaControlTuiModelOptions,
-  type GammaControlPort,
-  type GammaControlPortResult,
-  type GammaControlPortStatus,
-  type GammaControlStatusRow,
-  type GammaControlTuiView,
-  type GammaLoopRunner,
+  type CanaryControlCommandRow,
+  type CanaryControlCommand,
+  type CanaryControlTuiModelOptions,
+  type CanaryControlPort,
+  type CanaryControlPortResult,
+  type CanaryControlPortStatus,
+  type CanaryControlStatusRow,
+  type CanaryControlTuiView,
+  type CanaryLoopRunner,
 } from "./gamma-control-tui.ts";

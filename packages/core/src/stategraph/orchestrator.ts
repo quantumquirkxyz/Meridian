@@ -10,7 +10,7 @@ import type { PermissionRegistry } from "./permission-registry.ts";
 import { StateGraph, type TransitionInput, type TransitionOutcome } from "./state-graph.ts";
 
 /**
- * Orchestrator (Beta.2, issue #25): the complete deterministic orchestrator
+ * Orchestrator (Issue #25): the complete deterministic orchestrator
  * built on top of the Phase Zero StateGraph. Adds:
  *
  * - Timeout management per state (automatic transition on stall)

@@ -24,7 +24,7 @@ We build a **minimal in-house implementation** of a state graph (state machine +
 
 1. **LangGraph as core dependency** — Rejected. LangGraph is designed for LLM-driven agent workflows, not deterministic financial systems. It introduces Python-style graph semantics, checkpoint persistence, and human-in-the-loop patterns that don't align with the requirement that the Risk Engine governs all execution. Coupling to LangGraph would make the core dependent on an LLM framework.
 
-2. **Temporal for orchestration** — Rejected for the core. Temporal is excellent for durable execution and retry logic, but it's overkill for a state graph with ~20 states and deterministic transitions. The overhead of running a Temporal server doesn't justify the benefit for the current scale. May be reconsidered for Gamma if durable execution becomes necessary.
+2. **Temporal for orchestration** — Rejected for the core. Temporal is excellent for durable execution and retry logic, but it's overkill for a state graph with ~20 states and deterministic transitions. The overhead of running a Temporal server doesn't justify the benefit for the current scale. May be reconsidered for the canary session if durable execution becomes necessary.
 
 3. **XState or other state machine libraries** — Considered but rejected. These libraries provide general-purpose state machine semantics but lack the specific features needed: permission registry, guard composition, mandatory audit events, and the ability to model defensive modes that reduce activity. Building custom provides full control over the semantics.
 

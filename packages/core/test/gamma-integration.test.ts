@@ -14,9 +14,9 @@ import { AuditReconstructor } from "../src/gamma/audit-reconstructor.ts";
 import { ReportGenerator } from "../src/gamma/report-generator.ts";
 import { AuditExporter } from "../src/gamma/audit-exporter.ts";
 import {
-  GammaSession,
-  type GammaCycleInput,
-  type GammaSessionSummary,
+  TradingSession,
+  type TradingCycleInput,
+  type TradingSessionSummary,
 } from "../src/gamma/gamma-session.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -85,8 +85,8 @@ function drawdownRegimeInput(): RegimeClassifierInput {
 }
 
 function cycleInput(
-  overrides: Partial<GammaCycleInput> = {},
-): GammaCycleInput {
+  overrides: Partial<TradingCycleInput> = {},
+): TradingCycleInput {
   return {
     regime: normalRegimeInput(),
     market: { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
@@ -107,9 +107,9 @@ function canaryConfig(
 
 // ── AC1: All Subsystems Integrate ────────────────────────────────────
 
-describe("AC1: All Gamma subsystems integrate and run together", () => {
-  test("GammaSession wires CanarySession, RegimeClassifier, RegimePolicyEngine, LearningEngine, AuditReconstructor", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+describe("AC1: All canary subsystems integrate and run together", () => {
+  test("TradingSession wires CanarySession, RegimeClassifier, RegimePolicyEngine, LearningEngine, AuditReconstructor", () => {
+    const session = new TradingSession({ now: () => FIXED_TS });
 
     // All subsystems are accessible.
     expect(session.learning).toBeDefined();
@@ -127,7 +127,7 @@ describe("AC1: All Gamma subsystems integrate and run together", () => {
   });
 
   test("runCycle classifies regime, evaluates policy, and submits through canary", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     const result = session.runCycle(cycleInput());
@@ -144,7 +144,7 @@ describe("AC1: All Gamma subsystems integrate and run together", () => {
   });
 
   test("learning engine records fills from canary submissions", () => {
-    const session = new GammaSession({
+    const session = new TradingSession({
       now: () => FIXED_TS,
       learningCycleInterval: 1, // Run learning every cycle
     });
@@ -166,7 +166,7 @@ describe("AC1: All Gamma subsystems integrate and run together", () => {
   });
 
   test("audit reconstructor records events from canary cycles", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     session.runCycle(cycleInput());
@@ -195,7 +195,7 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
         maxOrdersPerWeek: 100,
       },
     });
-    const session = new GammaSession({ now: () => FIXED_TS, canaryConfig: config });
+    const session = new TradingSession({ now: () => FIXED_TS, canaryConfig: config });
     session.start();
 
     // Submit 4 orders of $25 each without filling them (capital stays deployed).
@@ -244,7 +244,7 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
         maxWeeklyLossUsd: 300,
       },
     });
-    const session = new GammaSession({ now: () => FIXED_TS, canaryConfig: config });
+    const session = new TradingSession({ now: () => FIXED_TS, canaryConfig: config });
     session.start();
 
     // Submit an order exceeding per-trade limit: 0.5 qty * $100 = $50 > $10.
@@ -263,7 +263,7 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
   });
 
   test("session completes normally with stop", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // Run a few cycles.
@@ -285,7 +285,7 @@ describe("AC2: Go-live canary session completes within hard limits", () => {
 
 describe("AC3: Every decision is auditable; failures degrade safely", () => {
   test("regime change to drawdown triggers halt", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // First cycle: normal regime.
@@ -317,7 +317,7 @@ describe("AC3: Every decision is auditable; failures degrade safely", () => {
   });
 
   test("regime change to high volatility triggers reduce-only", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // Normal regime first.
@@ -335,7 +335,7 @@ describe("AC3: Every decision is auditable; failures degrade safely", () => {
   });
 
   test("regime policy blocks trading when regime disables it", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // First cycle to establish regime.
@@ -357,7 +357,7 @@ describe("AC3: Every decision is auditable; failures degrade safely", () => {
   });
 
   test("orphan order triggers kill switch", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
     session.runCycle(cycleInput());
 
@@ -371,7 +371,7 @@ describe("AC3: Every decision is auditable; failures degrade safely", () => {
   });
 
   test("audit events are recorded for every cycle", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     session.runCycle(cycleInput());
@@ -384,7 +384,7 @@ describe("AC3: Every decision is auditable; failures degrade safely", () => {
   });
 
   test("learning recommendations are generated when learning cycle runs", () => {
-    const session = new GammaSession({
+    const session = new TradingSession({
       now: () => FIXED_TS,
       learningCycleInterval: 1, // Every cycle
     });
@@ -420,11 +420,11 @@ describe("AC3: Every decision is auditable; failures degrade safely", () => {
   });
 });
 
-// ── AC4: Gamma Exit Criterion ────────────────────────────────────────
+// ── AC4: Canary Exit Criterion ────────────────────────────────────────
 
-describe("AC4: Gamma exit criterion — bounded capital, limits, adaptation, audit", () => {
+describe("AC4: canary exit criterion — bounded capital, limits, adaptation, audit", () => {
   test("session summary includes all subsystem data", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // Run some cycles.
@@ -495,7 +495,7 @@ describe("AC4: Gamma exit criterion — bounded capital, limits, adaptation, aud
   });
 
   test("session preserves limits through regime adaptation", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // Start in trend regime (full permissions).
@@ -529,7 +529,7 @@ describe("AC4: Gamma exit criterion — bounded capital, limits, adaptation, aud
         maxWeeklyLossUsd: 200,
       },
     });
-    const session = new GammaSession({ now: () => FIXED_TS, canaryConfig: config });
+    const session = new TradingSession({ now: () => FIXED_TS, canaryConfig: config });
     session.start();
 
     session.runCycle(cycleInput());
@@ -544,7 +544,7 @@ describe("AC4: Gamma exit criterion — bounded capital, limits, adaptation, aud
   });
 
   test("complete go-live canary lifecycle: start → trade → regime change → halt → report", () => {
-    const session = new GammaSession({ now: () => FIXED_TS });
+    const session = new TradingSession({ now: () => FIXED_TS });
     session.start();
 
     // Cycle 1: Normal trading.
@@ -598,7 +598,7 @@ describe("AC4: Gamma exit criterion — bounded capital, limits, adaptation, aud
   });
 
   test("scales only with evidence: promotion pipeline integration", () => {
-    const session = new GammaSession({
+    const session = new TradingSession({
       now: () => FIXED_TS,
       learningCycleInterval: 1,
     });
