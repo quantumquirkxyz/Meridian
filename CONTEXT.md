@@ -6,7 +6,7 @@ AgentTrading is a multi-agent algorithmic trading infrastructure for hybrid cryp
 
 The system observes market data from multiple venues, detects opportunities by computing net profit after full cost stacks (fees, slippage, gas, bridges, funding, latency), evaluates them through deterministic risk rules, executes approved orders, reconciles state against exchanges, and records every decision for audit.
 
-**Current operational state:** Connected to Bybit Demo Trading with virtual assets. 11 consultative agents defined. DataQualityMonitor tracking source health. OpenRouter LLM adapter wired for agent reasoning when configured. Full audit trail with JSONL logging.
+**Current operational state:** Multi-agent system configured for live trading across Bybit (CEX) and PancakeSwap (DEX). 11 consultative agents defined. Source health tracking enabled. OpenRouter LLM adapter wired for agent reasoning when configured. Full audit trail with JSONL logging.
 
 ## 2. Why it exists
 
@@ -44,7 +44,7 @@ Risk is the dominant property of the system, not a secondary module. The Risk En
 
 **System modes** reduce activity, never increase it: `NORMAL → OBSERVE_ONLY → SIGNAL_ONLY → CANCEL_ONLY → REDUCE_ONLY → CASH_ONLY → HALT`.
 
-**Kill switch** activates on: orphan orders, reconciliation mismatch, daily/weekly loss limits, order count limits. Identical in demo and live modes.
+**Kill switch** activates on: orphan orders, reconciliation mismatch, daily/weekly loss limits, order count limits. Identical in all modes.
 
 **Regime classification** adapts permissions based on market state (trend, range, chop, high volatility, low liquidity, gas spike, degraded venue, drawdown). Regime changes can only reduce permissions.
 
@@ -68,30 +68,6 @@ Risk is the dominant property of the system, not a secondary module. The Risk En
 A specialized module that produces typed observations, hypotheses, evaluations, or recommendations. It never executes orders, does not approve risk, and does not move funds.
 _Avoid_: autonomous bot, entity with freedom of action, executing agent.
 
-**AgentAdapter:**
-A typed contract that isolates the deterministic core from LLM frameworks (Vercel AI SDK via OpenRouter). The StateGraph only consumes typed, validated outputs.
-_Avoid_: core coupled to an LLM provider.
-
-**AgentCatalog:**
-The registry of all consultative agents with their configurations, permissions, runtime declarations, and fallback strategies. Defines 11 agents across perception, analytical, deliberative, and control layers.
-_Avoid_: ad-hoc agent definitions outside the catalog.
-
-**BehavioralRuntime:**
-A deterministic agent implementation that operates without an LLM. Provides audit scoring, memory recall, and policy review using structured logic. Used as fallback when no LLM is configured.
-_Avoid_: treating behavioral runtimes as LLM-dependent.
-
-**OpenRouterAdapter:**
-A factory that creates a `generateFn` compatible with `VercelAISDKAdapter`, routing through OpenRouter's OpenAI-compatible endpoint. Uses `generateFn` injection to keep the agents package free of LLM framework dependencies.
-_Avoid_: importing `ai` or `@ai-sdk/openai` in the agents package.
-
-**DataQualityMonitor:**
-Per-source quality tracking that evaluates latency, staleness, gaps, WS/REST consistency, and RPC health. Produces `DataQualityReport` objects that gate signal generation and route tradability.
-_Avoid_: trading on data from degraded or disconnected sources.
-
-**StateGraph:**
-The project's own minimal deterministic orchestrator that models the system as a state graph. Every transition has guard conditions, per-agent/module permissions, fallbacks, and mandatory audit.
-_Avoid_: agent framework as the core (LangGraph, AutoGen).
-
 **Loop:**
 A closed perception → decision → action → learning cycle, with explicit frequency, inputs, outputs, permissions, and stopping criteria. Reads balances from `Reconciliation`, not from `MarketGraph`. Never mutates `MarketGraph`; never uses untyped agent output.
 _Avoid_: reactive processing without frequency or stopping criteria; treating the graph as inventory; allowing agent suggestions to become `OrderIntent` without `OpportunityCandidate`.
@@ -100,12 +76,32 @@ _Avoid_: reactive processing without frequency or stopping criteria; treating th
 Representation of the market as a directed, weighted graph. Nodes: assets, venues, chains, pools. Edges: order book, swap, bridge, transfer, funding, correlation. Weights: price, fee, gas, slippage, latency, liquidity, failure probability, risk.
 _Avoid_: superficial price without net cost; mutating the live graph for backtest; storing inventory or order state inside the graph.
 
+**Venue:**
+A market where an asset trades, identified by a stable id such as `bybit` or `pancakeswap-v4`. A venue is a node in the `MarketGraph` and the unit across which exposure, limits, and reconciliation are tracked.
+_Avoid_: conflating venue with connector or with a specific instrument.
+
+**CEX:**
+A centralized exchange venue (`venueModel: "cex"`), such as Bybit, where trading is governed by the operator's order book and matching engine.
+_Avoid_: treating the exchange's REST/WebSocket connector as the venue itself.
+
+**DEX:**
+A decentralized exchange venue (`venueModel: "dex"`), such as PancakeSwap, where trading occurs against on-chain liquidity pools via smart contracts.
+_Avoid_: conflating a pool with a venue; a venue hosts multiple pools.
+
+**Connector:**
+A venue-specific adapter that translates external market data (CEX REST/WebSocket, DEX RPC) into the shared `MarketDataSnapshot` contract that feeds the `MarketGraph`. Each venue has its own connector implementation. Connectors are the isolation boundary between venue-specific I/O and the normalized graph; the core never imports them directly.
+_Avoid_: treating the venue's raw API client as the connector; importing connector internals into the core.
+
+**DEXExecutor:**
+The on-chain execution component for DEX venues. It connects to EVM-compatible chains via RPC, manages nonces and gas, simulates swaps, and signs and submits transactions on-chain.
+_Avoid_: using a DEX market-data connector as if it could execute swaps; treating the executor as the venue itself.
+
 **OpportunityCandidate:**
 An opportunity hypothesis with expected net profit (after fees, slippage, gas, bridges, funding, latency, and safety buffer), route, costs, and invalidation reasons.
 _Avoid_: arbitrage signal without net costs.
 
 **OpportunityDetector:**
-Component that ingests `MarketDataSnapshot` objects, feeds the `MarketGraph`, discovers routes via `RouteEngine`, and produces `OpportunityCandidate` objects with `OrderIntent` pairs for risk evaluation.
+Component that ingests market data, feeds the `MarketGraph`, discovers profitable routes, and produces `OpportunityCandidate` objects with `OrderIntent` pairs for risk evaluation.
 _Avoid_: manual opportunity selection; opportunities without cost breakdown.
 
 **OrderIntent:**
@@ -128,45 +124,18 @@ _Avoid_: trusting internal state without external verification; executing expire
 Classification of market state (trend, range, high volatility, low liquidity, chop, gas spike, degraded venue, drawdown) that adjusts operational permissions. Can only reduce permissions; never increases them without deterministic validation.
 _Avoid_: fixed limits ignoring market state.
 
-**RegimeClassifier:**
-Deterministic classifier that produces `RegimeClassification` (regime + confidence) from market signals (volatility, spread, liquidity, gas, RPC health, CEX health, drawdown, directional streak, reversals).
-_Avoid_: fixed regime thresholds without adaptation.
-
 **SystemMode:**
 Global permission state: `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. Modes can only reduce activity, never increase it. Defensive states are suffixed (`CASH_ONLY_MODE`, `CANCEL_ONLY_MODE`, `REDUCE_ONLY_MODE`) while modes are not.
 _Avoid_: trading always active; conflating mode names across namespaces.
 
 **TradingSession:**
-Top-level integration that wires CanarySession, RegimeClassifier, RegimePolicyEngine, LearningEngine, AuditReconstructor, and RouteEngine into a single operational session. Orchestrates the full cycle from regime classification through opportunity detection to audit.
+The top-level orchestration root of the operational system. It drives the full cycle from regime classification through opportunity detection to audit, and owns the operational state of a running session.
 _Avoid_: treating as a standalone component; bypassing its subsystem wiring.
 
-**CanarySession:**
-Deterministic live canary session that enforces bounded capital, per-trade/day/venue limits, kill switch, and emergency modes. Identical logic in demo and live; only the exchange endpoints differ.
-_Avoid_: treating demo and live as different codepaths.
-
-**LearningEngine:**
-Governed learning loop that orchestrates TradeJournal, EdgeDecayDetector, and PromotionPipeline. Records every trade outcome, detects edge decay, and generates recommendations. Never mutates production directly.
-_Avoid_: autonomous strategy changes; learning without audit trail.
-
-**AuditReconstructor:**
-Assembles end-to-end trade timelines from audit events and trade journal entries. Produces `TradeReconstruction` objects with full phase mapping, incident flags, and lessons.
-_Avoid_: partial reconstruction; reconstructing without journal entries.
-
-**Harness:**
-Reproducible environment for evaluating strategies and agents: backtest, replay, fill/slippage/gas/latency/failure simulators, and stress tests. Uses deterministic PRNG for bit-exact reproducibility.
-_Avoid_: promoting to production without reproducible evidence.
-
-**Demo Trading:**
-Bybit's simulated trading environment (`api-demo.bybit.com`) with virtual assets. Exercises the full execution/reconciliation/audit pipeline against real exchange endpoints. Required validation before live.
-_Avoid_: treating demo as live capital; treating it as pure internal simulation.
-
 **Live:**
-Bybit's real trading environment with real balances, real API keys, and capital at risk. Requires explicit human approval, demo evidence, canary limits, and rollback path.
-_Avoid_: any mode without real credentials or without capital exposure.
-
-**Seam (unified runner):**
-Single `LiveRunner` receives `bybitEndpoints` from `AppConfig`. `MODE=demo` → demo endpoints; `MODE=live` → mainnet endpoints. No parallel runners. `AgentAdapter` is identical across modes.
+Real-capital trading across the system's venues: Bybit (CEX) and PancakeSwap (DEX). Uses real API keys and real balances with capital at risk. Requires explicit human approval, canary limits, and rollback path.
+_Avoid_: any operation without real credentials or without capital exposure; conflating with demo or simulated trading.
 
 **Kill switch:**
-Manual (TUI) + automatic (drawdown, orphans, reconciliation mismatch). Identical in demo and live. Activates `HALT` mode and blocks all new `OrderIntent` objects.
+Manual (TUI) + automatic (drawdown, orphans, reconciliation mismatch). Identical across all modes. Activates `HALT` mode and blocks all new `OrderIntent` objects.
 _Avoid_: treating kill switch as optional; different behavior between modes.
