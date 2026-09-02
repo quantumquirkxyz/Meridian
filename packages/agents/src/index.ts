@@ -67,6 +67,10 @@ export {
   type AgentRuntimeOptions,
 } from "./runtime.ts";
 
+// LLM runtime adapters (Vercel AI SDK, OpenRouter) are available via
+// subpath exports only (package.json exports map). They are NOT re-exported
+// from the main barrel to preserve ARCHITECTURE.md boundary rules.
+
 // ── Re-export contracts for convenience ────────────────────────────────
 export type {
   AgentInput,

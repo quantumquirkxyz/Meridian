@@ -125,6 +125,8 @@ async function runLiveMode(
     canaryConfig: opts.config.canaryConfig,
     auditLogPath: paths.auditLogPath,
     sessionId: paths.sessionId,
+    llmApiKey: opts.config.llmApiKey,
+    llmBaseUrl: opts.config.llmBaseUrl,
   });
 
   await runner.start();
@@ -183,6 +185,8 @@ async function runDemoMode(
     auditLogPath: paths.auditLogPath,
     sessionId: paths.sessionId,
     mode: "demo",
+    llmApiKey: opts.config.llmApiKey,
+    llmBaseUrl: opts.config.llmBaseUrl,
   });
 
   await runner.start();
