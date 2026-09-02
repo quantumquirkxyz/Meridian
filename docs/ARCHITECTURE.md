@@ -83,7 +83,8 @@ packages/
   contracts    types, schemas, events, reason codes (shared frontier)
   core         StateGraph, Risk, Execution, Reconciliation, Inventory, Loops, canary subsystems
   events       in-memory event bus, SQLite event store, deterministic replay
-  connectors   bybit (REST/WS), binance (REST), pancakeswap-v4 (RPC), dex-executor
+  connectors   bybit (REST/WS), binance (REST), pancakeswap-v4 (RPC + market data)
+  chain        on-chain execution (DEXExecutor via viem) — PancakeSwap swaps
   graph        MarketGraph, pathfinder, arbitrage-cycles, systemic-risk
   harness      backtest, replay, simulators (fill/gas/funding/latency/failure), stress
   agents       AgentAdapter + catalog (11 agents) + behavioral runtimes + OpenRouter adapter
@@ -91,7 +92,7 @@ packages/
   cli          LiveRunner (demo/live), config, manifest, status display
 ```
 
-Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `connectors` depend only on `contracts`; `harness` depends on `contracts`, `events`, and `graph` (ADR-0007); `infra` depends on `contracts`, `events`, `ink`, and `react` (ADR-0008, ADR-0010); `cli` depends on `contracts`, `core`, `connectors`, `infra`, and `agents` (wiring layer).
+Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `connectors` (it uses `contracts`); `events`, `graph`, `connectors` depend only on `contracts`; `chain` depends only on `contracts` and `viem` (on-chain execution seam — this is where real signing/swapping lives, kept out of `connectors` so `connectors` stays dependency-light); `harness` depends on `contracts`, `events`, and `graph` (ADR-0007); `infra` depends on `contracts`, `events`, `ink`, and `react` (ADR-0008, ADR-0010); `cli` depends on `contracts`, `core`, `connectors`, `chain`, `infra`, and `agents` (wiring layer).
 
 ## Persistence
 
