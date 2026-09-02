@@ -9,6 +9,7 @@ import { join } from "node:path";
  *   - core depends only on contracts (never LLMs or connectors);
  *   - connectors, graph, harness, events depend only on contracts
  *     (ARCHITECTURE.md:88; `events` follows the same rule);
+ *   - chain depends only on contracts and viem (on-chain execution seam);
  *   - agents depends only on contracts and never imports core
  *     (ARCHITECTURE.md:88; agents never imports core).
  *
@@ -18,6 +19,7 @@ import { join } from "node:path";
 const PACKAGE_DIRS = [
   "contracts",
   "core",
+  "chain",
   "connectors",
   "events",
   "graph",
@@ -117,6 +119,17 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     for (const dir of ["connectors", "graph", "events"]) {
       const { dependencies = {} } = packageJson(dir);
       expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
+    }
+  });
+
+  test("chain depends only on contracts and viem (on-chain execution seam)", () => {
+    const { dependencies = {} } = packageJson("chain");
+    expect(Object.keys(dependencies).sort()).toEqual([
+      "@agenttrading/contracts",
+      "viem",
+    ]);
+    for (const dep of Object.keys(dependencies)) {
+      expect(isForbiddenModule(dep)).toBe(false);
     }
   });
 

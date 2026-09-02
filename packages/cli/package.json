@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@agenttrading/agents": "workspace:*",
+    "@agenttrading/chain": "workspace:*",
     "@agenttrading/connectors": "workspace:*",
     "@agenttrading/contracts": "workspace:*",
     "@agenttrading/core": "workspace:*",
