@@ -41,6 +41,8 @@ Mandatory flow per signal: **data → graph → candidate signal → agent revie
 
 States: `IDLE, INGEST_MARKET_DATA, NORMALIZE_MARKET_STATE, UPDATE_MARKET_GRAPH, DETECT_OPPORTUNITY, BUILD_ORDER_INTENT, REQUEST_AGENT_REVIEW, RISK_VALIDATE, EXECUTION_PRECHECK, EXECUTE_ORDER, RECONCILE, AUDIT_DECISION` plus defensive modes reachable from any state (`HALT, DEGRADED_MODE, CASH_ONLY_MODE, CANCEL_ONLY_MODE, REDUCE_ONLY_MODE`).
 
+Additionally, the Orchestrator layer (implemented in `packages/core/src/stategraph/topology.ts`) runs a per-candidate parallel flow with its own states off the canonical backbone: `DEBATING, RISK_CHECKING, APPROVED, REJECTED, EXECUTING, RECONCILING, AUDITING`. Its flow is `BUILD_ORDER_INTENT → DEBATING → RISK_CHECKING → APPROVED → EXECUTING → RECONCILING → AUDITING → IDLE` (and the `REJECTED → AUDITING → IDLE` reject fork), with the same defensive fan-out to `HALT, DEGRADED_MODE, CASH_ONLY_MODE, CANCEL_ONLY_MODE, REDUCE_ONLY_MODE` from every orchestrator state.
+
 Every transition has **guard conditions** and **mandatory audit**. Example: `RISK_VALIDATE → EXECUTION_PRECHECK` only if data quality ≥ threshold, net profit > minimum edge, slippage/latency within limits, venue available, sufficient inventory, exposure within limits, no active circuit breaker, and a valid recent reconciliation.
 
 Base contracts: `StateName`, `StateContext`, `StateNode`, `Transition`, `TransitionGuard`, `GuardResult`, `AgentReview`, `RiskDecision`. All live in `packages/contracts`.

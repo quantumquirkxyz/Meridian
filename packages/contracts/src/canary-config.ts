@@ -259,7 +259,7 @@ export const DEFAULT_CANARY_CONFIG: CanaryConfig = {
   name: "Default Live Canary",
   capitalLimits: {
     maxCapitalUsd: 1_000,
-    maxRiskPerTradeUsd: 50,
+    maxRiskPerTradeUsd: 25,
     maxDailyLossUsd: 100,
     maxWeeklyLossUsd: 300,
   },

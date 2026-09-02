@@ -2,7 +2,8 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { LiveRunner } from "../src/live-runner.ts";
+import { LiveRunner, type BybitWSClientLike } from "../src/live-runner.ts";
+import type { BybitWSClientEvents } from "@agenttrading/connectors";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -40,6 +41,18 @@ function createRunner(overrides?: Record<string, unknown>): LiveRunner {
 }
 
 // ── LiveRunner Tests ────────────────────────────────────────────────
+
+// Fake WebSocket client that captures registered event callbacks so a test
+// can drive onOrderUpdate / onDisconnected without a network connection.
+class FakeWS implements BybitWSClientLike {
+  events: BybitWSClientEvents = {};
+  on(events: BybitWSClientEvents): void {
+    this.events = events;
+  }
+  async connect(): Promise<void> {}
+  async waitForAuth(): Promise<void> {}
+  disconnect(): void {}
+}
 
 describe("LiveRunner", () => {
   beforeEach(() => createTmpDir());
@@ -271,5 +284,65 @@ describe("LiveRunner", () => {
   test("SP6: fee bps is configurable", () => {
     const runner = createRunner({ feeBps: 5 });
     expect(runner).toBeDefined();
+  });
+
+  // ── AC7/CONTEXT: WS drop + partial fill → CANCEL_ONLY_MODE ─────────
+
+  test("WS order update PARTIALLY_FILLED is tracked as an active partial fill", () => {
+    const ws = new FakeWS();
+    createRunner({ wsClient: ws } as unknown as Record<string, unknown>);
+    expect(ws.events.onOrderUpdate).toBeTypeOf("function");
+
+    ws.events.onOrderUpdate?.({
+      orderId: "ord-partial",
+      symbol: "BTCUSDT",
+      side: "BUY",
+      orderType: "LIMIT",
+      quantity: 0.01,
+      status: "PARTIALLY_FILLED",
+      price: 50000,
+      cumulativeFilledQty: 0.001,
+      leavesQty: 0.009,
+      averagePrice: 50000,
+      timestampMs: 1000,
+    });
+  });
+
+  test("WS drop with active partial fill transitions to CANCEL_ONLY_MODE", () => {
+    const ws = new FakeWS();
+    const runner = createRunner({ wsClient: ws } as unknown as Record<string, unknown>);
+    runner.control("start");
+
+    // Drive a partial fill so the runner has an active partial-fill order.
+    ws.events.onOrderUpdate?.({
+      orderId: "ord-partial",
+      symbol: "BTCUSDT",
+      side: "BUY",
+      orderType: "LIMIT",
+      quantity: 0.01,
+      status: "PARTIALLY_FILLED",
+      price: 50000,
+      cumulativeFilledQty: 0.001,
+      leavesQty: 0.009,
+      averagePrice: 50000,
+      timestampMs: 1100,
+    });
+
+    expect(runner.systemMode).toBe("NORMAL");
+
+    // WebSocket drops while the partial fill is active -> CANCEL_ONLY_MODE.
+    ws.events.onDisconnected?.("socket error");
+
+    expect(runner.systemMode).toBe("CANCEL_ONLY");
+  });
+
+  test("WS drop without active partial fill does not change mode", () => {
+    const ws = new FakeWS();
+    const runner = createRunner({ wsClient: ws } as unknown as Record<string, unknown>);
+    runner.control("start");
+
+    ws.events.onDisconnected?.("socket error");
+
+    expect(runner.systemMode).not.toBe("CANCEL_ONLY");
   });
 });

@@ -128,6 +128,19 @@ export interface LiveRunnerConfig {
   statusDisplay?: StatusDisplay;
   /** Mode: demo (Bybit Demo Trading) or live. Determines withdrawal-check strictness. */
   mode?: "demo" | "live";
+  /** Injectable WebSocket client (default: real BybitWebSocketClient). For testing. */
+  wsClient?: BybitWSClientLike;
+}
+
+/**
+ * Minimal WebSocket client surface that LiveRunner depends on. The production
+ * implementation is BybitWebSocketClient; a fake may be injected for testing.
+ */
+export interface BybitWSClientLike {
+  on(events: BybitWSClientEvents): void;
+  connect(): Promise<void>;
+  waitForAuth(timeoutMs?: number): Promise<void>;
+  disconnect(): void;
 }
 
 export interface LiveRunnerEvents {
@@ -191,6 +204,7 @@ export class LiveRunner {
     llmApiKey?: string;
     llmBaseUrl?: string;
     llmModel?: string;
+    wsClient?: BybitWSClientLike;
   };
   private readonly nowMs: () => number;
 
@@ -204,7 +218,7 @@ export class LiveRunner {
 
   // Connectors
   private readonly restClient: BybitRESTClient;
-  private readonly wsClient: BybitWebSocketClient;
+  private readonly wsClient: BybitWSClientLike;
   private readonly binanceClient?: BinanceRESTClient;
   private readonly pancakeswapMarketData?: PancakeSwapMarketDataConnector;
   private readonly dexExecutor?: DEXExecutor;
@@ -225,6 +239,10 @@ export class LiveRunner {
 
   // Order tracking — maps exchange orderId → OrderIntent
   private pendingOrders: Map<string, OrderIntent> = new Map();
+
+  // Orders with an active partial fill (CONTEXT.md Reconciliation: if the
+  // WebSocket drops with one active, the system must enter CANCEL_ONLY_MODE).
+  private partialFillOrders: Set<string> = new Set();
 
   // Inventory tracking
   private availableCapitalUsd: number = 0;
@@ -269,10 +287,13 @@ export class LiveRunner {
       feeBps: config.feeBps ?? DEFAULT_FEE_BPS,
       nowMs: this.nowMs,
       statusDisplay: config.statusDisplay,
+      // The CLI always passes `mode` explicitly (from AppConfig). The default
+      // here is a fail-closed fallback: never degrade to demo. (OPERATING_FLOW.md)
       mode: config.mode ?? "live",
       llmApiKey: config.llmApiKey,
       llmBaseUrl: config.llmBaseUrl,
       llmModel: config.llmModel,
+      wsClient: config.wsClient,
     };
 
     // AC8: Validate API keys
@@ -323,14 +344,16 @@ export class LiveRunner {
       baseUrl: this.config.bybitEndpoints.restUrl,
     });
 
-    this.wsClient = new BybitWebSocketClient({
-      apiKey: this.config.bybitApiKey,
-      apiSecret: this.config.bybitApiSecret,
-      symbols: this.config.symbols,
-      nowMs: this.nowMs,
-      publicWsUrl: this.config.bybitEndpoints.publicWsUrl,
-      privateWsUrl: this.config.bybitEndpoints.privateWsUrl,
-    });
+    this.wsClient =
+      this.config.wsClient ??
+      new BybitWebSocketClient({
+        apiKey: this.config.bybitApiKey,
+        apiSecret: this.config.bybitApiSecret,
+        symbols: this.config.symbols,
+        nowMs: this.nowMs,
+        publicWsUrl: this.config.bybitEndpoints.publicWsUrl,
+        privateWsUrl: this.config.bybitEndpoints.privateWsUrl,
+      });
 
     // Initialize Binance connector for multi-venue price feeds
     if (config.binanceApiKey && config.binanceApiSecret) {
@@ -372,6 +395,26 @@ export class LiveRunner {
       },
       onDisconnected: (reason) => {
         this.auditLogger.record("WS_DISCONNECTED", { reason });
+        // CONTEXT.md Reconciliation: if the WebSocket drops with an active
+        // partial fill, immediately transition to CANCEL_ONLY_MODE and only
+        // return to NORMAL after exact reconciliation. Fail closed: block new
+        // positions, cancel the affected orders, and mark reconciliation
+        // unresolved so the Risk Engine refuses new intents until resolved.
+        // Uses setDefensiveCancelOnly (not setReconciliationStatus) so the
+        // reconciliation-mismatch auto kill switch (HALT) is not triggered;
+        // CANCEL_ONLY is cleared by the next clean reconcile().
+        if (this.partialFillOrders.size > 0) {
+          const affected = Array.from(this.partialFillOrders);
+          this.auditLogger.record("WS_DROP_PARTIAL_FILL", {
+            reason,
+            affectedOrderIds: affected,
+          });
+          console.warn(
+            `[live] WebSocket dropped with ${affected.length} active partial fill(s). Entering CANCEL_ONLY_MODE.`,
+          );
+          this.session.setDefensiveCancelOnly(true);
+          this.cancelAllOpenOrders();
+        }
       },
     };
     this.wsClient.on(wsEvents);
@@ -401,6 +444,15 @@ export class LiveRunner {
    */
   control(command: CanaryControlCommand) {
     return this.session.control(command);
+  }
+
+  /**
+   * Derived operational mode (SystemMode) based on session state, as seen by
+   * the Risk Engine. Exposed for observability and tests: e.g. an unresolved
+   * reconciliation (WebSocket drop with active partial fill) yields CANCEL_ONLY.
+   */
+  get systemMode(): SystemMode {
+    return this.mapSessionModeToSystemMode();
   }
 
   /** Connect infra layer: DataQualityMonitor for per-source quality tracking. */
@@ -847,13 +899,26 @@ export class LiveRunner {
       });
 
       this.pendingOrders.delete(orderId);
+      // Order fully resolved — no longer an active partial fill.
+      this.partialFillOrders.delete(orderId);
 
       console.log(
         `[live] FILL confirmed: ${update.symbol} ${update.side} ${fillQuantity} @ $${fillPrice.toFixed(2)} (fees: $${feesUsd.toFixed(4)})`,
       );
+    } else if (update.status === "PARTIALLY_FILLED") {
+      // Track active partial fills so a WebSocket drop can force CANCEL_ONLY_MODE.
+      if (update.cumulativeFilledQty > 0) {
+        this.partialFillOrders.add(orderId);
+        this.auditLogger.record("ORDER_PARTIALLY_FILLED", {
+          orderId,
+          symbol: update.symbol,
+          cumulativeFilledQty: update.cumulativeFilledQty,
+        });
+      }
     } else if (
       update.status === "CANCELLED" ||
-      update.status === "REJECTED"
+      update.status === "REJECTED" ||
+      update.status === "EXPIRED"
     ) {
       // Release committed capital on cancel/reject
       const intent = this.pendingOrders.get(orderId);
@@ -866,6 +931,8 @@ export class LiveRunner {
         0,
       );
       this.pendingOrders.delete(orderId);
+      // Order no longer active — clear any tracked partial fill.
+      this.partialFillOrders.delete(orderId);
     }
   }
 
@@ -1077,6 +1144,7 @@ export class LiveRunner {
       this.session.notifyOrderResolved(orderId, "CANCELLED", 0);
     }
     this.pendingOrders.clear();
+    this.partialFillOrders.clear();
     this.committedCapitalUsd = 0;
 
     // Also control through TradingSession

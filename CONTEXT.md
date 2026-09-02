@@ -73,7 +73,7 @@ A closed perception → decision → action → learning cycle, with explicit fr
 _Avoid_: reactive processing without frequency or stopping criteria; treating the graph as inventory; allowing agent suggestions to become `OrderIntent` without `OpportunityCandidate`.
 
 **MarketGraph:**
-Representation of the market as a directed, weighted graph. Nodes: assets, venues, chains, pools. Edges: order book, swap, bridge, transfer, funding, correlation. Weights: price, fee, gas, slippage, latency, liquidity, failure probability, risk.
+Representation of the market as a directed, weighted graph. Nodes: assets, venues, chains, pools. Edges: order book, swap, bridge, transfer, funding, correlation. Weights: price, fee, gas cost, expected slippage, latency, liquidity, funding cost, failure probability, confidence, risk.
 _Avoid_: superficial price without net cost; mutating the live graph for backtest; storing inventory or order state inside the graph.
 
 **Venue:**

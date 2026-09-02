@@ -461,6 +461,15 @@ export class TradingSession {
   }
 
   /**
+   * Enter/exit defensive CANCEL_ONLY_MODE for a WebSocket drop with an active
+   * partial fill. Delegates to CanarySession (does not trigger the auto kill
+   * switch). Cleared by a clean reconciliation.
+   */
+  setDefensiveCancelOnly(active: boolean): void {
+    this.canarySession.setDefensiveCancelOnly(active);
+  }
+
+  /**
    * Get the current canary status.
    */
   get status() {

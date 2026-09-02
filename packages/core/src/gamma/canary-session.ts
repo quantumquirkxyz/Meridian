@@ -483,6 +483,26 @@ export class CanarySession {
   }
 
   /**
+   * Defensive CANCEL_ONLY_MODE for a WebSocket drop with an active partial fill
+   * (CONTEXT.md §Reconciliation). Unlike setReconciliationStatus(true) this does
+   * NOT evaluate the reconciliation-mismatch auto-kill-switch (which would HALT);
+   * it blocks new positions and marks reconciliation unresolved so the derived
+   * mode is CANCEL_ONLY, and only returns to NORMAL after an exact reconciliation
+   * (setReconciliationStatus(false) from a clean reconcile clears it).
+   */
+  setDefensiveCancelOnly(active: boolean): void {
+    this.reconciliationUnresolved = active;
+    if (active) {
+      this.recordAudit("CANCEL_ONLY_ACTIVATED", {
+        reason: "ws-drop-partial-fill",
+      });
+    } else {
+      this.recordAudit("CANCEL_ONLY_RESOLVED", {});
+      this.currentMode = "NORMAL";
+    }
+  }
+
+  /**
    * Reset daily counters (called automatically when the day changes).
    */
   private resetCountersIfNeeded(nowMs: number): void {

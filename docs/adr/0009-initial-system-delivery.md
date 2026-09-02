@@ -38,7 +38,7 @@ packages/
 | `AuditEvent` | Machine-readable transition record |
 | `EventEnvelope` | Bus envelope with idempotency key |
 | `StateGraph` contracts | `StateName`, `StateContext`, `Transition`, `TransitionGuard`, `Permission` |
-| `SystemMode` | 8 operational modes |
+| `SystemMode` | 7 operational modes |
 | `CostBreakdown` | 8 cost components per the risk net profit formula |
 
 ### Testing
