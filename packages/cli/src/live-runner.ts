@@ -59,7 +59,10 @@ import {
   BinanceRESTClient,
   buildBinanceSnapshot,
   type BybitWSClientEvents,
+  PancakeSwapMarketDataConnector,
+  type PancakeSwapPoolSpec,
 } from "@agenttrading/connectors";
+import { DEXExecutor } from "@agenttrading/chain";
 import { StatusDisplay } from "./status-display.ts";
 import { DataQualityMonitor } from "@agenttrading/infra";
 import type { DataQualityMetrics } from "@agenttrading/contracts";
@@ -97,6 +100,14 @@ export interface LiveRunnerConfig {
   binanceApiSecret?: string;
   /** Binance base URL (default: mainnet). */
   binanceBaseUrl?: string;
+  /** PancakeSwap RPC URL for on-chain BNB chain market data (optional). */
+  pancakeSwapRpcUrl?: string;
+  /** PancakeSwap pools to observe for DEX market data. */
+  pancakeSwapPools?: readonly PancakeSwapPoolSpec[];
+  /** PancakeSwap private key for signing on-chain swaps (execution). */
+  pancakeSwapPrivateKey?: `0x${string}`;
+  /** PancakeSwap router address for swap execution. */
+  pancakeSwapRouterAddress?: `0x${string}`;
   /** Cycle interval in milliseconds. */
   cycleIntervalMs: number;
   /** Canary config override. */
@@ -195,6 +206,8 @@ export class LiveRunner {
   private readonly restClient: BybitRESTClient;
   private readonly wsClient: BybitWebSocketClient;
   private readonly binanceClient?: BinanceRESTClient;
+  private readonly pancakeswapMarketData?: PancakeSwapMarketDataConnector;
+  private readonly dexExecutor?: DEXExecutor;
 
   // State
   private running = false;
@@ -325,6 +338,23 @@ export class LiveRunner {
         apiKey: config.binanceApiKey,
         apiSecret: config.binanceApiSecret,
         baseUrl: config.binanceBaseUrl,
+      });
+    }
+
+    // Initialize PancakeSwap connectors for DEX market data and execution
+    if (config.pancakeSwapRpcUrl && config.pancakeSwapPools?.length) {
+      this.pancakeswapMarketData = new PancakeSwapMarketDataConnector({
+        rpcUrl: config.pancakeSwapRpcUrl,
+        pools: config.pancakeSwapPools,
+      });
+    }
+    if (config.pancakeSwapPrivateKey) {
+      this.dexExecutor = new DEXExecutor({
+        url: config.pancakeSwapRpcUrl ?? "",
+        chainId: 56,
+        chainName: "bsc",
+        privateKey: config.pancakeSwapPrivateKey,
+        routerAddress: config.pancakeSwapRouterAddress,
       });
     }
 
@@ -474,6 +504,19 @@ export class LiveRunner {
           this.marketDataSnapshots.set(`binance:${binanceSnapshot.symbol}`, binanceSnapshot);
         } catch {
           // Ignore Binance errors; Bybit data is sufficient
+        }
+      }
+
+      // Poll PancakeSwap pools for DEX market data
+      if (this.pancakeswapMarketData) {
+        try {
+          const dexSnapshots = await this.pancakeswapMarketData.fetchSnapshots();
+          for (const dexSnapshot of dexSnapshots) {
+            this.opportunityDetector.ingestMarketData(dexSnapshot);
+            this.marketDataSnapshots.set(`${dexSnapshot.venue}:${dexSnapshot.symbol}`, dexSnapshot);
+          }
+        } catch {
+          // Ignore PancakeSwap RPC errors; Bybit data is sufficient
         }
       }
     };
@@ -1317,8 +1360,79 @@ export class LiveRunner {
       side: intent.side,
       quantity: intent.quantity,
       price: intent.price,
+      venue: intent.venue,
     });
 
+    // Route by venue: PancakeSwap (DEX) vs Bybit (CEX)
+    if (intent.venue === "pancakeswap-v4") {
+      await this.placeDexOrder(intent, notionalUsd);
+    } else {
+      await this.placeBybitOrder(intent, notionalUsd);
+    }
+  }
+
+  /** Execute an on-chain swap on PancakeSwap for a DEX-routed intent. */
+  private async placeDexOrder(
+    intent: OrderIntent,
+    notionalUsd: number,
+  ): Promise<void> {
+    if (!this.dexExecutor) {
+      this.auditLogger.record("ORDER_FAILED", {
+        orderId: intent.idempotencyKey,
+        error: "PancakeSwap execution not configured (no private key)",
+      });
+      return;
+    }
+
+    try {
+      // Token amounts are derived from the intent quantity in the base asset;
+      // this example routes through a quoted path (pool is reverse of intent).
+      // Amount in wei: assume the quote asset has 18 decimals.
+      const amountIn = BigInt(Math.trunc(notionalUsd * 1e18));
+      const gasInfo = await this.dexExecutor.getGasInfo();
+      const amountOutMin = amountIn / BigInt(100); // 1% minimum slippage floor
+      const path: readonly `0x${string}`[] = [
+        intent.symbol.toLowerCase() as `0x${string}`,
+        intent.quoteCurrency.toLowerCase() as `0x${string}`,
+      ];
+
+      const result = await this.dexExecutor.executeSwap({
+        path,
+        amountIn,
+        amountOutMin,
+        to: this.dexExecutor.account,
+        deadlineMs: intent.expiresAtMs,
+      });
+
+      this.committedCapitalUsd += notionalUsd;
+      this.pendingOrders.set(result.txHash, intent);
+
+      this.auditLogger.record("ORDER_ACCEPTED", {
+        orderId: result.txHash,
+        clientOrderId: intent.idempotencyKey,
+        symbol: intent.symbol,
+        side: intent.side,
+        venue: intent.venue,
+      });
+
+      console.log(
+        `[live] PancakeSwap swap submitted (${intent.symbol} ${intent.side}) tx: ${result.txHash}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.auditLogger.record("ORDER_FAILED", {
+        orderId: intent.idempotencyKey,
+        error: msg,
+      });
+      console.error(`[live] PancakeSwap order failed: ${msg}`);
+    }
+  }
+
+  /** Place a limit order on Bybit for a CEX-routed (default) intent. */
+  private async placeBybitOrder(
+    intent: OrderIntent,
+    notionalUsd: number,
+  ): Promise<void> {
     try {
       const result = await this.restClient.placeOrder({
         category: this.config.orderCategory,
