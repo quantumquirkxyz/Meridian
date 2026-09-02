@@ -216,6 +216,7 @@ export class LiveRunner {
   // Inventory tracking
   private availableCapitalUsd: number = 0;
   private committedCapitalUsd: number = 0;
+  private lastKnownBalances: Array<{ asset: string; available: number; locked: number }> = [];
 
   // Agent observation layer
   private lastAgentObservation: AgentOutput | undefined;
@@ -997,18 +998,21 @@ export class LiveRunner {
 
   /**
    * Derive internal balances from inventory tracking.
+   * Returns per-asset balances from the last inventory query.
    */
   private deriveInternalBalances(): Array<{ asset: string; available: number; locked: number }> {
-    const balances: Array<{ asset: string; available: number; locked: number }> = [];
+    // Return the last known per-asset balances from the exchange query.
+    // This ensures reconciliation compares apples-to-apples.
+    if (this.lastKnownBalances.length > 0) {
+      return this.lastKnownBalances;
+    }
 
-    // USDT balance from inventory
-    balances.push({
+    // Fallback: single USDT balance from inventory tracking.
+    return [{
       asset: "USDT",
       available: Math.max(0, this.availableCapitalUsd - this.committedCapitalUsd),
       locked: this.committedCapitalUsd,
-    });
-
-    return balances;
+    }];
   }
 
   // ── AC5: Kill Switch ───────────────────────────────────────────────
@@ -1046,18 +1050,29 @@ export class LiveRunner {
     try {
       const balances = await this.restClient.getCoinBalances();
       let totalUsd = 0;
+      const trackedBalances: Array<{ asset: string; available: number; locked: number }> = [];
 
       for (const coin of balances) {
         const walletBalance = parseFloat(coin.walletBalance ?? "0");
+        const locked = parseFloat(coin.locked ?? "0");
         totalUsd += walletBalance;
+        if (walletBalance > 0 || locked > 0) {
+          trackedBalances.push({
+            asset: coin.coin,
+            available: walletBalance - locked,
+            locked,
+          });
+        }
       }
 
       this.availableCapitalUsd = totalUsd;
+      this.lastKnownBalances = trackedBalances;
 
       this.auditLogger.record("INVENTORY_UPDATED", {
         availableCapitalUsd: this.availableCapitalUsd,
         committedCapitalUsd: this.committedCapitalUsd,
         freeCapitalUsd: this.availableCapitalUsd - this.committedCapitalUsd,
+        trackedAssets: trackedBalances.length,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
