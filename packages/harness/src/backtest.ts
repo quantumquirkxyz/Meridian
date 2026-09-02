@@ -20,7 +20,7 @@ import {
   detectCycleCandidates,
 } from "@agenttrading/graph";
 import type { ScoredRoute, CostOptions, FilterOptions } from "@agenttrading/graph";
-import { createSeededRng, type SeededRng } from "./seed.ts";
+import { createSeededRng } from "./seed.ts";
 import { FillSimulator, type FillResult, type FillSimulatorOptions } from "./simulators/fill.ts";
 import { GasSimulator, type GasEstimate, type GasSimulatorOptions } from "./simulators/gas.ts";
 import { FundingSimulator, type FundingEstimate, type FundingSimulatorOptions } from "./simulators/funding.ts";

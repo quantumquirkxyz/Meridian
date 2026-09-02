@@ -1,7 +1,6 @@
 import {
   type DataQualityReport,
   type DataQualityState,
-  type MarketEdge,
   type MarketGraphSnapshot,
   markEdgesByQuality,
 } from "@agenttrading/contracts";

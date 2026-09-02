@@ -18,10 +18,8 @@
 import {
   type MarketEdge,
   type MarketGraphSnapshot,
-  type EdgeWeights,
   type OpportunityCandidate,
   type CostBreakdown,
-  type RiskReasonCode,
 } from "@agenttrading/contracts";
 
 // ── Types ──────────────────────────────────────────────────────────
