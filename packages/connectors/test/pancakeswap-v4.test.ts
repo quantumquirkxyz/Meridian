@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildPancakeSwapSnapshot } from "../src/pancakeswap-v4.ts";
+import {
+  buildPancakeSwapSnapshot,
+  PancakeSwapMarketDataConnector,
+} from "../src/pancakeswap-v4.ts";
 import { isMarketDataSnapshot } from "@agenttrading/contracts";
 
 describe("PancakeSwap v4 connector normalization", () => {
@@ -27,5 +30,28 @@ describe("PancakeSwap v4 connector normalization", () => {
     expect(snapshot.gasEstimateUsd).toBe(1.25);
     expect(snapshot.routerQuote).toBe(299);
     expect(isMarketDataSnapshot(snapshot)).toBe(true);
+  });
+});
+
+describe("PancakeSwapMarketDataConnector", () => {
+  test("returns unavailable snapshots when RPC is unreachable", async () => {
+    const connector = new PancakeSwapMarketDataConnector({
+      rpcUrl: "http://127.0.0.1:1",
+      pools: [
+        {
+          poolAddress: "0x0000000000000000000000000000000000000001",
+          token0Symbol: "WBNB",
+          token1Symbol: "USDT",
+        },
+      ],
+    });
+
+    const snapshots = await connector.fetchSnapshots();
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].venue).toBe("pancakeswap-v4");
+    expect(snapshots[0].symbol).toBe("WBNB/USDT");
+    expect(snapshots[0].rpcHealth).toBe("unavailable");
+    expect(snapshots[0].reserve0).toBe(0);
+    expect(isMarketDataSnapshot(snapshots[0])).toBe(true);
   });
 });
