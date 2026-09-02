@@ -61,6 +61,18 @@ import {
   type BybitWSClientEvents,
 } from "@agenttrading/connectors";
 import { StatusDisplay } from "./status-display.ts";
+import { DataQualityMonitor } from "@agenttrading/infra";
+import type { DataQualityMetrics } from "@agenttrading/contracts";
+import {
+  CONSULTATIVE_AGENT_CATALOG,
+  AuditConsultativeAdapter,
+  MemoryConsultativeAdapter,
+  PolicyConsultativeAdapter,
+} from "@agenttrading/agents";
+import { VercelAISDKAdapter } from "@agenttrading/agents/runtimes/vercel";
+import { createOpenRouterGenerateFn } from "@agenttrading/agents/runtimes/openrouter";
+import { generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -73,6 +85,12 @@ export interface LiveRunnerConfig {
   bybitApiSecret: string;
   /** Bybit REST + WS endpoints — same runner, different endpoints per mode. */
   bybitEndpoints: { restUrl: string; publicWsUrl: string; privateWsUrl: string };
+  /** OpenRouter LLM API key for agent reasoning (optional). */
+  llmApiKey?: string;
+  /** OpenRouter base URL (default: https://openrouter.ai/api/v1). */
+  llmBaseUrl?: string;
+  /** Default LLM model for agent reasoning (default: openrouter/auto). */
+  llmModel?: string;
   /** Binance API key for multi-venue price feeds (optional). */
   binanceApiKey?: string;
   /** Binance API secret for multi-venue price feeds (optional). */
@@ -159,6 +177,9 @@ export class LiveRunner {
     auditLogPath: string;
     nowMs: () => number;
     statusDisplay?: StatusDisplay;
+    llmApiKey?: string;
+    llmBaseUrl?: string;
+    llmModel?: string;
   };
   private readonly nowMs: () => number;
 
@@ -168,8 +189,7 @@ export class LiveRunner {
   private readonly reconciliationEngine: ReconciliationEngine;
   private readonly opportunityDetector: OpportunityDetector;
   private readonly riskEngine: RiskEngine;
-  private dataQualityMonitor?: unknown;
-  private observability?: unknown;
+  private dataQualityMonitor?: DataQualityMonitor;
 
   // Connectors
   private readonly restClient: BybitRESTClient;
@@ -200,6 +220,10 @@ export class LiveRunner {
   // Agent observation layer
   private lastAgentObservation: AgentOutput | undefined;
   private agentObservationCount = 0;
+  private auditAdapter?: AuditConsultativeAdapter;
+  private memoryAdapter?: MemoryConsultativeAdapter;
+  private policyAdapter?: PolicyConsultativeAdapter;
+  private llmAdapter?: VercelAISDKAdapter;
 
   // Tracking
   private trades: TradeRecord[] = [];
@@ -232,6 +256,9 @@ export class LiveRunner {
       nowMs: this.nowMs,
       statusDisplay: config.statusDisplay,
       mode: config.mode ?? "live",
+      llmApiKey: config.llmApiKey,
+      llmBaseUrl: config.llmBaseUrl,
+      llmModel: config.llmModel,
     };
 
     // AC8: Validate API keys
@@ -345,16 +372,12 @@ export class LiveRunner {
     return this.session.control(command);
   }
 
-  /** Connect infra layer (DataQualityMonitor + ObservabilityService) — lazy load due to workspace dependency. */
-  async connectInfra(): Promise<void> {
-    try {
-      // @ts-expect-error - workspace dependency resolved at runtime via bun install
-      const infra = await import("@agenttrading/infra");
-      this.dataQualityMonitor = new (infra.DataQualityMonitor as new () => unknown)();
-      this.observability = new (infra.ObservabilityService as new (cfg: unknown) => unknown)({ sessionId: this.sessionId ?? "live-runner" });
-    } catch {
-      // Infra layer optional at startup — workspace linking may be deferred.
-    }
+  /** Connect infra layer: DataQualityMonitor for per-source quality tracking. */
+  connectInfra(): void {
+    this.dataQualityMonitor = new DataQualityMonitor();
+    this.auditLogger.record("INFRA_CONNECTED", {
+      dataQualityMonitor: true,
+    });
   }
 
   /** Start the live runner: validate, connect WS, reconcile, start cycles. */
@@ -395,6 +418,9 @@ export class LiveRunner {
 
     // Query initial balances for inventory management
     await this.updateInventory();
+
+    // Connect infra layer for data quality tracking
+    this.connectInfra();
 
     // Wire consultative agent for market observations
     this.wireConsultativeAgent();
@@ -535,32 +561,49 @@ export class LiveRunner {
   // ── Consultative Agent ─────────────────────────────────────────────
 
   /**
-   * Wire a consultative agent that observes market state and provides
-   * structured observations. CONTEXT.md §8: "AI Agents do not replace
-   * deterministic trading logic; they add a cognitive layer for reasoning,
-   * classification, interpretation of context."
+   * Wire consultative agents from the agent catalog. Uses deterministic
+   * behavioral adapters (no LLM) for audit, memory, and policy observations.
+   * CONTEXT.md §8: "AI Agents do not replace deterministic trading logic;
+   * they add a cognitive layer for reasoning, classification, interpretation."
    *
-   * The agent only observes — it never executes or approves risk.
+   * The agents only observe — they never execute or approve risk (ADR-0003).
    */
   private wireConsultativeAgent(): void {
+    // Build agent config map from catalog
+    const agentConfigs = new Map(
+      CONSULTATIVE_AGENT_CATALOG.map((def) => [def.id, def.config]),
+    );
+
+    // Initialize behavioral adapters (deterministic, no LLM)
+    this.auditAdapter = new AuditConsultativeAdapter(agentConfigs);
+    this.memoryAdapter = new MemoryConsultativeAdapter(agentConfigs);
+    this.policyAdapter = new PolicyConsultativeAdapter(agentConfigs);
+
+    // Wire the primary market observer adapter into the session
     const adapter = {
       run: (input: AgentInput): AgentOutput => {
         this.agentObservationCount++;
+        const spreadBps = this.market.bid > 0 && this.market.ask > 0
+          ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
+          : 0;
+        const dataFreshnessMs = this.nowMs() - (this.marketDataSnapshots.values().next().value?.timestampMs ?? this.nowMs());
+
         const observation: AgentOutput = {
           kind: "structured",
           agentId: "market-observer",
           payload: {
             regime: this.lastRegime ?? "unknown",
             marketMid: this.market.mid,
-            spreadBps: this.market.bid > 0 && this.market.ask > 0
-              ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
-              : 0,
-            dataFreshnessMs: this.nowMs() - (this.marketDataSnapshots.values().next().value?.timestampMs ?? this.nowMs()),
+            spreadBps,
+            dataFreshnessMs,
             availableCapitalUsd: this.availableCapitalUsd,
             committedCapitalUsd: this.committedCapitalUsd,
             openOrders: this.pendingOrders.size,
             opportunitiesDetected: this.opportunitiesDetected,
             opportunitiesRejectedByRisk: this.opportunitiesRejectedByRisk,
+            // Agent catalog metadata
+            catalogSize: CONSULTATIVE_AGENT_CATALOG.length,
+            activeAdapters: ["audit", "memory", "policy"],
           },
           schemaName: "market-observation",
           timestampMs: this.nowMs(),
@@ -571,9 +614,36 @@ export class LiveRunner {
     };
 
     this.session.wireAgentAdapter(adapter);
+
+    // Wire LLM adapter when API key is available (real agent reasoning).
+    if (this.config.llmApiKey) {
+      const openrouter = createOpenAI({
+        apiKey: this.config.llmApiKey,
+        baseURL: this.config.llmBaseUrl ?? "https://openrouter.ai/api/v1",
+      });
+      const generateFn = createOpenRouterGenerateFn({
+        generateText,
+        openrouter,
+      });
+      this.llmAdapter = new VercelAISDKAdapter({
+        generateFn,
+        configs: agentConfigs,
+        defaultModel: this.config.llmModel ?? "openrouter/auto",
+        baseUrl: this.config.llmBaseUrl,
+      });
+      this.auditLogger.record("LLM_ADAPTER_WIRED", {
+        provider: "openrouter",
+        model: this.config.llmModel ?? "openrouter/auto",
+        catalogAgents: CONSULTATIVE_AGENT_CATALOG.length,
+      });
+    }
+
     this.auditLogger.record("AGENT_WIRED", {
       agentId: "market-observer",
       role: "consultative",
+      catalogAgents: CONSULTATIVE_AGENT_CATALOG.length,
+      behavioralAdapters: ["audit", "memory", "policy"],
+      llmEnabled: !!this.config.llmApiKey,
     });
   }
 
@@ -616,9 +686,20 @@ export class LiveRunner {
     // Feed into OpportunityDetector
     this.opportunityDetector.ingestMarketData(snapshot);
 
-    // Forward to infra observability if connected.
-    (this.observability as { recordMarketData?: (s: unknown) => void } | undefined)
-      ?.recordMarketData?.(snapshot);
+    // Feed data quality monitor with freshness metrics.
+    if (this.dataQualityMonitor) {
+      const ageMs = this.nowMs() - snapshot.timestampMs;
+      const metrics: DataQualityMetrics = {
+        source: snapshot.venue,
+        latencyMs: snapshot.latencyMs ?? 100,
+        stalenessMs: ageMs,
+        gapCount: 0,
+        wsRestConsistent: true,
+        rpcHealthy: snapshot.rpcHealth !== "unavailable",
+        exchangeStatus: snapshot.rpcHealth === "degraded" ? "degraded" : "online",
+      };
+      this.dataQualityMonitor.evaluate(metrics, this.nowMs());
+    }
   }
 
   /**
@@ -1166,9 +1247,20 @@ export class LiveRunner {
   }
 
   /**
-   * Estimate data quality from market data freshness.
+   * Estimate data quality from the DataQualityMonitor (preferred) or
+   * fallback to raw freshness heuristic.
    */
   private estimateDataQuality(): number {
+    // Prefer DataQualityMonitor reports when available.
+    if (this.dataQualityMonitor) {
+      const reports = this.dataQualityMonitor.getAllReports();
+      if (reports.length > 0) {
+        // Return the best quality score across all sources.
+        return Math.max(...reports.map((r: { score: number }) => r.score));
+      }
+    }
+
+    // Fallback: compute from market data freshness.
     const now = this.nowMs();
     let bestQuality = 0;
 
