@@ -13,11 +13,9 @@
 import type {
   AgentInput,
   AgentOutput,
-  AgentMessage,
 } from "@agenttrading/contracts";
 import {
   BaseAgentAdapter,
-  type SchemaValidationResult,
 } from "../adapter.ts";
 import type { AgentConfig } from "../config.ts";
 

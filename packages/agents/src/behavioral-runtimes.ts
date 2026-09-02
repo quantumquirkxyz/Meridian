@@ -8,7 +8,6 @@ import { dirname, resolve } from "node:path";
 import type {
   AgentInput,
   AgentOutput,
-  AgentMessage,
 } from "@agenttrading/contracts";
 import { parseConsultativeAgentOutput } from "@agenttrading/contracts";
 import type { ConsultativeAgentOutput } from "@agenttrading/contracts";
