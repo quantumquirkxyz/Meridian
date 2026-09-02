@@ -5,7 +5,6 @@ import {
   isNullable,
   isNumber,
   isObjectOf,
-  isOptional,
   isRecordOf,
   isString,
   parse,

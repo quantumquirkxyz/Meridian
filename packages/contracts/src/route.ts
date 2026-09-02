@@ -5,7 +5,6 @@ import {
   isInRange,
   isNumber,
   isObjectOf,
-  isOptional,
   isRecordOf,
   isString,
   parse,

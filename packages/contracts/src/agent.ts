@@ -40,8 +40,6 @@ export const OUTPUT_KINDS = [
 
 export type OutputKind = (typeof OUTPUT_KINDS)[number];
 
-const isOutputKind: Validator<OutputKind> = isEnumOf(OUTPUT_KINDS);
-
 // ── Agent Input ────────────────────────────────────────────────────────
 
 /**

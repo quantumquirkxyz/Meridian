@@ -12,7 +12,6 @@ import {
   type Validator,
 } from "./schema.ts";
 import { isSystemMode, type SystemMode } from "./modes.ts";
-import { isRiskReasonCode } from "./reason-codes.ts";
 
 /**
  * StateGraph base contracts (ADR-0002, ARCHITECTURE.md). The project's own
