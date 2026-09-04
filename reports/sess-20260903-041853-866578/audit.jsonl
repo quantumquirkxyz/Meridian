@@ -1,0 +1,5 @@
+{"timestampMs":1788409133755,"type":"SESSION_STARTED","data":{"symbols":["BTCUSDT","ETHUSDT","USDT"],"cycleIntervalMs":5000,"mode":"demo","reconciliationIntervalMs":30000},"sessionId":"sess-20260903-041853-866578"}
+{"timestampMs":1788409133560,"type":"INVENTORY_UPDATED","data":{"availableCapitalUsd":104912.71928207,"committedCapitalUsd":0,"freeCapitalUsd":104912.71928207,"trackedAssets":4},"sessionId":"sess-20260903-041853-866578"}
+{"timestampMs":1788409133561,"type":"INFRA_CONNECTED","data":{"dataQualityMonitor":true},"sessionId":"sess-20260903-041853-866578"}
+{"timestampMs":1788409133561,"type":"LLM_ADAPTER_WIRED","data":{"provider":"openrouter","model":"openrouter/auto","catalogAgents":11},"sessionId":"sess-20260903-041853-866578"}
+{"timestampMs":1788409133561,"type":"AGENT_WIRED","data":{"agentId":"market-observer","role":"consultative","catalogAgents":11,"behavioralAdapters":["audit","memory","policy"],"llmEnabled":true},"sessionId":"sess-20260903-041853-866578"}

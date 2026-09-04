@@ -1,0 +1,168 @@
+{"timestampMs":1788409372258,"type":"SESSION_STARTED","data":{"symbols":["BTCUSDT","ETHUSDT","USDT"],"cycleIntervalMs":5000,"mode":"demo","reconciliationIntervalMs":30000},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409374431,"type":"INVENTORY_QUERY_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409373585],server_timestamp[1788409372494],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409374431,"type":"INFRA_CONNECTED","data":{"dataQualityMonitor":true},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409374432,"type":"LLM_ADAPTER_WIRED","data":{"provider":"openrouter","model":"openrouter/auto","catalogAgents":11},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409374432,"type":"AGENT_WIRED","data":{"agentId":"market-observer","role":"consultative","catalogAgents":11,"behavioralAdapters":["audit","memory","policy"],"llmEnabled":true},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409377258,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409376407],server_timestamp[1788409375177],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409380334,"type":"CYCLE_HALTED","data":{"cycleCount":1,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409385348,"type":"CYCLE_HALTED","data":{"cycleCount":2,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409390353,"type":"CYCLE_HALTED","data":{"cycleCount":3,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409395358,"type":"CYCLE_HALTED","data":{"cycleCount":4,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409400360,"type":"CYCLE_HALTED","data":{"cycleCount":5,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409405361,"type":"CYCLE_HALTED","data":{"cycleCount":6,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409405689,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409405342],server_timestamp[1788409403711],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409408446,"type":"CYCLE_HALTED","data":{"cycleCount":7,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409413458,"type":"CYCLE_HALTED","data":{"cycleCount":8,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409418463,"type":"CYCLE_HALTED","data":{"cycleCount":9,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409423466,"type":"CYCLE_HALTED","data":{"cycleCount":10,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409428470,"type":"CYCLE_HALTED","data":{"cycleCount":11,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409433471,"type":"CYCLE_HALTED","data":{"cycleCount":12,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409434108,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409433428],server_timestamp[1788409432246],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409436552,"type":"CYCLE_HALTED","data":{"cycleCount":13,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409441553,"type":"CYCLE_HALTED","data":{"cycleCount":14,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409446555,"type":"CYCLE_HALTED","data":{"cycleCount":15,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409451559,"type":"CYCLE_HALTED","data":{"cycleCount":16,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409456561,"type":"CYCLE_HALTED","data":{"cycleCount":17,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409461564,"type":"CYCLE_HALTED","data":{"cycleCount":18,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409463219,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409462406],server_timestamp[1788409461334],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409466566,"type":"CYCLE_HALTED","data":{"cycleCount":19,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409469575,"type":"CYCLE_HALTED","data":{"cycleCount":20,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409474576,"type":"CYCLE_HALTED","data":{"cycleCount":21,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409479579,"type":"CYCLE_HALTED","data":{"cycleCount":22,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409484583,"type":"CYCLE_HALTED","data":{"cycleCount":23,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409489583,"type":"CYCLE_HALTED","data":{"cycleCount":24,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409489854,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409489524],server_timestamp[1788409488215],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409494587,"type":"CYCLE_HALTED","data":{"cycleCount":25,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409497644,"type":"CYCLE_HALTED","data":{"cycleCount":26,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409502648,"type":"CYCLE_HALTED","data":{"cycleCount":27,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409507653,"type":"CYCLE_HALTED","data":{"cycleCount":28,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409512657,"type":"CYCLE_HALTED","data":{"cycleCount":29,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409517658,"type":"CYCLE_HALTED","data":{"cycleCount":30,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409517928,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409517590],server_timestamp[1788409516470],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409522661,"type":"CYCLE_HALTED","data":{"cycleCount":31,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409527665,"type":"CYCLE_HALTED","data":{"cycleCount":32,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409530742,"type":"CYCLE_HALTED","data":{"cycleCount":33,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409535743,"type":"CYCLE_HALTED","data":{"cycleCount":34,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409540751,"type":"CYCLE_HALTED","data":{"cycleCount":35,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409545753,"type":"CYCLE_HALTED","data":{"cycleCount":36,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409547099,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409546747],server_timestamp[1788409545696],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409550755,"type":"CYCLE_HALTED","data":{"cycleCount":37,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409555760,"type":"CYCLE_HALTED","data":{"cycleCount":38,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409558824,"type":"CYCLE_HALTED","data":{"cycleCount":39,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409563824,"type":"CYCLE_HALTED","data":{"cycleCount":40,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409568828,"type":"CYCLE_HALTED","data":{"cycleCount":41,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409573829,"type":"CYCLE_HALTED","data":{"cycleCount":42,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409575649,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409578833,"type":"CYCLE_HALTED","data":{"cycleCount":43,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409583834,"type":"CYCLE_HALTED","data":{"cycleCount":44,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409588835,"type":"CYCLE_HALTED","data":{"cycleCount":45,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409591852,"type":"CYCLE_HALTED","data":{"cycleCount":46,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409596853,"type":"CYCLE_HALTED","data":{"cycleCount":47,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409601854,"type":"CYCLE_HALTED","data":{"cycleCount":48,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409603791,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409606855,"type":"CYCLE_HALTED","data":{"cycleCount":49,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409611856,"type":"CYCLE_HALTED","data":{"cycleCount":50,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409616856,"type":"CYCLE_HALTED","data":{"cycleCount":51,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409619857,"type":"CYCLE_HALTED","data":{"cycleCount":52,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409624858,"type":"CYCLE_HALTED","data":{"cycleCount":53,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409629858,"type":"CYCLE_HALTED","data":{"cycleCount":54,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409632119,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409634859,"type":"CYCLE_HALTED","data":{"cycleCount":55,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409639860,"type":"CYCLE_HALTED","data":{"cycleCount":56,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409644860,"type":"CYCLE_HALTED","data":{"cycleCount":57,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409649862,"type":"CYCLE_HALTED","data":{"cycleCount":58,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409652946,"type":"CYCLE_HALTED","data":{"cycleCount":59,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409657947,"type":"CYCLE_HALTED","data":{"cycleCount":60,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409659587,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409662948,"type":"CYCLE_HALTED","data":{"cycleCount":61,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409667952,"type":"CYCLE_HALTED","data":{"cycleCount":62,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409672952,"type":"CYCLE_HALTED","data":{"cycleCount":63,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409677952,"type":"CYCLE_HALTED","data":{"cycleCount":64,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409680997,"type":"CYCLE_HALTED","data":{"cycleCount":65,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409686001,"type":"CYCLE_HALTED","data":{"cycleCount":66,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409688918,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409691003,"type":"CYCLE_HALTED","data":{"cycleCount":67,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409696004,"type":"CYCLE_HALTED","data":{"cycleCount":68,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409701004,"type":"CYCLE_HALTED","data":{"cycleCount":69,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409706011,"type":"CYCLE_HALTED","data":{"cycleCount":70,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409709041,"type":"CYCLE_HALTED","data":{"cycleCount":71,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409714043,"type":"CYCLE_HALTED","data":{"cycleCount":72,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409716191,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409719043,"type":"CYCLE_HALTED","data":{"cycleCount":73,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409724053,"type":"CYCLE_HALTED","data":{"cycleCount":74,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409729055,"type":"CYCLE_HALTED","data":{"cycleCount":75,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409734057,"type":"CYCLE_HALTED","data":{"cycleCount":76,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409739062,"type":"CYCLE_HALTED","data":{"cycleCount":77,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409742099,"type":"CYCLE_HALTED","data":{"cycleCount":78,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409744461,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409747100,"type":"CYCLE_HALTED","data":{"cycleCount":79,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409752104,"type":"CYCLE_HALTED","data":{"cycleCount":80,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409757121,"type":"CYCLE_HALTED","data":{"cycleCount":81,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409762123,"type":"CYCLE_HALTED","data":{"cycleCount":82,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409767125,"type":"CYCLE_HALTED","data":{"cycleCount":83,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409770178,"type":"CYCLE_HALTED","data":{"cycleCount":84,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409771817,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409775181,"type":"CYCLE_HALTED","data":{"cycleCount":85,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409780183,"type":"CYCLE_HALTED","data":{"cycleCount":86,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409785185,"type":"CYCLE_HALTED","data":{"cycleCount":87,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409790187,"type":"CYCLE_HALTED","data":{"cycleCount":88,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409795189,"type":"CYCLE_HALTED","data":{"cycleCount":89,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409800193,"type":"CYCLE_HALTED","data":{"cycleCount":90,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409800341,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409800004],server_timestamp[1788409798288],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409803228,"type":"CYCLE_HALTED","data":{"cycleCount":91,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409808230,"type":"CYCLE_HALTED","data":{"cycleCount":92,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409813253,"type":"CYCLE_HALTED","data":{"cycleCount":93,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409818254,"type":"CYCLE_HALTED","data":{"cycleCount":94,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409823257,"type":"CYCLE_HALTED","data":{"cycleCount":95,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409828260,"type":"CYCLE_HALTED","data":{"cycleCount":96,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409828385,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409828040],server_timestamp[1788409826417],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409831278,"type":"CYCLE_HALTED","data":{"cycleCount":97,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409836280,"type":"CYCLE_HALTED","data":{"cycleCount":98,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409841280,"type":"CYCLE_HALTED","data":{"cycleCount":99,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409846283,"type":"CYCLE_HALTED","data":{"cycleCount":100,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409851285,"type":"CYCLE_HALTED","data":{"cycleCount":101,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409856288,"type":"CYCLE_HALTED","data":{"cycleCount":102,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409856382,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409856056],server_timestamp[1788409854566],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409861290,"type":"CYCLE_HALTED","data":{"cycleCount":103,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409864335,"type":"CYCLE_HALTED","data":{"cycleCount":104,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409869345,"type":"CYCLE_HALTED","data":{"cycleCount":105,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409874355,"type":"CYCLE_HALTED","data":{"cycleCount":106,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409879357,"type":"CYCLE_HALTED","data":{"cycleCount":107,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409884363,"type":"CYCLE_HALTED","data":{"cycleCount":108,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409884439,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409884099],server_timestamp[1788409882773],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409889364,"type":"CYCLE_HALTED","data":{"cycleCount":109,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409892419,"type":"CYCLE_HALTED","data":{"cycleCount":110,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409897427,"type":"CYCLE_HALTED","data":{"cycleCount":111,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409902431,"type":"CYCLE_HALTED","data":{"cycleCount":112,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409907438,"type":"CYCLE_HALTED","data":{"cycleCount":113,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409912441,"type":"CYCLE_HALTED","data":{"cycleCount":114,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409914180,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409913853],server_timestamp[1788409912540],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409917443,"type":"CYCLE_HALTED","data":{"cycleCount":115,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409922448,"type":"CYCLE_HALTED","data":{"cycleCount":116,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409925499,"type":"CYCLE_HALTED","data":{"cycleCount":117,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409930503,"type":"CYCLE_HALTED","data":{"cycleCount":118,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409935504,"type":"CYCLE_HALTED","data":{"cycleCount":119,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409940511,"type":"CYCLE_HALTED","data":{"cycleCount":120,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409941133,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409940807],server_timestamp[1788409939702],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409945515,"type":"CYCLE_HALTED","data":{"cycleCount":121,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409950518,"type":"CYCLE_HALTED","data":{"cycleCount":122,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409953533,"type":"CYCLE_HALTED","data":{"cycleCount":123,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409958534,"type":"CYCLE_HALTED","data":{"cycleCount":124,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409963537,"type":"CYCLE_HALTED","data":{"cycleCount":125,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409968542,"type":"CYCLE_HALTED","data":{"cycleCount":126,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409969274,"type":"RECONCILIATION_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409968922],server_timestamp[1788409967917],recv_window[5000]"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409973544,"type":"CYCLE_HALTED","data":{"cycleCount":127,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409978547,"type":"CYCLE_HALTED","data":{"cycleCount":128,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409981599,"type":"CYCLE_HALTED","data":{"cycleCount":129,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409986606,"type":"CYCLE_HALTED","data":{"cycleCount":130,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409991607,"type":"CYCLE_HALTED","data":{"cycleCount":131,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409996620,"type":"CYCLE_HALTED","data":{"cycleCount":132,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788409999084,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410001623,"type":"CYCLE_HALTED","data":{"cycleCount":133,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410006623,"type":"CYCLE_HALTED","data":{"cycleCount":134,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410011624,"type":"CYCLE_HALTED","data":{"cycleCount":135,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410014682,"type":"CYCLE_HALTED","data":{"cycleCount":136,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410019693,"type":"CYCLE_HALTED","data":{"cycleCount":137,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410024696,"type":"CYCLE_HALTED","data":{"cycleCount":138,"reason":"kill switch active"},"sessionId":"sess-20260903-042252-fbf392"}
+{"timestampMs":1788410027976,"type":"RECONCILIATION","data":{"unresolved":true,"severity":"SOFT","orphanOrders":0,"positionMismatches":0,"balanceMismatches":1},"sessionId":"sess-20260903-042252-fbf392"}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                  

@@ -1,0 +1,5 @@
+{"timestampMs":1788409213248,"type":"SESSION_STARTED","data":{"symbols":["BTCUSDT","ETHUSDT","USDT"],"cycleIntervalMs":5000,"mode":"demo","reconciliationIntervalMs":30000},"sessionId":"sess-20260903-042013-070450"}
+{"timestampMs":1788409214437,"type":"INVENTORY_QUERY_FAILED","data":{"error":"Bybit API error 10002: invalid request, please check your server timestamp or recv_window param: req_timestamp[1788409214087],server_timestamp[1788409212940],recv_window[5000]"},"sessionId":"sess-20260903-042013-070450"}
+{"timestampMs":1788409214437,"type":"INFRA_CONNECTED","data":{"dataQualityMonitor":true},"sessionId":"sess-20260903-042013-070450"}
+{"timestampMs":1788409214438,"type":"LLM_ADAPTER_WIRED","data":{"provider":"openrouter","model":"openrouter/auto","catalogAgents":11},"sessionId":"sess-20260903-042013-070450"}
+{"timestampMs":1788409214438,"type":"AGENT_WIRED","data":{"agentId":"market-observer","role":"consultative","catalogAgents":11,"behavioralAdapters":["audit","memory","policy"],"llmEnabled":true},"sessionId":"sess-20260903-042013-070450"}
