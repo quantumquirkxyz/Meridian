@@ -3,10 +3,11 @@
  *
  * Responsibilities:
  * - Load `.env` file via Bun built-in (`Bun.env`)
- * - Validate required API keys for demo/live modes
- * - Parse optional parameters (MODE, CONFIG_PATH, etc.)
+ * - Validate required API keys for demo/live modes and venue selection
+ * - Parse optional parameters (MODE, VENUE, CONFIG_PATH, etc.)
  * - Apply JSON config overrides from `--config` flag
  * - Demo mode uses Bybit Demo Trading credentials but cannot pass as live
+ * - Venue selection (bybit / both / pancakeswap) gates which credentials are required
  * - Fail fast with descriptive error listing all missing/invalid fields
  */
 
@@ -14,6 +15,7 @@ import { parseCanaryConfig } from "@agenttrading/contracts";
 import type { CanaryConfig } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import { DEMO_BASE_URL, DEMO_PUBLIC_WS_URL, DEMO_PRIVATE_WS_URL } from "@agenttrading/connectors";
+import type { Venue } from "./args.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -34,12 +36,20 @@ export interface BybitEndpoints {
 export interface AppConfig {
   /** Active system mode. */
   mode: Mode;
+  /** Selected venue set. */
+  venue: Venue;
   /** API key for Bybit (demo or live). */
   bybitApiKey: string;
   /** API secret for Bybit (demo or live). */
   bybitApiSecret: string;
   /** Bybit REST + WS endpoints for the current mode. */
   bybitEndpoints: BybitEndpoints;
+  /** PancakeSwap RPC URL for on-chain BNB chain market data (optional). */
+  pancakeSwapRpcUrl?: string;
+  /** PancakeSwap private key for signing on-chain swaps (execution). */
+  pancakeSwapPrivateKey?: `0x${string}`;
+  /** PancakeSwap router address for swap execution. */
+  pancakeSwapRouterAddress?: `0x${string}`;
   /** Path to JSON config override file (optional). */
   configPath?: string;
   /** Cycle interval in milliseconds. */
@@ -76,7 +86,7 @@ const DEFAULT_REPORT_DIR = "./reports";
 const VALID_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export type LogLevel = (typeof VALID_LOG_LEVELS)[number];
 
-// ── Loading ──────────────────────────────────────────────────────────
+// ── Loading ─────────────────────────────────────────────────────────
 
 /**
  * Load and validate configuration from environment variables and optional
@@ -89,11 +99,13 @@ export type LogLevel = (typeof VALID_LOG_LEVELS)[number];
 export async function loadConfig(
   overrides?: {
     configPath?: string;
+    venue?: Venue;
     env?: Record<string, string | undefined>;
   },
 ): Promise<LoadConfigResult> {
   const env = overrides?.env ?? (Bun.env as Record<string, string | undefined>);
   const configPath = overrides?.configPath ?? env.CONFIG_PATH;
+  const venue = overrides?.venue ?? parseVenue(env.VENUE);
 
   const errors: ConfigError[] = [];
 
@@ -119,11 +131,10 @@ export async function loadConfig(
   const logLevel = parseLogLevel(rawLogLevel, errors);
   const reportDir = env.REPORT_DIR ?? DEFAULT_REPORT_DIR;
 
-  // ── Validate API keys based on mode ───────────────────────────────
+  // ── Parse Bybit API keys (always required for demo/live) ─────────
   const bybitApiKey = env.BYBIT_API_KEY ?? "";
   const bybitApiSecret = env.BYBIT_API_SECRET ?? "";
 
-  // Only require API keys for live/demo modes (demo connects to Bybit Demo Trading)
   if (mode === "live" || mode === "demo") {
     if (!bybitApiKey.trim()) {
       errors.push({
@@ -135,6 +146,32 @@ export async function loadConfig(
       errors.push({
         field: "BYBIT_API_SECRET",
         message: `BYBIT_API_SECRET is required for ${mode} mode.`,
+      });
+    }
+  }
+
+  // ── Parse PancakeSwap credentials (required for pancakeswap venues) ─
+  const pancakeSwapRpcUrl = env.PANCAKESWAP_RPC_URL?.trim();
+  const pancakeSwapPrivateKey = (env.PANCAKESWAP_PRIVATE_KEY?.trim() || undefined) as `0x${string}` | undefined;
+  const pancakeSwapRouterAddress = (env.PANCAKESWAP_ROUTER_ADDRESS?.trim() || undefined) as `0x${string}` | undefined;
+
+  if (venue === "pancakeswap" || venue === "both") {
+    if (!pancakeSwapRpcUrl) {
+      errors.push({
+        field: "PANCAKESWAP_RPC_URL",
+        message: `PANCAKESWAP_RPC_URL is required when venue is "${venue}".`,
+      });
+    }
+    if (!pancakeSwapPrivateKey) {
+      errors.push({
+        field: "PANCAKESWAP_PRIVATE_KEY",
+        message: `PANCAKESWAP_PRIVATE_KEY is required when venue is "${venue}".`,
+      });
+    }
+    if (!pancakeSwapRouterAddress) {
+      errors.push({
+        field: "PANCAKESWAP_ROUTER_ADDRESS",
+        message: `PANCAKESWAP_ROUTER_ADDRESS is required when venue is "${venue}".`,
       });
     }
   }
@@ -176,9 +213,13 @@ export async function loadConfig(
     ok: true,
     config: {
       mode: mode!,
+      venue: venue ?? "bybit",
       bybitApiKey,
       bybitApiSecret,
       bybitEndpoints,
+      pancakeSwapRpcUrl,
+      pancakeSwapPrivateKey,
+      pancakeSwapRouterAddress,
       configPath,
       cycleIntervalMs,
       logLevel,
@@ -190,10 +231,15 @@ export async function loadConfig(
   };
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────
 
 function parseMode(raw: string): Mode | undefined {
   if (raw === "demo" || raw === "live") return raw;
+  return undefined;
+}
+
+function parseVenue(raw: string | undefined): Venue | undefined {
+  if (raw === "bybit" || raw === "both" || raw === "pancakeswap") return raw;
   return undefined;
 }
 
@@ -305,5 +351,3 @@ export function formatConfigErrors(errors: ConfigError[]): string {
   const lines = errors.map((e) => `  - ${e.field}: ${e.message}`);
   return `Configuration validation failed:\n${lines.join("\n")}`;
 }
-
-

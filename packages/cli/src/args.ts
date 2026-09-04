@@ -2,8 +2,16 @@
  * CLI argument parser for AgentTrading.
  *
  * Uses `parseArgs` from `node:util` (Bun built-in) — zero external
- * dependencies. Accepts --mode, --config, --dry-run, and --cycle-interval
- * flags with sensible defaults.
+ * dependencies. Accepts --mode, --venue, --config, --dry-run, and
+ * --cycle-interval flags with sensible defaults.
+ *
+ * Venue selection:
+ *   --venue bybit       Trade only on Bybit (CEX).
+ *   --venue both        Trade on both Bybit (CEX) and PancakeSwap (DEX).
+ *   --venue pancakeswap Trade only on PancakeSwap (DEX).
+ *
+ * If --venue is omitted, an interactive menu is presented at run time so
+ * the operator can pick one of the three venue configurations.
  */
 
 import { parseArgs } from "node:util";
@@ -16,9 +24,14 @@ const { version: CLI_VERSION } = require("../../../package.json") as {
 /** Valid system mode. */
 export type Mode = "demo" | "live";
 
+/** Venue selection for trading operations. */
+export type Venue = "bybit" | "both" | "pancakeswap";
+
 /** Parsed CLI arguments. */
 export interface CliArgs {
   mode: Mode;
+  /** Selected venue set; undefined means interactive menu should prompt. */
+  venue: Venue | undefined;
   configPath: string | undefined;
   dryRun: boolean;
   cycleIntervalMs: number | undefined;
@@ -58,6 +71,10 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
           type: "string",
           short: "m",
           default: "demo",
+        },
+        venue: {
+          type: "string",
+          short: "v",
         },
         config: {
           type: "string",
@@ -112,6 +129,21 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
     });
   }
 
+  // Parse and validate --venue
+  const rawVenue = parsed.values.venue as string | undefined;
+  let venue: Venue | undefined;
+  if (rawVenue !== undefined) {
+    const parsedVenue = parseVenue(rawVenue);
+    if (parsedVenue === undefined) {
+      errors.push({
+        field: "venue",
+        message: `Invalid venue "${rawVenue}". Must be "bybit", "both", or "pancakeswap".`,
+      });
+    } else {
+      venue = parsedVenue;
+    }
+  }
+
   // Parse --cycle-interval
   let cycleIntervalMs: number | undefined;
   if (parsed.values["cycle-interval"] !== undefined) {
@@ -135,6 +167,7 @@ export function parseCliArgs(argv: string[]): ParseCliArgsResult {
     ok: true,
     args: {
       mode: mode!,
+      venue,
       configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
       dryRun: (parsed.values["dry-run"] as boolean) ?? false,
       cycleIntervalMs,
@@ -149,6 +182,11 @@ function parseMode(raw: string): Mode | undefined {
   return undefined;
 }
 
+function parseVenue(raw: string): Venue | undefined {
+  if (raw === "bybit" || raw === "both" || raw === "pancakeswap") return raw;
+  return undefined;
+}
+
 function printHelp(): void {
   console.log(
     `AgentTrading CLI — start a demo or live trading session.
@@ -158,6 +196,7 @@ Usage:
 
 Options:
   -m, --mode <demo|live>        System mode (default: demo)
+  -v, --venue <bybit|both|pancakeswap>  Venue selection (default: interactive menu)
   -c, --config <path>           Path to JSON config override
       --dry-run                 Run full cycle but skip order submission
       --cycle-interval <ms>     Override cycle frequency (ms)
@@ -165,9 +204,9 @@ Options:
   -V, --version                 Show version number
 
 Examples:
-  bun run start                          # Demo mode, defaults
-  bun run start --mode demo --dry-run    # Demo mode, dry run
-  bun run start --config ./config.json   # Demo mode with config override
-  bun run start --mode live --config ./live.json  # Live mode`,
+  bun run start                          # Demo mode, interactive venue menu
+  bun run start --mode demo --venue bybit     # Demo mode, Bybit only
+  bun run start --mode live --venue both      # Live mode, Bybit + PancakeSwap
+  bun run start --mode live --venue pancakeswap --config ./config.json  # Live mode, PancakeSwap only`,
   );
 }

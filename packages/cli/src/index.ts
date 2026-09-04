@@ -1,21 +1,32 @@
 /**
  * @agenttrading/cli — CLI entry point for the AgentTrading system.
  *
- * Provides configuration loading, mode dispatch, and the `bun run start`
- * entry point. Wires together core, contracts, and connectors.
+ * Provides configuration loading, mode + venue dispatch, an interactive
+ * venue menu, and the `bun run start` entry point. Wires together core,
+ * contracts, and connectors.
  *
  * Usage: `bun run start [options]`
  *
  * Flags:
  *   --mode demo|live            System mode (default: demo)
- *   --config <path>            JSON config override path
- *   --dry-run                  Skip order submission
- *   --cycle-interval <ms>      Override cycle frequency
+ *   --venue bybit|both|pancakeswap  Venue selection (default: interactive menu)
+ *   --config <path>             JSON config override path
+ *   --dry-run                   Skip order submission
+ *   --cycle-interval <ms>       Override cycle frequency
+ *
+ * Venue selection:
+ *   bybit       — Trade only on Bybit (CEX).
+ *   both        — Trade on both Bybit (CEX) and PancakeSwap (DEX).
+ *   pancakeswap — Trade only on PancakeSwap (DEX).
+ *
+ * If --venue is omitted, an interactive menu is shown so the operator can
+ * pick one of the three configurations before the run starts.
  */
 
 import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
+import type { Venue } from "./args.ts";
 import { generateSessionId } from "@agenttrading/core";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 import { ManifestWriter } from "./manifest.ts";
@@ -24,7 +35,7 @@ import { ManifestWriter } from "./manifest.ts";
 
 export { loadConfig, formatConfigErrors } from "./config.ts";
 export type { AppConfig, Mode, LoadConfigResult, ConfigError, LogLevel } from "./config.ts";
-export { parseCliArgs, type CliArgs, type CliArgsError, type ParseCliArgsResult } from "./args.ts";
+export { parseCliArgs, type CliArgs, type CliArgsError, type ParseCliArgsResult, type Venue } from "./args.ts";
 export { LiveRunner, type LiveRunnerConfig, type LiveRunnerEvents } from "./live-runner.ts";
 export { ManifestWriter, type ManifestData, type ManifestEntry } from "./manifest.ts";
 export { StatusDisplay, type CycleStatusInput, type RegimeChangeInput, type OrderEventInput, type KillSwitchTriggerInput } from "./status-display.ts";
@@ -66,6 +77,81 @@ function buildSessionPaths(reportDir: string, sessionId: string): SessionPaths {
   };
 }
 
+// ── Venue Menu ───────────────────────────────────────────────────────
+
+/**
+ * Interactive menu that lets the operator pick one of three venue
+ * configurations: Bybit only, both Bybit + PancakeSwap, or PancakeSwap
+ * only. Reads a single line from stdin.
+ */
+export async function promptVenueMenu(): Promise<Venue> {
+  console.log("");
+  console.log("┌──────────────────────────────────────────────────────────────┐");
+  console.log("│                  Select Trading Venues                       │");
+  console.log("├──────────────────────────────────────────────────────────────┤");
+  console.log("│  1) bybit        — Operate only on Bybit (CEX)               │");
+  console.log("│  2) both         — Operate on Bybit (CEX) + PancakeSwap      │");
+  console.log("│                     (DEX, BNB Chain)                         │");
+  console.log("│  3) pancakeswap  — Operate only on PancakeSwap (DEX)          │");
+  console.log("├──────────────────────────────────────────────────────────────┤");
+  console.log("│  Selection: 1 / 2 / 3   (default: 1)                         │");
+  console.log("└──────────────────────────────────────────────────────────────┘");
+
+  const choice = await readLine("  Enter choice [1]: ");
+  switch (choice.trim()) {
+    case "":
+    case "1":
+      return "bybit";
+    case "2":
+      return "both";
+    case "3":
+      return "pancakeswap";
+    default:
+      console.log(`  Unknown option "${choice}", defaulting to bybit.`);
+      return "bybit";
+  }
+}
+
+/**
+ * Read a single line from stdin. Used for the interactive venue menu.
+ * Bails out with the provided default if no TTY is available (e.g. when
+ * the process is started without a controlling terminal).
+ */
+function readLine(prompt: string, fallback: string = ""): Promise<string> {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      resolve(fallback);
+      return;
+    }
+    process.stdout.write(prompt);
+    let buffer = "";
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString("utf8");
+      if (buffer.includes("\n")) {
+        process.stdin.removeListener("data", onData);
+        process.stdin.pause();
+        resolve(buffer.split("\n")[0] ?? "");
+      }
+    };
+    process.stdin.resume();
+    process.stdin.once("data", onData);
+  });
+}
+
+/**
+ * Friendly label for the venue selection (used in banners / logs).
+ */
+function describeVenue(venue: Venue): string {
+  switch (venue) {
+    case "bybit":
+      return "Bybit (CEX only)";
+    case "both":
+      return "Bybit (CEX) + PancakeSwap (DEX)";
+    case "pancakeswap":
+      return "PancakeSwap (DEX only)";
+  }
+}
+
 // ── Banner ────────────────────────────────────────────────────────────
 
 /**
@@ -79,11 +165,7 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
   console.log("║             AgentTrading — Startup Banner               ║");
   console.log("╠══════════════════════════════════════════════════════════╣");
   console.log(`║  Mode:          ${config.mode.padEnd(40)}║`);
-  if (config.mode === "demo") {
-    console.log(`║  Venue:         bybit (demo trading)${" ".repeat(21)}║`);
-  } else {
-    console.log(`║  Venue:         ${(canaryConfig.scope.allowedVenues.join(", ") || "none").padEnd(40)}║`);
-  }
+  console.log(`║  Venue:         ${describeVenue(config.venue).padEnd(40)}║`);
   console.log(
     `║  Capital Cap:   $${canaryConfig.capitalLimits.maxCapitalUsd.toFixed(2).padEnd(38)}║`,
   );
@@ -104,6 +186,43 @@ function printBanner(config: AppConfig, cycleIntervalMs: number): void {
 // ── Mode Dispatch ─────────────────────────────────────────────────────
 
 /**
+ * Build a LiveRunnerConfig from the validated AppConfig + session paths.
+ * Wires in Bybit and (optionally) PancakeSwap credentials based on the
+ * selected venue.
+ */
+function buildRunnerConfig(opts: RunOptions, paths: SessionPaths): LiveRunnerConfig {
+  const { config } = opts;
+  const base = {
+    symbols: config.canaryConfig.scope.allowedTokens.map((t) => {
+      const base = t.replace("/", "");
+      return base.endsWith("USDT") ? base : `${base}USDT`;
+    }),
+    bybitApiKey: config.bybitApiKey,
+    bybitApiSecret: config.bybitApiSecret,
+    bybitEndpoints: config.bybitEndpoints,
+    cycleIntervalMs: opts.cycleIntervalMs,
+    canaryConfig: config.canaryConfig,
+    auditLogPath: paths.auditLogPath,
+    sessionId: paths.sessionId,
+    mode: config.mode,
+    llmApiKey: config.llmApiKey,
+    llmBaseUrl: config.llmBaseUrl,
+  };
+
+  // For pancakeswap / both venues, pass DEX credentials through to the runner.
+  if (config.venue === "pancakeswap" || config.venue === "both") {
+    return {
+      ...base,
+      pancakeSwapRpcUrl: config.pancakeSwapRpcUrl,
+      pancakeSwapPrivateKey: config.pancakeSwapPrivateKey,
+      pancakeSwapRouterAddress: config.pancakeSwapRouterAddress,
+    };
+  }
+
+  return base;
+}
+
+/**
  * Run live mode using LiveRunner. Connects to Bybit private+public WS,
  * places real orders through LiveExecutionEngine with canary limits,
  * confirms fills via WS, reconciles, and produces full audit trail.
@@ -113,22 +232,7 @@ async function runLiveMode(
   paths: SessionPaths,
   manifest: ManifestWriter,
 ): Promise<{ exitCode: number }> {
-  const runner = new LiveRunner({
-    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) => {
-      const base = t.replace("/", "");
-      return base.endsWith("USDT") ? base : `${base}USDT`;
-    }),
-    bybitApiKey: opts.config.bybitApiKey,
-    bybitApiSecret: opts.config.bybitApiSecret,
-    bybitEndpoints: opts.config.bybitEndpoints,
-    cycleIntervalMs: opts.cycleIntervalMs,
-    canaryConfig: opts.config.canaryConfig,
-    auditLogPath: paths.auditLogPath,
-    sessionId: paths.sessionId,
-    mode: opts.config.mode,
-    llmApiKey: opts.config.llmApiKey,
-    llmBaseUrl: opts.config.llmBaseUrl,
-  });
+  const runner = new LiveRunner(buildRunnerConfig(opts, paths));
 
   await runner.start();
 
@@ -173,22 +277,7 @@ async function runDemoMode(
   opts: RunOptions,
   paths: SessionPaths,
 ): Promise<{ exitCode: number }> {
-  const runner = new LiveRunner({
-    symbols: opts.config.canaryConfig.scope.allowedTokens.map((t) => {
-      const base = t.replace("/", "");
-      return base.endsWith("USDT") ? base : `${base}USDT`;
-    }),
-    bybitApiKey: opts.config.bybitApiKey,
-    bybitApiSecret: opts.config.bybitApiSecret,
-    bybitEndpoints: opts.config.bybitEndpoints,
-    cycleIntervalMs: opts.cycleIntervalMs,
-    canaryConfig: opts.config.canaryConfig,
-    auditLogPath: paths.auditLogPath,
-    sessionId: paths.sessionId,
-    mode: opts.config.mode,
-    llmApiKey: opts.config.llmApiKey,
-    llmBaseUrl: opts.config.llmBaseUrl,
-  });
+  const runner = new LiveRunner(buildRunnerConfig(opts, paths));
 
   await runner.start();
 
@@ -275,8 +364,8 @@ function shutdownObservability(opts: {
 // ── Main ──────────────────────────────────────────────────────────────
 
 /**
- * Main entry point. Parse CLI args, load config, display banner,
- * and dispatch to the appropriate mode.
+ * Main entry point. Parse CLI args, prompt for venue if needed, load
+ * config, display banner, and dispatch to the appropriate mode.
  */
 export async function main(argv: string[] = process.argv): Promise<void> {
   // ── Step 1: Parse CLI arguments ──────────────────────────────────
@@ -288,9 +377,16 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   }
   const cliArgs = argResult.args;
 
-  // ── Step 2: Load and validate configuration ──────────────────────
+  // ── Step 2: Resolve venue (CLI flag → interactive menu) ─────────
+  let venue: Venue = cliArgs.venue ?? (Bun.env.VENUE as Venue | undefined) ?? "bybit";
+  if (!cliArgs.venue && !Bun.env.VENUE) {
+    venue = await promptVenueMenu();
+  }
+
+  // ── Step 3: Load and validate configuration ──────────────────────
   const loadResult: LoadConfigResult = await loadConfig({
     configPath: cliArgs.configPath,
+    venue,
     env: {
       ...(Bun.env as Record<string, string | undefined>),
       MODE: cliArgs.mode,
@@ -304,18 +400,18 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 
   const config = loadResult.config;
 
-  // ── Step 3: Determine cycle interval ─────────────────────────────
+  // ── Step 4: Determine cycle interval ─────────────────────────────
   // CLI flag takes precedence over config/env.
   const cycleIntervalMs = cliArgs.cycleIntervalMs ?? config.cycleIntervalMs;
 
-  // ── Step 4: Generate session ID and compute output paths ─────────
+  // ── Step 5: Generate session ID and compute output paths ─────────
   const sessionId = generateSessionId();
   const paths = buildSessionPaths(config.reportDir, sessionId);
 
-  // ── Step 5: Print startup banner ─────────────────────────────────
+  // ── Step 6: Print startup banner ─────────────────────────────────
   printBanner(config, cycleIntervalMs);
 
-  // ── Step 6: Exchange connectivity check (SP2) ───────────────────
+  // ── Step 7: Exchange connectivity check (SP2) ───────────────────
   if (config.mode === "live") {
     console.log("[live] Checking exchange connectivity...");
     const reachable = await checkExchangeReachable();
@@ -327,7 +423,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     console.log("[live] Exchange reachable.\n");
   }
 
-  // ── Step 7: Dispatch to mode ─────────────────────────────────────
+  // ── Step 8: Dispatch to mode ─────────────────────────────────────
   const runOpts: RunOptions = {
     config,
     cycleIntervalMs,
@@ -345,7 +441,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
       startedAtMs: Date.now(),
     });
     manifest.track("audit-log", paths.auditLogPath);
-    
+
     // Add manifest to runOpts for live mode
     exitCode = (await runLiveMode(runOpts, paths, manifest)).exitCode;
   }
