@@ -17,8 +17,8 @@ ARCHIVO / ESTADO / CORRECCIÓN DETALLADA
    - Estado: Auth privada OK (demo), reconciliación, ciclo 5s.
    - Corrección: Antes de live, validar que onShutdown escriba audit.jsonl y manifest.json; comprobar que no haya orders huérfanos sin reconciliar.
 
-5. packages/core/src/ (GammaSession)
-   - Estado: Sesión de GammaSession operativa via session.start/stop.
+5. packages/core/src/live/ (TradingSession / CanarySession)
+   - Estado: Sesión operativa via session.start/stop.
    - Corrección: Verificar que killSwitchActive se active al drawdown; que openOrders esté limitado por maxOpenOrders del canary.
 
 6. REQUISITOS HUMANOS PRE-LIVE (no automáticos)
