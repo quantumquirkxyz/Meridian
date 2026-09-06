@@ -14,6 +14,7 @@ import {
   type OrderIntent,
   type OrderRouteAck,
   type OrderRouter,
+  type RiskDecision,
 } from "@agenttrading/contracts";
 import { BybitRESTClient } from "@agenttrading/connectors";
 import { DEXExecutor } from "@agenttrading/chain";
@@ -38,7 +39,13 @@ export class BybitDexOrderRouter implements OrderRouter {
     this.orderCategory = options.orderCategory ?? "linear";
   }
 
-  async route(intent: OrderIntent): Promise<OrderRouteAck> {
+  async route(intent: OrderIntent, riskDecision: RiskDecision): Promise<OrderRouteAck> {
+    // Fail closed (ADR-0003): never send an order the Risk Engine did not approve.
+    if (riskDecision.decision !== "APPROVE") {
+      throw new Error(
+        `router requires an APPROVE risk decision, got ${riskDecision.decision} for ${intent.idempotencyKey}`,
+      );
+    }
     if (isDexIntent(intent)) {
       return this.routeDex(intent);
     }
