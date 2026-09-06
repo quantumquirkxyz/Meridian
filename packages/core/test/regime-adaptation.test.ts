@@ -17,12 +17,12 @@ import {
   RegimeClassifier,
   DEFAULT_REGIME_THRESHOLDS,
   type RegimeClassifierInput,
-} from "../src/gamma/regime-classifier.ts";
+} from "../src/live/regime-classifier.ts";
 import {
   RegimePolicyEngine,
   RegimePerformanceTracker,
   validatePermissionReduction,
-} from "../src/gamma/regime-policy-engine.ts";
+} from "../src/live/regime-policy-engine.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

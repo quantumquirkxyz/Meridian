@@ -31,7 +31,7 @@ import type {
 import { DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
 import { evaluateAuditStaleness } from "./audit-availability.ts";
 
-// ── Phase Mapping ────────────────────────────────────────────────────
+// ── Timeline Mapping ────────────────────────────────────────────────
 
 /**
  * Map audit action strings to timeline phases.

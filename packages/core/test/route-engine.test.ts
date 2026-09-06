@@ -7,8 +7,8 @@ import type {
   SystemicRiskOverlay,
 } from "@agenttrading/contracts";
 import { DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
-import { RouteEngine } from "../src/gamma/route-engine.ts";
-import { SystemicRiskOverlayEngine } from "../src/gamma/systemic-risk-overlay.ts";
+import { RouteEngine } from "../src/live/route-engine.ts";
+import { SystemicRiskOverlayEngine } from "../src/live/systemic-risk-overlay.ts";
 
 // ── Test helpers ────────────────────────────────────────────────────
 

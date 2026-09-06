@@ -9,9 +9,9 @@ import {
   type CanaryControlCommand,
 } from "@agenttrading/contracts";
 import { isCanaryControlCommand, isCanaryControlStatus } from "@agenttrading/contracts";
-import { KillSwitch } from "../src/gamma/kill-switch.ts";
-import { LiveExecutionEngine, type CanaryExecutionState } from "../src/gamma/live-execution-engine.ts";
-import { CanarySession } from "../src/gamma/canary-session.ts";
+import { KillSwitch } from "../src/live/kill-switch.ts";
+import { LiveExecutionEngine, type CanaryExecutionState } from "../src/live/live-execution-engine.ts";
+import { CanarySession } from "../src/live/canary-session.ts";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

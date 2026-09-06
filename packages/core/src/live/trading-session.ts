@@ -263,7 +263,7 @@ export class TradingSession {
     // with typed contracts — never approves or executes orders.
     try {
       const agentInput: AgentInput = {
-        agentId: "gamma-observer",
+        agentId: "trading-observer",
         payload: { regime: input.regime, market: input.market },
         permissions: ["observe"],
         timestampMs: this.now(),
@@ -624,11 +624,11 @@ export class TradingSession {
   ): void {
     this.auditSequence++;
     this.auditReconstructor.addAuditEvent({
-      eventId: `gamma-${eventType}-${this.now()}`,
+      eventId: `trading-${eventType}-${this.now()}`,
       sequence: this.auditSequence,
       timestampMs: this.now(),
       action: "STATE_TRANSITION",
-      actor: "gamma-session",
+      actor: "trading-session",
       state: this.canarySession.status.killSwitchActive
         ? "HALT"
         : this.running
