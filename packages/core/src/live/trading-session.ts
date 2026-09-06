@@ -268,8 +268,9 @@ export class TradingSession {
   placeLiveOrder(
     intent: OrderIntent,
     preCheck: CanaryPreCheckResult,
+    riskDecision: RiskDecision,
   ): Promise<OrderRouteAck> {
-    return this.canarySession.placeLiveOrder(intent, preCheck);
+    return this.canarySession.placeLiveOrder(intent, preCheck, riskDecision);
   }
 
   // AgentAdapter interface contract (isolated from LLM framework).
@@ -500,6 +501,14 @@ export class TradingSession {
    */
   get status() {
     return this.canarySession.status;
+  }
+
+  /**
+   * Current canary execution state (orders, exposure, capital, PnL) so the
+   * orchestrator can feed live risk inputs to the RiskEngine (GAP3).
+   */
+  get executionState() {
+    return this.canarySession.executionState;
   }
 
   /**

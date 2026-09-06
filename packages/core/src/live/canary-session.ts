@@ -267,15 +267,16 @@ export class CanarySession {
 
   /**
    * Place a real order through the execution engine's OrderRouter
-   * (ADR-0011). The engine enforces the canary pre-check once more and
-   * routes via the attached OrderRouter; without a router it falls back
-   * to simulation (harness/tests).
+   * (ADR-0011). The engine enforces the canary pre-check and requires the
+   * Risk Engine's APPROVE decision before sending (fail closed, ADR-0003);
+   * without a router it falls back to simulation (harness/tests).
    */
   placeLiveOrder(
     intent: OrderIntent,
     preCheck: CanaryPreCheckResult,
+    riskDecision: RiskDecision,
   ): Promise<OrderRouteAck> {
-    return this.execution.placeLiveOrder(intent, preCheck);
+    return this.execution.placeLiveOrder(intent, preCheck, riskDecision);
   }
 
   /**
@@ -401,6 +402,9 @@ export class CanarySession {
       (this.exposurePerToken[intent.symbol] ?? 0) + notionalUsd;
     this.exposurePerVenue[intent.venue] =
       (this.exposurePerVenue[intent.venue] ?? 0) + notionalUsd;
+    // engine preCheck keys chain exposure by venue (DEX venue == chain).
+    this.exposurePerChain[intent.venue] =
+      (this.exposurePerChain[intent.venue] ?? 0) + notionalUsd;
 
     this.recordAudit("ORDER_SUBMITTED", {
       orderId: intent.idempotencyKey,
@@ -453,6 +457,8 @@ export class CanarySession {
       (this.exposurePerToken[record.symbol] ?? 0) - record.notionalUsd;
     this.exposurePerVenue[record.venue] =
       (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
+    this.exposurePerChain[record.venue] =
+      (this.exposurePerChain[record.venue] ?? 0) - record.notionalUsd;
 
     if (state === "FILLED") {
       this.dailyPnlUsd += pnlUsd;
@@ -686,6 +692,15 @@ export class CanarySession {
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
+  /**
+   * Current execution state snapshot (orders, exposure, capital, PnL).
+   * Lets the orchestrator feed live exposure/loss inputs to the RiskEngine
+   * evaluation (GAP3: rules 4-6 are fed from tracked state).
+   */
+  get executionState(): CanaryExecutionState {
+    return this.buildExecutionState();
+  }
+
   private buildExecutionState(): CanaryExecutionState {
     this.resetCountersIfNeeded(this.now());
     return {
@@ -709,6 +724,8 @@ export class CanarySession {
         (this.exposurePerToken[record.symbol] ?? 0) - record.notionalUsd;
       this.exposurePerVenue[record.venue] =
         (this.exposurePerVenue[record.venue] ?? 0) - record.notionalUsd;
+      this.exposurePerChain[record.venue] =
+        (this.exposurePerChain[record.venue] ?? 0) - record.notionalUsd;
     }
     this.openOrders = [];
   }
@@ -747,7 +764,7 @@ export class CanarySession {
     this.audit?.record({
       eventId: `canary-${action}-${this.now()}`,
       timestampMs: this.now(),
-      action: "STATE_TRANSITION" as any,
+      action: "STATE_TRANSITION",
       actor: "canary-session",
       state: this.killSwitchActive
         ? "HALT"
