@@ -27,7 +27,7 @@ The cognitive layer lives behind an in-house `AgentAdapter` contract (`run(input
 
 These are always available regardless of LLM configuration.
 
-**Agent Catalog:** 11 consultative agents are defined in `CONSULTATIVE_AGENT_CATALOG` with explicit configurations, permissions, runtime declarations, and fallback strategies. When `LLM_API_KEY` is configured, deliberative agents (Bull, Bear, Skeptic, Risk Analyst, Execution Advisor) activate with real LLM reasoning via OpenRouter. Without an LLM, the system operates deterministically using behavioral adapters.
+**Agent Catalog:** 11 consultative agents are defined in `CONSULTATIVE_AGENT_CATALOG` with explicit configurations, permissions, runtime declarations, and fallback strategies. When `LLM_API_KEY` is configured, deliberative agents (Bull, Bear, Skeptic, Risk Analyst, Execution Advisor) activate with real LLM reasoning via OpenRouter. Without an LLM, the system operates deterministically using behavioral adapters. Deployment of the catalog is defined in ADR-0013: one general agent per trading scope, with the catalog agents bound to that scope as sub-agents.
 
 **Wiring:** The `VercelAISDKAdapter` and `createOpenRouterGenerateFn` are available via subpath exports (`@agenttrading/agents/runtimes/vercel`, `@agenttrading/agents/runtimes/openrouter`). The CLI package imports `ai` and `@ai-sdk/openai` and creates the concrete `generateFn` — the LLM dependency lives at the wiring layer, not in the agents package.
 
