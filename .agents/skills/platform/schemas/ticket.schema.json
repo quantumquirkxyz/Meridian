@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "qquirk Ticket Artifact",
+  "title": "quirk Ticket Artifact",
   "type": "object",
   "additionalProperties": false,
   "required": ["parent", "metadata", "outcome", "acceptanceCriteria", "validation", "blockedBy"],

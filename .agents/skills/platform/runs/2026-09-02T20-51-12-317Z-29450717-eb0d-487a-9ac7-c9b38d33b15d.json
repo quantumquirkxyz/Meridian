@@ -1,0 +1,18 @@
+{
+  "id": "29450717-eb0d-487a-9ac7-c9b38d33b15d",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-09-02T20:51:12.317Z",
+  "finishedAt": "2026-09-02T20:51:12.318Z",
+  "contextPack": "platform-semantic",
+  "status": "fail",
+  "warnings": [
+    "skill-sandbox: write-code skill marked low risk"
+  ],
+  "errors": [
+    "skill-promoter: dependency missing validate-skills",
+    "skill-promoter: dependency missing audit-semantics"
+  ],
+  "markdownFiles": 127,
+  "skills": 62
+}

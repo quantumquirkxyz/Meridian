@@ -1,0 +1,17 @@
+{
+  "id": "2895c989-d99e-493d-a54f-411bae84dedf",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-09-02T20:51:30.945Z",
+  "finishedAt": "2026-09-02T20:51:30.945Z",
+  "contextPack": "platform-semantic",
+  "status": "fail",
+  "warnings": [],
+  "errors": [
+    "skill-promoter: dependency missing validate-skills",
+    "skill-promoter: dependency missing audit-semantics",
+    "skill-sandbox: lock hash is stale"
+  ],
+  "markdownFiles": 127,
+  "skills": 62
+}

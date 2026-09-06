@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "qquirk Implementation Note Artifact",
+  "title": "quirk Implementation Note Artifact",
   "type": "object",
   "additionalProperties": false,
   "required": ["status", "completed", "validation", "remaining", "scopeNotes"],

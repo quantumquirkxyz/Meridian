@@ -24,7 +24,7 @@ test('semantic audit passes without warnings', () => {
 });
 
 test('sync bundle defaults to dry-run', () => {
-  const target = fs.mkdtempSync('/tmp/qquirk-sync-test-');
+  const target = fs.mkdtempSync('/tmp/quirk-sync-test-');
   const result = run(['.agents/skills/platform/sync-bundle.mjs', target]);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout);

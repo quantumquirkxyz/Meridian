@@ -1,0 +1,16 @@
+{
+  "id": "5b28290e-c298-4005-ab37-26151cf2595a",
+  "skill": "skill-audit",
+  "tool": "skills:audit-semantics",
+  "startedAt": "2026-09-02T21:18:26.846Z",
+  "finishedAt": "2026-09-02T21:18:26.846Z",
+  "contextPack": "platform-semantic",
+  "status": "fail",
+  "warnings": [],
+  "errors": [
+    "agent-observability: lock hash is stale",
+    "skill-creator: lock hash is stale"
+  ],
+  "markdownFiles": 133,
+  "skills": 62
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "qquirk Review Fix Plan Artifact",
+  "title": "quirk Review Fix Plan Artifact",
   "type": "object",
   "additionalProperties": false,
   "required": ["status", "pr", "review", "sourceReview", "items"],

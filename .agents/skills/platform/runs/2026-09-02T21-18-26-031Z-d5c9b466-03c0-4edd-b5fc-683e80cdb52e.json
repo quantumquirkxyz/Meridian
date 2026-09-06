@@ -1,0 +1,30 @@
+{
+  "id": "d5c9b466-03c0-4edd-b5fc-683e80cdb52e",
+  "skill": "evaluate-skill",
+  "tool": "skills:evaluate-behavioral-fixtures",
+  "startedAt": "2026-09-02T21:18:26.031Z",
+  "finishedAt": "2026-09-02T21:18:26.032Z",
+  "contextPack": "platform-behavioral-fixtures",
+  "status": "pass",
+  "warnings": [],
+  "errors": [],
+  "fixtures": 4,
+  "results": [
+    {
+      "file": "spec-output.md",
+      "status": "checked"
+    },
+    {
+      "file": "ticket-output.md",
+      "status": "checked"
+    },
+    {
+      "file": "review-fix-plan-output.md",
+      "status": "checked"
+    },
+    {
+      "file": "pr-body-output.md",
+      "status": "checked"
+    }
+  ]
+}

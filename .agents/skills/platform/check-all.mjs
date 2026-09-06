@@ -33,14 +33,47 @@ for (const [command, args] of checks) {
 
 const failures = results.filter((result) => result.code !== 0);
 
-console.log(JSON.stringify({
-  status: failures.length ? 'fail' : 'pass',
-  checks: results.map((result) => ({
+function parseJson(text) {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+const structuredChecks = results.map((result) => {
+  const parsed = parseJson(result.stdout.trim());
+  return {
     command: result.command,
     status: result.code === 0 ? 'pass' : 'fail',
     code: result.code,
+    parsed,
+  };
+});
+
+const skillsCount = structuredChecks.find((c) => c.parsed?.skills)?.parsed?.skills ?? null;
+const warnings = structuredChecks.flatMap((c) => c.parsed?.warnings ?? []);
+const errors = structuredChecks.flatMap((c) => c.parsed?.errors ?? []);
+
+const report = {
+  status: failures.length ? 'fail' : 'pass',
+  checks: structuredChecks.map(({ command, status, code, parsed }) => ({
+    command,
+    status,
+    code,
+    skills: parsed?.skills ?? null,
+    scenarios: parsed?.scenarios ?? null,
+    fixtures: parsed?.fixtures ?? null,
+    warnings: parsed?.warnings?.length ?? 0,
+    errors: parsed?.errors?.length ?? 0,
   })),
-}, null, 2));
+  summary: {
+    totalChecks: checks.length,
+    passed: checks.length - failures.length,
+    failed: failures.length,
+    skillsEvaluated: skillsCount,
+    totalWarnings: warnings.length,
+    totalErrors: errors.length,
+  },
+};
+
+console.log(JSON.stringify(report, null, 2));
 
 if (failures.length) {
   for (const failure of failures) {

@@ -1,0 +1,14 @@
+{
+  "id": "6fcf6ce6-dbf6-4e36-9e1c-3ae208178f9d",
+  "skill": "skill-audit",
+  "tool": "skills:validate",
+  "startedAt": "2026-09-02T20:50:54.532Z",
+  "finishedAt": "2026-09-02T20:50:54.533Z",
+  "contextPack": "platform-default",
+  "status": "fail",
+  "warnings": [],
+  "errors": [
+    "missing .claude link for skill-creator"
+  ],
+  "skills": 62
+}

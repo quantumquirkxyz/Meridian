@@ -1,4 +1,0 @@
-interface:
-  display_name: "Make Project"
-  short_description: "Create a GitHub Projects V2 board, wired with fields, views, linked repos, and items"
-  default_prompt: "Use $make-project to create a new GitHub Projects V2 board: confirm the owner, title, and scope, then create the project, set its defaults, link repositories, add custom fields and views, add items, and set item field values via the GraphQL API. Follow the step order in SKILL.md and use the snippets in references/graphql.md."

@@ -1,44 +1,364 @@
 {
-  "version": 1,
   "skills": {
-    "ask-matt": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/ask-matt/SKILL.md", "computedHash": "fd103ca4788299a606d043684cd79fba9771810a77711d2ba22859aeaa9b3fe1"},
-    "code-review": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/code-review/SKILL.md", "computedHash": "6a65cc61114f96db07ec41e3920e67c9c5bf70dd6e0901eb9460ebcb2bdc209f"},
-    "review-pr": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/review-pr/SKILL.md", "computedHash": "ab39df123a8dd3329d43d3208ec5d4f86200e9fd3b011204690765e70d79879c"},
-    "codebase-design": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/codebase-design/SKILL.md", "computedHash": "a8d50abac5a4018f60e1d911d4b6f4e36454ca14d6c390c0695a578c7de65dad"},
-    "diagnosing-bugs": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/diagnosing-bugs/SKILL.md", "computedHash": "7a0779480f323a66d109404646bcc1a14bf0232b45b3e3ea93b652a035718acb"},
-    "domain-modeling": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/domain-modeling/SKILL.md", "computedHash": "152e2c97239affb12a60c5f4a7e74ab546a49ae169688c81f4e2ccc42dafa579"},
-    "grill-with-docs": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/grill-with-docs/SKILL.md", "computedHash": "610d091047bcfb9db0f75c057d15538481a721111579fc5ec7f83ad9131a2165"},
-    "implement": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/implement/SKILL.md", "computedHash": "6d3fd9e83b8f36e5213854779db49b256a457a7ebb4a503e53fa7dcff696adc3"},
-    "agent-observability": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/agent-observability/SKILL.md", "computedHash": "f988a3c6ad15274feb4024afd5a19b6695274fde4f62baeb235adef9cbf89396"},
-    "artifact-handoff": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/artifact-handoff/SKILL.md", "computedHash": "9149de01e6e9f781e8f4d628f710e6665e40f352fe326dfc6138e886c3ba6f84"},
-    "capability-router": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/capability-router/SKILL.md", "computedHash": "5ce97837aa3874549264303d13fa895f4ce70b93fc244f39b84b36c4fc7817fb"},
-    "context-pack": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/context-pack/SKILL.md", "computedHash": "992b348a9220067cce8942b0e42138b273fe9534e56a923288fe1a2ef54b7633"},
-    "evaluate-skill": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/evaluate-skill/SKILL.md", "computedHash": "438ecb01ee65d64b72a9f256d388b589f408822cbd4e63f3ec840418f4dbdf51"},
-    "execution-policy": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/execution-policy/SKILL.md", "computedHash": "1a7e3cd8bcacb3030e80efa4c9a6bb8ee83670290eed57c0b359181ef3b341b8"},
-    "implement-review-fixes": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/implement-review-fixes/SKILL.md", "computedHash": "6896a75498f281198128963b5907998d2253bf1ce8e6c36614299a9eebe9a440"},
-    "knowledge-curator": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/knowledge-curator/SKILL.md", "computedHash": "814dab080b75ac1ed821c1f5ad83306e2a66fe0e6a6e49e8acc437408ed48d6a", "sha256": "0198a36281d288f15728333d513f53b1ca72ef38da959b53f402d4f38c2850d8"},
-    "make-project": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/make-project/SKILL.md", "computedHash": "b1e8e4204c7368b1a037715614a367d91f5b45a5c8b97900ad31a098920c2616"},
-    "plan-review-fixes": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/plan-review-fixes/SKILL.md", "computedHash": "b10aa6e98bf6f2a9903f327a3fab96905c128983d7d22f537a4ce5a40aba305c"},
-    "spec-draft-pr": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Meridian", "revision": "working-tree", "skillPath": ".agents/skills/spec-draft-pr/SKILL.md", "computedHash": "2ac7000a8f9f4b1dfe2c7b733a3c63f1f2b67f1d8c3eb5a6a8e56f6d7db0ce0de"},
-    "publish-open-pr": {"source": "cohortlens-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/publish-open-pr/SKILL.md", "computedHash": "90930822ebed4cc9fb4a530a45a3dbb295c1cd71ce540c0af9317793efe64fb2"},
-    "review-fix-loop": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/review-fix-loop/SKILL.md", "computedHash": "d1d2196dc730f4234053294b276a13810dd1cbc6d89ecacfdfa8709d02595d41", "sha256": "57b1b417001620aa1006596ca30db6c85f673ac193a4492ea19429f62d0d454c"},
-    "ship-subissue": {"source": "aries-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/ship-subissue/SKILL.md", "computedHash": "27167d808c75f43b871242744e9d5303025ba73306641fda220c38143fb06706"},
-    "skill-audit": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/skill-audit/SKILL.md", "computedHash": "8eb94c27d899d3de13a41d42f97f6975fb9320887918ede57c3134c6ba2bc943", "sha256": "980325f6f9e5569423049fc8d28542f7469b873e24c984ed153d21f64bd15892"},
-    "spec-audit": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/spec-audit/SKILL.md", "computedHash": "3b29513a309f85f0cc6cdc87052fd1e250258e73190e6e313cd403de6e9902a2"},
-    "ticket-audit": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/ticket-audit/SKILL.md", "computedHash": "56a1475dacc7c34271c3be7d4778087241744ee0efd88bc1c21ddf24eceb9d3f"},
-    "prototype": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/prototype/SKILL.md", "computedHash": "03074862d4b6e4eaf472aa75146e1d193dd9e3bba0e4303a9b2425562d1d44cc"},
-    "research": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/research/SKILL.md", "computedHash": "af378829f015775a3bcd65ff466826722e99359017ae6bae227ca4c9bd14049c"},
-    "resolving-merge-conflicts": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/resolving-merge-conflicts/SKILL.md", "computedHash": "c7c9ba81362a786aac05d2223123bf1bd2f8a99c3243a72882ede9c68bedfb24"},
-    "setup-matt-pocock-skills": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/setup-matt-pocock-skills/SKILL.md", "computedHash": "def265a8b15ffb8afc3f335d69e175ba9a7fe3991218984b0e49e8345cde3b20"},
-    "tdd": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/tdd/SKILL.md", "computedHash": "5363bb2775679fe9311fbb67947f95359169c6e7f1fac77c0f25e190bca6cf2f"},
-    "to-spec": {"source": "cohortlens-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/to-spec/SKILL.md", "computedHash": "46581c6bae73dc1f73df50efb61e4cdcc3e50e0daf76fe208eff6b725fd66a7c"},
-    "to-tickets": {"source": "cohortlens-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/to-tickets/SKILL.md", "computedHash": "458b26babefbad5bddb1fa21c0415bbe1ca596820978289f1fdb522eae98441c"},
-    "triage": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/triage/SKILL.md", "computedHash": "d45827c299c021f77b0f146fefa3ee679b13f99e9a2ffdf48e8de2347adeefe1"},
-    "wayfinder": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/engineering/wayfinder/SKILL.md", "computedHash": "257e40665b28ae959ffdcb97d7a72b074360f4a3d201bd84786505308546e434"},
-    "work-item-router": {"source": "quant-local-skills", "sourceType": "local", "repository": "/home/quantumquirkz/Quant", "revision": "working-tree", "skillPath": ".agents/skills/work-item-router/SKILL.md", "computedHash": "0038154200f9b8baf8c393a5166d24620d7f2c3d25d978d0432d6519c113d01f"},
-    "grill-me": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/productivity/grill-me/SKILL.md", "computedHash": "6189dfceb7304a6e5558f75d87e68fa3bc7fcf7ba120e44f21f8a61fe01eba54"},
-    "grilling": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/productivity/grilling/SKILL.md", "computedHash": "44331dda57f461db4fec3f2efb6ddabe7aaaa0a57ae0f88a883bc61aed8a0587"},
-    "handoff": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/productivity/handoff/SKILL.md", "computedHash": "57c9f1f392d7352cdc85b1e39ca49eddc70ce1dc278bd9653fb4f23dfc2560fc"},
-    "writing-great-skills": {"source": "mattpocock/skills", "sourceType": "github", "repository": "https://github.com/mattpocock/skills", "revision": "ed37663cc5fbef691ddfecd080dff42f7e7e350d", "skillPath": "skills/productivity/writing-great-skills/SKILL.md", "computedHash": "4d6ccbc3760b1bd4107c495a79872286ea69494003f3b0a719fc95b147457061"}
+    "agent-observability": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "7c2aa8863b0cf4fcfaf5d2ffbf8d77f2fd1337ffd31b4fd81e6cf354aadf6497"
+    },
+    "api-contracts": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "3167ea1eeb5dbbfb1e4f9c4ca88a20e15698aa971052fccec2bb250e664e1976"
+    },
+    "api-design": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "ed09fb7e0155413537b09aef099bebe78aff7f6af09c3ede8e867b2c3afa51a5"
+    },
+    "artifact-handoff": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "e9445c61d52a463de910c5e67025d8aec7201644f6bd375e22e1937bb6068ac4"
+    },
+    "ask-to": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "1c63f3286cd88ccd60e107b0c443c6f40f94658504797ddd6187397ca5102c81"
+    },
+    "auth": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "908ced63127cf5beb342141a177d7a5ad7313f3fb2e4e81c1668e89a3ce4bbd0"
+    },
+    "capability-router": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "65273ba4fd09768e630b39297801084d7cbbeb6eeee06c8be5bf7fd6253596eb"
+    },
+    "code-review": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "8845a096eecaba5a0980e5087c6e8580c9b4bccabd540e31a7c7459bb61d7484"
+    },
+    "codebase-design": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "5806ce94009bf2608693ddbbad3e16b0041548512b6ee8facbb2c30142f77b31"
+    },
+    "context-pack": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "951fac0801460e3a2f2a5fefb39335e014acb8a3d4827d28b81dc6fd4423cae9"
+    },
+    "database-migrations": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "507c4bb4df47fd19e4b9aedfa7bf498019d4e54444400a6b2e31233a2b3c4ca1"
+    },
+    "deployment": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "f6cb479776f9355c2686e7991264b6691693d9853be1acc243d7dc1f79b0f635"
+    },
+    "design-system": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "72440eb3817cfcdde5d768c658117987c4a527a48ca44ab645d55f1c40715452"
+    },
+    "diagnosing-bugs": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "9d5fe65b4f642ad5c9c2bf320d40443cb311bf6fbbd2753dd30ec80bb3c33ef4"
+    },
+    "docs-management": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "c9d6c89a20e58077a863b2961829fca3201779845e20b057788e6cdff6544807"
+    },
+    "domain-modeling": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "af0a1f5b83ad99b666aa280debbb545e6674a79faf0ca7886e9d2966b66c61ef"
+    },
+    "evaluate-skill": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "8b226bf6b110cf746dcce00b35d3787dcb8132693c48c56a428ccda5cfcfdd58"
+    },
+    "execution-policy": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "0f29e1a5ed8a420820025b858473dbdcfecdeb226e3fb3475cdd0d2503543a05"
+    },
+    "frontend-design": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "9662c4d613e35adb92e623aba0d2232feebd6fc987df91bdd8cefcc2d02b692e"
+    },
+    "grill": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "dd57a165c1de0b1f33da4023a8af5e8bd2195407448d5d42b716380c49d294dd"
+    },
+    "grill-me": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "f713b4dd3c413d505f1d86f286d5b17d107330c3d72477f99d6f09d6a05cab1e"
+    },
+    "grill-with-docs": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "d0075b97b3a980051395a3d847d85902e2789e3a50c5b3aadf53f2ab03587ba0"
+    },
+    "grilling": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "aec9b1a1e06f7f842fc4cdaa1215b1e3e09c06a91c21379c0b26d6d25f73f462"
+    },
+    "handoff": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "d565eb5c6b4dd1c7803880e7d675724c70c017dcdeb57f0e264abcef32b6ec36"
+    },
+    "implement": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "26998b6f6e707610d33abd59313f0d4238b6f682cd83683d3322ce48a71cc6a9"
+    },
+    "implement-review-fixes": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "3e871167c0b9a166e5c3a7d407d3987894b67ef6a3635076d5098e012b363b20"
+    },
+    "knowledge-curator": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "1993542f467a6975d751342e832e8a3be9a10c161631de2134196b0ceca4f9dd"
+    },
+    "make-project": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "d5f8d29a1bfd20c9591637d517585fa3bee17a595ef68b3361fd1080a4ac0490"
+    },
+    "mobile": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "147b4c70a4e55ac129ad03c38b68dd05f7af191527c6382a41dd0a9ed5f3c5fc"
+    },
+    "monitoring-alerting": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "3ad191cd5e23eb72c424bbab06da3e8e7559cdfb098e3f5916a99a9a4b18a444"
+    },
+    "nextjs": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "5b36545f26ef7fbd1a6b204c48b3c6a26aef99c863ec560c605ffa9c1bfab92c"
+    },
+    "observability": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "6d801eb322367b7377642880978bca377d555ed41e0eee79b12931ffe712825f"
+    },
+    "payments": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "bb16cec848f327c4093ee7522b165b97b71141a27508517e82acf4b91eb2c93a"
+    },
+    "plan-review-fixes": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "0ee8a51c2b75991e22ce3ab903b5078fd970b588594591e69f26995dc61b9410"
+    },
+    "postgres": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "ff9f0164a593a2b2d36ff50101ee8aaddf070b76ff1d8c0ce8efb1d52708934e"
+    },
+    "project-development": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "e92ecca39b6cf9d89122c58c2e87cb59ab32bc4b677a80515206074ea6d64ece"
+    },
+    "prototype": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "ffd7e7ecf4f4819afc5c7a7d4031824d44122ebe05f5d092effb13d9cb71e882"
+    },
+    "publish-open-pr": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "ab87b9a97d3d0b1e0fecbff9b761e144b4e1de0c4e36642016e64cbd2e374567"
+    },
+    "queueing": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "625fd5124a7ebe87a135e89461cd654d9ebdd27af31369fd9c610af84e0a12fb"
+    },
+    "react": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "67fa28f6d6e17ffd87e772ee8ed2f13c628d3fb403ccc61fe74b2af8fecf6663"
+    },
+    "release-management": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "877bfd6d26f56fe173f5cc642d1b4e7009338f23ce212a59fe2b63dde1dac32a"
+    },
+    "research": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "05eb60cf1c344b50a108ae56e71edc8e35f421faf22ba5fc5ee47eef118c75ef"
+    },
+    "resolving-merge-conflicts": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "b42a3ebfb4034661880ac1dac913685857cc733adacd219692806ae864c3171f"
+    },
+    "review-fix-loop": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "2c5584b49f362ee54332338b2d0ed49b7aec8953b73472b838fca8b121f433fc"
+    },
+    "review-pr": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "9cfd17d43d1612357102b4a0910b0e14587814c5702dbc39952a3917330bba7c"
+    },
+    "search": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "08485d945d5d43f17b334769ddd267b729fde75faa008846a4b82c43dbe10a42"
+    },
+    "ship-subissue": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "fe0342a2b906357f52fffeadc6b210ac28a205bd89c5e043a95e7cc0268b29ad"
+    },
+    "skill-audit": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "14ba19a48ffb0e7a2a7df5cbed62f43a56fa8bf6e31e0f8e9c319c6b93c840c7"
+    },
+    "skill-creator": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "050e7775c00c0373f6b4e781d0d88ef1654c77f3d60f5f4c26f8d820106dd0ef"
+    },
+    "skill-sandbox": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "7a5716ea8dbf490669c744f3b91039103ca5caa071699e71387197be270af4e8"
+    },
+    "skill-promoter": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "7209a36d9050b278b59aeccd1607f51c54170bcb8da01aa2b9d2d9e937c249ec"
+    },
+    "tdd": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "7878babdfdaeb8660ea0968f8b93deace383857d77087d0a7f7523e6fe4ad9f4"
+    },
+    "testing": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "c1e51c0ac0144cfd3e901ba17bc39311f3e73322bd4a7691028d3b9b914a37f9"
+    },
+    "to-spec": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "6805d2c17174b6e1e6b0c88caa956fe2b345c38aa31f3882fb6a4ff76b71aa31"
+    },
+    "to-tickets": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "6b8d3d4a67b38747ba7e2f3187231c0061356fb157cb0a70b231626e51c403f9"
+    },
+    "triage": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "7189a3b61dd707414fd29bf789877697466fc02f157fb25f17adf920190e3bdf"
+    },
+    "vercel": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "41bae859ded45791ff4f13921ee9533eab19e56f77429168bc74bb8efa46779e"
+    },
+    "wayfinder": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "7ca10c73d850213a47fe20c16c3624646610bfddc23f5b0360ef49ebd34316dd"
+    },
+    "webapp-testing": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "2d04963da1cefd62f347ffc971e87895fd6dc13b0b37b5393b67554e4bc7cec6"
+    },
+    "work-item-router": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "0d51d0b13389bda489b69c4f3e7e86fbb550b27274ccb68f859901190454f68e"
+    },
+    "skill-tutor": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "024f6e9e6b92a1bbb74d805d1912041bf4e58a6d67fc832a91a431587aa4ae16"
+    },
+    "writing-great-skills": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "9488f4e8f4caed77f48577d6b236e2270d2f3f52b02be3fcaeef564e776445b7"
+    },
+    "contribution-workflow-optimizer": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "a8e940d8b2079eae5b7cbc77fd3bc52299ad2770f29eb85918f415f1d905920b"
+    },
+    "integration-playground": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "86502bec009d000a1d4a2b041d7df942b87c4aaf162dba460a0f33d18d64c47b"
+    },
+    "interactive-tutorial-builder": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "9da33ec3d03663d66c072a8e82463df711950e804e0a210f363a35e1c8492ee5"
+    },
+    "rule-cataloger": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "27f897a426d5efd3bc10ebd75b575c1088786dddfafc54c807d6ebf56ba1f9ba"
+    },
+    "skill-dependency-graph": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "ffab117da674682f175ba732f2baea782e2250f383f802bb21bda320d9f7958c"
+    },
+    "skill-diff-analyzer": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "b2383ffc377a995b0bf018d30c712f0ac58f8bf3570b0cc258b6dd2392822ba6"
+    },
+    "skill-performance-metrics": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "a72914818971633530eaeca12ce6439f6e817580f2ae457da2e24ddeb4f09f39"
+    },
+    "skill-template-generator": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "d39140521b2d53ee4080e456e23d81298ca41e4a6cc95963dbd83613aaa62d85"
+    },
+    "skill-testing-framework": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "f74fd72351c0b38c65a9c60101c05a73946356989b3f88305008ec897f493568"
+    },
+    "setup-qquirk-skills": {
+      "sourceType": "local",
+      "revision": "working-tree",
+      "hash": "4796683d0f6e9ec2b1a8dc1e3290c9a5145efa6a57b5ef7a5274be397644cec3"
+    }
   }
 }

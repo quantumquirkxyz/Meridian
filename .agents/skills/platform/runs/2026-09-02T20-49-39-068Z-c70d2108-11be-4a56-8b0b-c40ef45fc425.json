@@ -1,0 +1,17 @@
+{
+  "id": "c70d2108-11be-4a56-8b0b-c40ef45fc425",
+  "skill": "skill-audit",
+  "tool": "skills:validate",
+  "startedAt": "2026-09-02T20:49:39.068Z",
+  "finishedAt": "2026-09-02T20:49:39.069Z",
+  "contextPack": "platform-default",
+  "status": "fail",
+  "warnings": [
+    "lockfile missing local entry for skill-audit",
+    "lockfile missing local entry for skill-creator"
+  ],
+  "errors": [
+    "missing .claude link for skill-creator"
+  ],
+  "skills": 62
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "qquirk Release Decision Record Artifact",
+  "title": "quirk Release Decision Record Artifact",
   "type": "object",
   "additionalProperties": false,
   "required": ["releaseCandidate", "changeSet", "requiredGates", "decision", "rollbackAuthority"],
