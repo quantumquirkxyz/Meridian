@@ -7,3 +7,6 @@ bun.lockb
 !.env.example
 coverage/
 *.log
+
+# Generated skill audit execution records
+.agents/skills/platform/runs/
