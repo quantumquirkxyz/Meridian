@@ -128,7 +128,7 @@
     "implement-review-fixes": {
       "sourceType": "local",
       "revision": "working-tree",
-      "hash": "3e871167c0b9a166e5c3a7d407d3987894b67ef6a3635076d5098e012b363b20"
+      "hash": "f955b813ec80a4fead013024070bd18b1b302888d788035d71913f366330d51d"
     },
     "knowledge-curator": {
       "sourceType": "local",
@@ -168,7 +168,7 @@
     "plan-review-fixes": {
       "sourceType": "local",
       "revision": "working-tree",
-      "hash": "0ee8a51c2b75991e22ce3ab903b5078fd970b588594591e69f26995dc61b9410"
+      "hash": "17c8b19daa4680523316f77eebd9e8331de06d2e4aa8e04c64e7cc4a640bbbb9"
     },
     "postgres": {
       "sourceType": "local",
@@ -223,7 +223,7 @@
     "review-pr": {
       "sourceType": "local",
       "revision": "working-tree",
-      "hash": "9cfd17d43d1612357102b4a0910b0e14587814c5702dbc39952a3917330bba7c"
+      "hash": "b50d91e303602658a2b8ff8221d0d7c1b56ce2e48eed13982a22d55233caaacc"
     },
     "search": {
       "sourceType": "local",
@@ -258,7 +258,7 @@
     "tdd": {
       "sourceType": "local",
       "revision": "working-tree",
-      "hash": "7878babdfdaeb8660ea0968f8b93deace383857d77087d0a7f7523e6fe4ad9f4"
+      "hash": "142389c2ebc2238779d0eaeb99757034b0cd6304e7f2cbcd1d08f298e70de108"
     },
     "testing": {
       "sourceType": "local",
@@ -303,7 +303,7 @@
     "skill-tutor": {
       "sourceType": "local",
       "revision": "working-tree",
-      "hash": "024f6e9e6b92a1bbb74d805d1912041bf4e58a6d67fc832a91a431587aa4ae16"
+      "hash": "652d0923488f6e74c024c9d5a55fd6e15f4407666b4067e736e913aaa7547ba0"
     },
     "writing-great-skills": {
       "sourceType": "local",
