@@ -18,7 +18,11 @@ The project operates in a domain where latency matters (market data, order execu
 
 ## Decision
 
-We adopt **TypeScript + Bun** in a **monorepo with Bun workspaces** (`packages/contracts`, `packages/core`, `packages/connectors`, `packages/graph`, `packages/harness`, `packages/agents`, `packages/infra`, `packages/cli`) with `contracts` as the shared typed frontier.
+We adopt **TypeScript + Bun** in a **monorepo with Bun workspaces** (`packages/contracts`, `packages/core`, `packages/events`, `packages/connectors`, `packages/chain`, `packages/graph`, `packages/harness`, `packages/agents`, `packages/infra`, `packages/cli`) with `contracts` as the shared typed frontier.
+
+## Update 2026-09-06
+
+The workspace grew to 10 packages as the execution and delivery layers landed: `events` (event bus + SQLite store, ADR-0006), `chain` (on-chain execution seam, ADR-0012), `agents` (per-scope general agents + consultative catalog, ADR-0004/0013), and `cli` (LiveRunner wiring, ADR-0011).
 
 ## Options considered
 

@@ -112,10 +112,12 @@ Boundary rules: `agents` never imports `core`; `core` never imports LLMs or `con
 ## LLM Integration
 
 - **Provider:** OpenRouter via OpenAI-compatible API
-- **SDK:** Vercel AI SDK (`ai` package) with `@ai-sdk/openai` provider
+- **SDK:** Vercel AI SDK (`ai` package) with `@ai-sdk/openai` provider — the primary LLM runtime for analytical/deliberative agents
 - **Pattern:** `generateFn` injection — agents package never imports `ai` directly
-- **Activation:** When `LLM_API_KEY` is set in `.env`, deliberative agents use real LLM reasoning
-- **Fallback:** Without LLM, behavioral adapters (audit, memory, policy) provide deterministic operation
+- **Mastra runtime:** `agents/runtimes/mastra` is a second LLM runtime behind `AgentAdapter`; catalog agents that declare `runtime: "mastra"` (Bull, Bear, Skeptic, Memory, Audit) execute through it (ADR-0004)
+- **Activation:** When `LLM_API_KEY` is set in `.env`, analytical/deliberative agents use real LLM reasoning
+- **Fallback:** Without LLM, `ScopeObserverAdapter` provides deterministic scoped observations for the per-scope general agents (ADR-0013), and audit/memory/policy keep their behavioral adapters
+- **Execution seam:** none of the above touches order placement — `cli` routes orders through the engine's `OrderRouter` (ADR-0011), and agents never execute (ADR-0003)
 
 ## Stack
 

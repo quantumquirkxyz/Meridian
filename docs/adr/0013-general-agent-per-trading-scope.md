@@ -25,3 +25,14 @@ The shared catalog of 11 consultative agents (planner-supervisor, arbitrage-alph
 - Negative: footprint scales with trading scopes (venues × pairs; × pools on DEX); budgets, timeouts, and lifecycle management must be per scope, and not every sub-agent should run an LLM call on every cycle.
 - Negative: the current single-adapter wiring in `LiveRunner` must be refactored to instantiate a general agent per configured scope and to scope sub-agent invocation accordingly.
 - Follow-up: refactor `packages/cli/src/live-runner.ts` wiring to per-scope general agents; add per-scope budget/lifecycle controls; confirm memoized/fallback sub-agent paths scale before `live`.
+
+## Update 2026-09-06
+
+Per-scope deployment is implemented:
+
+- `GeneralAgent` (packages/agents/src/general-agent.ts) owns one trading scope and aggregates scoped sub-agent outputs into one `GeneralAgentRecommendation` per cycle using best-confidence directional voting (HOLD default).
+- `createScopeDeployment` / `deployPerScopeGeneralAgents` (packages/agents/src/deployment.ts) build one fresh per-scope `AgentRegistry` + `AgentRuntime` from the shared catalog.
+- `ScopeObserverAdapter` (packages/agents/src/behavioral-runtimes.ts) provides deterministic, scoped observations for the analytical/deliberative sub-agents so no LLM call is required per sub-agent per cycle; an LLM adapter overrides only the analytical/deliberative agents when configured. Control agents (memory/audit/policy) always use their behavioral adapters.
+- `LiveRunner` (packages/cli/src/live-runner.ts) derives scopes from configured symbols and PancakeSwap pools, deploys one general agent per scope, runs the cognitive layer each cycle, and audits every `SCOPE_RECOMMENDATION`.
+
+The per-scope deployment emits observation-only recommendations into the Risk Engine gate; execution authority is unchanged (ADR-0003).

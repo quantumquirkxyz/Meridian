@@ -12,9 +12,9 @@ The event bus (inter-module communication) needs to be fast and simple. There is
 
 ## Decision
 
-**Persistence:** SQLite via `bun:sqlite` (embedded, zero infrastructure). The `storage` package provides a `SqliteEventStore` with typed schemas, WAL mode, and transaction support. Graph state, risk state, and configuration are serialized to SQLite tables.
+**Persistence:** SQLite via `bun:sqlite` (embedded, zero infrastructure). The `events` package provides an `EventStore` with a typed `events` table, WAL mode, and transaction support, persisting every published event keyed by its idempotency key (`eventId`). Events are the durable record; other state lives in memory inside its owning package (`graph`, `risk`, `config`).
 
-**Event bus:** In-memory pub/sub. Modules communicate through a `Bus` class that publishes events synchronously within a single process. No external broker.
+**Event bus:** In-memory pub/sub. Modules communicate through an `EventBus` class that publishes events synchronously within a single process. No external broker.
 
 ## Options considered
 
@@ -31,5 +31,5 @@ The event bus (inter-module communication) needs to be fast and simple. There is
 - **Zero infrastructure:** No database server, no Docker, no cloud dependency. The system runs with a single `bun` binary.
 - **ACID transactions:** Audit trail and event store are consistent even on crashes. WAL mode allows concurrent reads during writes.
 - **Single-process limitation:** If the system ever needs multiple processes (e.g., separate execution and monitoring), SQLite will not work for shared state. At that point, the event bus should be upgraded to Redis Streams or NATS, and persistent storage should move to PostgreSQL.
-- **Data locality:** All data lives in local SQLite files under `storage/`. Backups are file copies. No network I/O for persistence.
+- **Data locality:** Event data lives in local SQLite files; in-memory databases are used for tests and harness. Backups are file copies. No network I/O for persistence.
 - **Event bus is non-durable:** In-memory events are lost on process restart. This is acceptable because the event store (SQLite) is the durable record, and the bus is only for intra-process communication.
