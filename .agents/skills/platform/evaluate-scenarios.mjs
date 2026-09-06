@@ -4,7 +4,33 @@ import { recordExecution } from './record-execution.mjs';
 
 const repoRoot = process.cwd();
 const skillsRoot = path.join(repoRoot, '.agents', 'skills');
-const scenariosDir = path.join(skillsRoot, 'evaluate-skill', 'scenarios');
+const scenariosDir = path.join(skillsRoot, 'skill-dev', 'evaluate-skill', 'scenarios');
+
+async function exists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function selectSkillDir(skillName) {
+  async function walk(dir) {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'runs') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.name === skillName && await exists(path.join(full, 'SKILL.md'))) {
+        return full;
+      }
+      const nested = await walk(full);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  return walk(skillsRoot);
+}
 
 function frontmatterValue(text, key) {
   const match = text.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
@@ -30,9 +56,12 @@ function frontmatterList(text, key) {
 }
 
 async function readSkill(skillName) {
-  const skillPath = path.join(skillsRoot, skillName, 'SKILL.md');
+  const skillDir = await selectSkillDir(skillName);
+  if (!skillDir) return null;
+  const skillPath = path.join(skillDir, 'SKILL.md');
   const text = await fs.readFile(skillPath, 'utf8');
   return {
+    dir: skillDir,
     path: skillPath,
     text,
     sideEffects: frontmatterList(text, 'sideEffects'),
@@ -41,20 +70,12 @@ async function readSkill(skillName) {
 }
 
 async function scenarioFiles() {
+  if (!(await exists(scenariosDir))) return [];
   const entries = await fs.readdir(scenariosDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
     .map((entry) => path.join(scenariosDir, entry.name))
     .sort();
-}
-
-async function exists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function main() {
@@ -67,13 +88,13 @@ async function main() {
     const scenarioResult = { id: scenario.id, checks: [] };
 
     for (const skillName of scenario.expectedRoute ?? []) {
-      if (!(await exists(path.join(skillsRoot, skillName, 'SKILL.md')))) {
+      if (!(await selectSkillDir(skillName))) {
         errors.push(`${scenario.id}: expected route references missing skill ${skillName}`);
       }
     }
 
     for (const check of scenario.checks ?? []) {
-      const skill = await readSkill(check.skill).catch(() => null);
+      const skill = await readSkill(check.skill);
       if (!skill) {
         errors.push(`${scenario.id}: check references missing skill ${check.skill}`);
         continue;
@@ -97,7 +118,7 @@ async function main() {
         }
       }
       for (const ref of check.requiredReferences ?? []) {
-        const refPath = path.join(skillsRoot, check.skill, ref);
+        const refPath = path.join(skill.dir, ref);
         if (!(await exists(refPath))) {
           errors.push(`${scenario.id}: ${check.skill} missing reference ${ref}`);
         }

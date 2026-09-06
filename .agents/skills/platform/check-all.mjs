@@ -9,7 +9,7 @@ const checks = [
   ['node', ['--check', '.agents/skills/platform/evaluate-scenarios.mjs']],
   ['node', ['--check', '.agents/skills/platform/evaluate-behavioral-fixtures.mjs']],
   ['node', ['--check', '.agents/skills/platform/sync-bundle.mjs']],
-  ['bash', ['-n', '.agents/skills/diagnosing-bugs/scripts/hitl-loop.template.sh']],
+  ['bash', ['-n', '.agents/skills/delivery/diagnosing-bugs/scripts/hitl-loop.template.sh']],
   ['node', ['--test', '.agents/skills/platform/tests/*.test.mjs']],
 ];
 
