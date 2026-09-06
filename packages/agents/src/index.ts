@@ -44,6 +44,7 @@ export {
   AuditConsultativeAdapter,
   MemoryConsultativeAdapter,
   PolicyConsultativeAdapter,
+  ScopeObserverAdapter,
 } from "./behavioral-runtimes.ts";
 
 // ── Logger ─────────────────────────────────────────────────────────────
@@ -67,6 +68,23 @@ export {
   type AgentRuntimeOptions,
 } from "./runtime.ts";
 
+// ── General Agent per trading scope (ADR-0013) ─────────────────────────
+export {
+  GeneralAgent,
+  DEFAULT_SCOPE_SUB_AGENTS,
+  type GeneralAgentCycleInput,
+  type GeneralAgentCycleResult,
+  type GeneralAgentOptions,
+} from "./general-agent.ts";
+export {
+  createScopeDeployment,
+  deployPerScopeGeneralAgents,
+  defaultGeneralAgentId,
+  type ScopeDeployment,
+  type ScopeDeploymentOptions,
+  type DeployPerScopeOptions,
+} from "./deployment.ts";
+
 // LLM runtime adapters (Vercel AI SDK, OpenRouter) are available via
 // subpath exports only (package.json exports map). They are NOT re-exported
 // from the main barrel to preserve ARCHITECTURE.md boundary rules.
@@ -87,4 +105,19 @@ export type {
   ExplanationAgentOutput,
   ErrorAgentOutput,
   OutputKind,
+} from "@agenttrading/contracts";
+export type {
+  TradingScope,
+  TradingScopeKind,
+  GeneralAgentRecommendation,
+  GeneralAgentSignal,
+} from "@agenttrading/contracts";
+export {
+  TRADING_SCOPE_KINDS,
+  GENERAL_AGENT_SIGNALS,
+  scopeIdOf,
+  isTradingScope,
+  parseTradingScope,
+  isGeneralAgentRecommendation,
+  parseGeneralAgentRecommendation,
 } from "@agenttrading/contracts";

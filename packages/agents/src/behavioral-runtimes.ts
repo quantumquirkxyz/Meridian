@@ -351,3 +351,225 @@ export class PolicyConsultativeAdapter extends BaseAgentAdapter {
     };
   }
 }
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Deterministic, scope-aware observer for the consultative catalog agents.
+ *
+ * ADR-0013: general agents must produce a scoped recommendation every cycle
+ * without requiring an LLM call per sub-agent. This adapter reads the scoped
+ * market payload and emits the catalog agents' deliberation from market
+ * geometry (spread, liquidity, regime) alone. When an LLM is configured for
+ * a deployment, the live layer overrides this adapter for the analytical and
+ * deliberative agents; memory/audit/policy keep their behavioral adapters.
+ *
+ * Every emitted output is advisory: it carries a directional `signal` and a
+ * `confidence` so the general agent aggregation layer can vote on it.
+ */
+export class ScopeObserverAdapter extends BaseAgentAdapter {
+  readonly adapterId = "scope-observer";
+  readonly runtimeName = "vercel-ai-sdk";
+
+  constructor(private readonly configs: ReadonlyMap<string, AgentConfig>) {
+    super();
+  }
+
+  async run(input: AgentInput): Promise<AgentOutput> {
+    const config = this.configs.get(input.agentId);
+    if (!config) {
+      return this.fallback(input.agentId, "missing scope observer config");
+    }
+
+    const payload = asObject(input.payload);
+    const market = asObject(payload.market);
+
+    const bid = readNumber(market.bid);
+    const ask = readNumber(market.ask);
+    const mid = readNumber(market.mid);
+    const liquidityUsd = readNumber(market.liquidityUsd);
+
+    const spreadBps =
+      typeof mid === "number" && typeof bid === "number" && typeof ask === "number" && mid > 0
+        ? ((ask - bid) / mid) * 10_000
+        : undefined;
+
+    const direction: Record<string, unknown> = {
+      object: "signal",
+      signal: this.inferSignal(mid, bid, ask, spreadBps, liquidityUsd),
+      confidence: this.inferConfidence(spreadBps, liquidityUsd),
+    };
+
+    let output: Record<string, unknown>;
+    switch (input.agentId) {
+      case "agent-market-regime": {
+        const regime = this.classifyRegime(spreadBps, liquidityUsd);
+        output = {
+          ...direction,
+          regime,
+          recommendedMode:
+            regime === "stable" ? "ARBITRAGE_ON" : regime === "volatile" ? "RISK_OFF" : "OBSERVE_ONLY",
+          summary: `Regime classified as ${regime} from live market geometry`,
+          assumptions: ["regime is inferred from spread and liquidity only"],
+        };
+        break;
+      }
+      case "agent-arbitrage-alpha": {
+        const hasViableArb = typeof spreadBps === "number" && spreadBps >= 15;
+        output = {
+          ...direction,
+          candidateSignal: hasViableArb ? "BUY" : "NO_TRADE",
+          expectedNetProfitUsd:
+            typeof mid === "number" && hasViableArb && typeof liquidityUsd === "number"
+              ? Math.round(Math.min(liquidityUsd, 1_000) * (spreadBps ?? 0) * 0.0001 * 100) / 100
+              : 0,
+          summary: hasViableArb
+            ? `Spread of ${Math.round(spreadBps ?? 0)} bps clears the execution cost hurdle`
+            : "No viable spread for an arbitrage leg",
+          assumptions: ["cost stack is folded into the bps hurdle", "no cross-venue bridge required"],
+        };
+        break;
+      }
+      case "agent-bull": {
+        const optimistic = typeof spreadBps === "number" && spreadBps < 20 && direction.signal !== "SELL";
+        output = {
+          ...direction,
+          signal: optimistic ? "BUY" : "HOLD",
+          stance: optimistic ? "bullish" : "neutral",
+          summary: optimistic ? "Lean constructive while the spread is tight" : "No constructive edge from market geometry",
+          assumptions: ["bull case rests on live spread tightness"],
+        };
+        break;
+      }
+      case "agent-bear": {
+        const defensive = typeof spreadBps === "number" && spreadBps >= 35;
+        output = {
+          ...direction,
+          signal: defensive ? "SELL" : "HOLD",
+          stance: defensive ? "bearish" : "neutral",
+          summary: defensive ? "Wide spread suggests adverse selection risk" : "No bearish edge from market geometry",
+          assumptions: ["bear case reacts to liquidity/thinness only"],
+        };
+        break;
+      }
+      case "agent-skeptic": {
+        const weak = typeof liquidityUsd === "number" && liquidityUsd < 10_000;
+        output = {
+          ...direction,
+          signal: weak ? "HOLD" : direction.signal,
+          flags: [
+            ...(weak ? ["liquidity below the 10k USD confidence floor"] : []),
+            ...(typeof spreadBps === "number" && spreadBps >= 50 ? ["extreme spread; quote may be stale"] : []),
+          ],
+          summary:
+            weak || (typeof spreadBps === "number" && spreadBps >= 50)
+              ? "Candidate does not resist skeptical pressure from market data"
+              : "Candidate survives skeptical checking of market geometry",
+          assumptions: ["skeptic checks liquidity and spread only"],
+        };
+        break;
+      }
+      case "agent-risk-analyst": {
+        const riskLevel = typeof spreadBps === "number" && spreadBps >= 35 ? 0.9 : 0.4;
+        output = {
+          ...direction,
+          signal: "HOLD",
+          riskLevel,
+          recommendedControls: [
+            ...(riskLevel >= 0.7 ? ["require explicit man-in-the-loop approval"] : []),
+            ...(riskLevel < 0.7 ? ["keep size capped by the standing per-order limit"] : []),
+          ],
+          summary: `Risk posture scored at ${Math.round(riskLevel * 100)}% from market geometry`,
+          assumptions: ["risk is derived from spread and liquidity, not orderbook depth"],
+        };
+        break;
+      }
+      case "agent-execution-advisor": {
+        output = {
+          ...direction,
+          recommendedMode: typeof liquidityUsd === "number" && liquidityUsd >= 10_000 ? "ARBITRAGE_ON" : "OBSERVE_ONLY",
+          executionDraft: {
+            venue: asObject(payload.scope).venue ?? "unknown",
+            maxSlippageBps: 50,
+            deadlineMs: Date.now() + 30_000,
+          },
+          summary: "Execution recommendation derived from liquidity floor only",
+          assumptions: ["execution advice is non-binding and advisory"],
+        };
+        break;
+      }
+      case "agent-planner-supervisor": {
+        output = {
+          ...direction,
+          plannedSteps: [
+            { order: 1, action: "observe", detail: "collect market geometry into the consensus readout" },
+            { order: 2, action: "decide", detail: "aggregate scoped votes into a general agent recommendation" },
+            { order: 3, action: "act", detail: "route the recommendation through the engine's pre-check seam" },
+          ],
+          recommendedMode: direction.signal === "BUY" ? "ARBITRAGE_ON" : "OBSERVE_ONLY",
+          summary: "Plan derived deterministically from the scoped market readout",
+          assumptions: ["plan is advisory; execution authority lives in the engine"],
+        };
+        break;
+      }
+      default: {
+        output = {
+          ...direction,
+          purpose: "generic scope observation",
+          summary: "Advisory readout of the scoped market state",
+          assumptions: ["no specialized deliberation available for this agent"],
+        };
+        break;
+      }
+    }
+
+    return {
+      kind: "structured",
+      agentId: input.agentId,
+      payload: output,
+      schemaName: config.outputSchemaName,
+      timestampMs: input.timestampMs,
+      auditTrail: [
+        this.buildAuditEntry({
+          agentId: input.agentId,
+          action: "scope-observe",
+          fallbackUsed: false,
+        }),
+      ],
+    };
+  }
+
+  private inferSignal(
+    mid: number | undefined,
+    bid: number | undefined,
+    ask: number | undefined,
+    spreadBps: number | undefined,
+    liquidityUsd: number | undefined,
+  ): "BUY" | "SELL" | "HOLD" {
+    if (typeof bid === "number" && typeof ask === "number" && typeof mid === "number" && bid > 0 && ask >= bid) {
+      if (typeof spreadBps === "number" && spreadBps < 12) return "BUY";
+      if (typeof spreadBps === "number" && spreadBps >= 45) return "SELL";
+      if (typeof liquidityUsd === "number" && liquidityUsd < 5_000) return "HOLD";
+    }
+    return "HOLD";
+  }
+
+  private inferConfidence(spreadBps: number | undefined, liquidityUsd: number | undefined): number {
+    if (typeof spreadBps === "undefined") return 0.2;
+    let confidence = 0.5;
+    if (spreadBps < 15) confidence += 0.25;
+    if (spreadBps >= 35) confidence -= 0.2;
+    if (typeof liquidityUsd === "number" && liquidityUsd >= 10_000) confidence += 0.15;
+    if (typeof liquidityUsd === "number" && liquidityUsd < 5_000) confidence -= 0.2;
+    return Math.max(0.1, Math.min(0.95, Math.round(confidence * 100) / 100));
+  }
+
+  private classifyRegime(spreadBps: number | undefined, liquidityUsd: number | undefined): "stable" | "volatile" | "trending" {
+    if (typeof spreadBps === "undefined") return "trending";
+    if (spreadBps < 10 && typeof liquidityUsd === "number" && liquidityUsd >= 10_000) return "stable";
+    if (spreadBps >= 30) return "volatile";
+    return "trending";
+  }
+}
