@@ -25,7 +25,7 @@ export * from "./loop.ts";
 export * from "./agent.ts";
 export * from "./consultative-agents.ts";
 export * from "./canary-config.ts";
-export * from "./gamma-control.ts";
+export * from "./canary-control.ts";
 export * from "./regime.ts";
 export * from "./learning-loop.ts";
 export * from "./route.ts";

@@ -12,7 +12,7 @@ import { isSystemMode, type SystemMode } from "./modes.ts";
 import { isStateName, type StateName } from "./stategraph.ts";
 
 /**
- * Gamma control-surface contract (issue #34). canary control
+ * Canary control-surface contract (issue #34). canary control
  * vocabulary with live-canary-specific commands and status fields.
  *
  * The deterministic canary session and the operator UI both speak this
@@ -78,7 +78,7 @@ export interface CanaryControlStatus {
 }
 
 /**
- * Result of a gamma control command. Includes the command that was
+ * Result of a canary control command. Includes the command that was
  * executed plus the full status snapshot after the command.
  */
 export interface CanaryControlResult extends CanaryControlStatus {
