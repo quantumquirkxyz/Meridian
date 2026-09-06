@@ -1,5 +1,6 @@
 import {
   type AuditEvent,
+  type AuditReasonCode,
   type Permission,
   type StateContext,
   type StateName,
@@ -483,7 +484,7 @@ export class Orchestrator {
       action: "STATE_TRANSITION",
       actor: options.input.actor,
       state: this.graph.currentState,
-      reasonCodes: options.reasonCodes as any,
+      reasonCodes: options.reasonCodes as AuditReasonCode[],
       data: { ...options.data, mode: this.graph.currentMode },
     });
   }

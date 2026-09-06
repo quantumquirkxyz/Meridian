@@ -272,8 +272,8 @@ export interface OperatorHaltRequested {
 
 export const isOperatorHaltRequested: Validator<OperatorHaltRequested> = (v): v is OperatorHaltRequested => {
   if (!v || typeof v !== "object") return false;
-  if ((v as any).type !== OPERATOR_HALT_REQUESTED) return false;
   const obj = v as Record<string, unknown>;
+  if (obj.type !== OPERATOR_HALT_REQUESTED) return false;
   if (typeof obj.requestedAtMs !== "number") return false;
   if (typeof obj.source !== "string") return false;
   return true;
