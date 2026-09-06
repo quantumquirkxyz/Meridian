@@ -3,7 +3,7 @@
  * metrics from backtest results: gross/net PnL, max drawdown, win rate,
  * profit factor, expected value, fill ratio, and tail losses.
  *
- * This is the evidence layer — no hypothesis passes to Beta without
+ * This is the evidence layer — no hypothesis reaches promotion without
  * harness evidence produced by this reporter.
  */
 
