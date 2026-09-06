@@ -62,14 +62,14 @@ export const CANARY_CONTROL_COMMAND_DESCRIPTORS: readonly CanaryControlCommandRo
     dangerous: command === "cancel-all" || command === "halt",
   }));
 
-export function gammaCommandForHotkey(
+export function canaryCommandForHotkey(
   input: string,
 ): CanaryControlCommand | undefined {
   return CANARY_CONTROL_COMMAND_DESCRIPTORS.find((row) => row.hotkey === input)
     ?.command;
 }
 
-function gammaModeEmphasis(
+function canaryModeEmphasis(
   status: CanaryControlStatus,
 ): CanaryControlStatusRow["emphasis"] {
   if (status.killSwitchActive || status.mode === "HALT") return "danger";
@@ -78,7 +78,7 @@ function gammaModeEmphasis(
 }
 
 function renderCanaryStatus(status: CanaryControlStatus): CanaryControlStatusRow[] {
-  const mode = gammaModeEmphasis(status);
+  const mode = canaryModeEmphasis(status);
   const dailyLossWarning =
     status.dailyPnlUsd < 0 ? "warning" : "normal";
   const orphanDanger =

@@ -21,7 +21,7 @@ export { InfrastructureEngine, modeIndex } from "./infrastructure-engine.ts";
 export {
   CANARY_CONTROL_COMMAND_DESCRIPTORS,
   CanaryControlTuiModel,
-  gammaCommandForHotkey,
+  canaryCommandForHotkey,
   type CanaryControlCommandRow,
   type CanaryControlCommand,
   type CanaryControlTuiModelOptions,
@@ -31,4 +31,4 @@ export {
   type CanaryControlStatusRow,
   type CanaryControlTuiView,
   type CanaryLoopRunner,
-} from "./gamma-control-tui.ts";
+} from "./canary-control-tui.ts";

@@ -8,7 +8,7 @@ import type {
 import {
   CanaryControlTuiModel,
   CANARY_CONTROL_COMMAND_DESCRIPTORS,
-} from "../src/gamma-control-tui.ts";
+} from "../src/canary-control-tui.ts";
 
 // ── Mock session ─────────────────────────────────────────────────────
 
