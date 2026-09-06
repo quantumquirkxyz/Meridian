@@ -17,6 +17,7 @@ import {
   type Validator,
 } from "./schema.ts";
 import { type OrderIntent } from "./order.ts";
+import { type RiskDecision } from "./risk.ts";
 
 // ── Acknowledgement ──────────────────────────────────────────────────
 
@@ -57,11 +58,15 @@ export function parseOrderRouteAck(value: unknown): OrderRouteAck {
  */
 export interface OrderRouter {
   /**
-   * Route an OrderIntent to the appropriate venue connector.
+   * Route a Risk-Engine-approved OrderIntent to the appropriate venue connector.
+   *
+   * The `riskDecision` must be an `APPROVE` (ADR-0003 / CONTEXT.md): the
+   * execution seam is fail-closed and only ever sends orders that the Risk
+   * Engine approved. Implementations must refuse a non-`APPROVE` decision.
    * Returns the exchange-assigned order ID and any external reference.
    * Throws on connection/venue failure (caller handles).
    */
-  route(intent: OrderIntent): Promise<OrderRouteAck>;
+  route(intent: OrderIntent, riskDecision: RiskDecision): Promise<OrderRouteAck>;
 }
 
 // ── Venue Routing ────────────────────────────────────────────────────
