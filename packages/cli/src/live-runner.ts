@@ -84,8 +84,32 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { BybitDexOrderRouter } from "./order-router.ts";
 import { buildRecommendationIntent } from "./recommendation-intent.ts";
+import { defensiveActionFor, isDefensiveOutcome } from "./defensive-mode.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
+
+/**
+ * Route-level context fed into a RiskEngine evaluation for the market-metric
+ * rules (13 MIN_LIQUIDITY, 14 MAX_FUNDING_COST, 15 CORRELATION). Optional so
+ * the engine's defensive short-circuit applies when the data is unavailable.
+ */
+export interface RiskEvaluationContext {
+  /** Liquidity depth (USD) available on the route (bottleneck). */
+  liquidityDepthUsd?: number;
+  /** Funding cost (USD) for the position. */
+  fundingCostUsd?: number;
+  /** Maximum risk concentration across route nodes (0–1). */
+  riskConcentration?: number;
+}
+
+/** Maximum risk concentration across a candidate's route nodes (0–1). */
+export function routeConcentration(
+  candidate: { riskConcentration?: Record<string, number> },
+): number | undefined {
+  const map = candidate.riskConcentration;
+  if (map === undefined || Object.keys(map).length === 0) return undefined;
+  return Math.max(...Object.values(map));
+}
 
 export interface LiveRunnerConfig {
   /** Symbols to trade (e.g. ["BTCUSDT"]). */
@@ -1401,7 +1425,15 @@ export class LiveRunner {
     const approvedIntents: OrderIntent[] = [];
     const approvedRiskDecisions: RiskDecision[] = [];
     for (const { candidate, intent } of opportunities) {
-      const riskDecision = this.evaluateRisk(intent, candidate.expectedNetProfitUsd);
+      const riskDecision = this.evaluateRisk(
+        intent,
+        candidate.expectedNetProfitUsd,
+        {
+          liquidityDepthUsd: candidate.maxCapitalUsd ?? this.market.liquidityUsd,
+          fundingCostUsd: candidate.costs.fundingCostUsd,
+          riskConcentration: routeConcentration(candidate),
+        },
+      );
 
       if (riskDecision.decision === "APPROVE") {
         approvedIntents.push(intent);
@@ -1418,6 +1450,9 @@ export class LiveRunner {
           decision: riskDecision.decision,
           reasonCodes: "reasonCodes" in riskDecision ? riskDecision.reasonCodes : [],
         });
+        // ADR-0003: a defensive risk dictamen (HALT_SYSTEM / CASH_ONLY /
+        // CANCEL_ONLY / EXIT_ONLY) instructs the orchestrator to reduce mode.
+        this.applyDefensiveDecision(riskDecision);
       }
     }
 
@@ -1456,6 +1491,8 @@ export class LiveRunner {
           decision: riskDecision.decision,
           reasonCodes: "reasonCodes" in riskDecision ? riskDecision.reasonCodes : [],
         });
+        // ADR-0003: a defensive risk dictamen instructs a mode reduction.
+        this.applyDefensiveDecision(riskDecision);
       }
     }
 
@@ -1490,14 +1527,16 @@ export class LiveRunner {
     this.ordersBlocked += result.blockedCount;
     this.learningRecommendationCount += result.learningRecommendations.length;
 
-    // AC3: Place orders via REST for submitted intents
-    const submittedIntents: OrderIntent[] = [];
+    // AC3: Place orders via REST for submitted intents. approvedIntents and
+    // approvedRiskDecisions are parallel arrays, so the matching APPROVE
+    // decision rides along to the fail-closed execution seam (ADR-0003).
+    const submittedIntents: Array<{ intent: OrderIntent; riskDecision: RiskDecision }> = [];
     for (let i = 0; i < approvedIntents.length && i < result.submittedCount; i++) {
-      submittedIntents.push(approvedIntents[i]);
+      submittedIntents.push({ intent: approvedIntents[i], riskDecision: approvedRiskDecisions[i] });
     }
 
-    for (const intent of submittedIntents) {
-      await this.placeOrder(intent);
+    for (const { intent, riskDecision } of submittedIntents) {
+      await this.placeOrder(intent, riskDecision);
     }
 
     // SP1: Post-order kill switch check
@@ -1553,12 +1592,47 @@ export class LiveRunner {
   // ── Risk Engine Evaluation ─────────────────────────────────────────
 
   /**
+   * Apply a defensive risk dictamen (ADR-0003, CONTEXT.md §Risk Engine):
+   * HALT_SYSTEM / CASH_ONLY / EXIT_ONLY / CANCEL_ONLY reduce the operational
+   * mode through the canary control surface. The Risk Engine never sets
+   * `SystemMode` directly — the orchestrator applies the dictated mode here.
+   */
+  private applyDefensiveDecision(riskDecision: RiskDecision): void {
+    if (!isDefensiveOutcome(riskDecision.decision)) return;
+    const action = defensiveActionFor(riskDecision.decision);
+    if (action === null) return;
+
+    if (action.kind === "control") {
+      this.session.control(action.command);
+      this.auditLogger.record("MODE_REDUCED_BY_RISK", {
+        dictamen: riskDecision.decision,
+        command: action.command,
+        reasonCodes: "reasonCodes" in riskDecision ? riskDecision.reasonCodes : [],
+      });
+    } else {
+      // CANCEL_ONLY has no literal session command: enter defensive
+      // CANCEL_ONLY (blocks new positions until an exact reconciliation).
+      this.session.setDefensiveCancelOnly(true);
+      this.auditLogger.record("MODE_REDUCED_BY_RISK", {
+        dictamen: riskDecision.decision,
+        defensiveMode: "CANCEL_ONLY",
+        reasonCodes: "reasonCodes" in riskDecision ? riskDecision.reasonCodes : [],
+      });
+    }
+  }
+
+  /**
    * Evaluate an OrderIntent through the RiskEngine.
    * CONTEXT.md §17: "The signal must pass through validation layers."
    * CONTEXT.md §18: "No OrderIntent exists without Risk Engine approval."
    */
-  private evaluateRisk(intent: OrderIntent, expectedNetProfitUsd: number): RiskDecision {
+  private evaluateRisk(
+    intent: OrderIntent,
+    expectedNetProfitUsd: number,
+    riskContext: RiskEvaluationContext = {},
+  ): RiskDecision {
     const mode: SystemMode = this.mapSessionModeToSystemMode();
+    const state = this.session.executionState;
 
     return this.riskEngine.evaluate({
       orderIntent: intent,
@@ -1566,8 +1640,15 @@ export class LiveRunner {
       mode,
       dataQualityScore: this.estimateDataQuality(),
       dailyLossUsd: this.session.status.dailyPnlUsd < 0 ? Math.abs(this.session.status.dailyPnlUsd) : 0,
+      weeklyLossUsd: this.session.status.weeklyPnlUsd < 0 ? Math.abs(this.session.status.weeklyPnlUsd) : 0,
+      tokenExposureUsd: state.exposurePerToken[intent.symbol] ?? 0,
+      venueExposureUsd: state.exposurePerVenue[intent.venue] ?? 0,
+      chainExposureUsd: state.exposurePerChain[intent.venue] ?? 0,
       openOrderCount: this.pendingOrders.size,
       slippageBps: intent.limits.maxSlippageBps,
+      liquidityDepthUsd: riskContext.liquidityDepthUsd,
+      fundingCostUsd: riskContext.fundingCostUsd,
+      riskConcentration: riskContext.riskConcentration,
       reconciliationUnresolved: this.session.status.reconciliationUnresolved,
       auditUnavailable: false,
       evaluatedAtMs: this.nowMs(),
@@ -1621,7 +1702,7 @@ export class LiveRunner {
 
   // ── AC3: Order Placement ───────────────────────────────────────────
 
-  private async placeOrder(intent: OrderIntent): Promise<void> {
+  private async placeOrder(intent: OrderIntent, riskDecision: RiskDecision): Promise<void> {
     // Check inventory: ensure we have enough free capital
     const notionalUsd = intent.quantity * intent.price;
     const freeCapital = this.availableCapitalUsd - this.committedCapitalUsd;
@@ -1660,7 +1741,7 @@ export class LiveRunner {
     }
 
     try {
-      const ack = await this.session.placeLiveOrder(intent, preCheck);
+      const ack = await this.session.placeLiveOrder(intent, preCheck, riskDecision);
 
       // Track the pending order (AC6: wait for WS fill confirmation)
       this.pendingOrders.set(ack.orderId, intent);
