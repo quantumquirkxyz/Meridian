@@ -26,7 +26,7 @@ export interface AuditRecordInput {
  *
  * Persistence to SQLite (event store / audit) is deferred to the infra and
  * event-bus tickets (ADR-0006); this in-memory store already guarantees the
- * Phase Zero exit criterion of verifiable logs.
+ * baseline exit criterion of verifiable logs.
  */
 export class AuditLog {
   private readonly events: AuditEvent[] = [];
@@ -71,7 +71,7 @@ export class AuditLog {
 
   /**
    * Human-verifiable log lines, one per event. Used by the simulated flow to
-   * prove the Phase Zero exit criterion: a full opportunity -> reject/approve
+   * prove the baseline exit criterion: a full opportunity -> reject/approve
    * walk that runs with no LLM and produces reconstructable logs.
    */
   toLogLines(): readonly string[] {

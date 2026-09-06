@@ -13,7 +13,7 @@ import {
  * Guard factories for the StateGraph (ARCHITECTURE.md:41). A guard decides
  * whether a transition is allowed in the current StateContext. Guards never
  * call LLMs and never depend on wall-clock randomness; they are pure functions
- * of the context, so the core stays deterministic (Phase Zero, user story 30).
+ * of the context, so the core stays deterministic.
  */
 
 /** Guard that always allows the transition. */

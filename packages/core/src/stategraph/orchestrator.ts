@@ -11,7 +11,7 @@ import { StateGraph, type TransitionInput, type TransitionOutcome } from "./stat
 
 /**
  * Orchestrator (Issue #25): the complete deterministic orchestrator
- * built on top of the Phase Zero StateGraph. Adds:
+ * built on top of the baseline StateGraph. Adds:
  *
  * - Timeout management per state (automatic transition on stall)
  * - Fallback handlers for failed transitions
@@ -65,7 +65,7 @@ export interface OrchestratorOptions {
 
 /**
  * Orchestrator: the complete deterministic orchestrator built on the
- * Phase Zero StateGraph. Coordinates state transitions with timeouts,
+ * baseline StateGraph. Coordinates state transitions with timeouts,
  * retries, fallbacks, kill switch, and degraded mode — while never
  * replacing the Risk Engine's authority.
  */

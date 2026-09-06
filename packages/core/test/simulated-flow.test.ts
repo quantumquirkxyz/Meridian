@@ -51,7 +51,7 @@ function flowHarness(): {
   };
 }
 
-describe("simulated opportunity flow (issue #13 AC4, Phase Zero exit criterion)", () => {
+describe("simulated opportunity flow (issue #13 AC4, baseline exit criterion)", () => {
   test("approve: the full cycle runs to IDLE with verifiable logs and no LLM", () => {
     const { audit, run } = flowHarness();
     const result = run("approve-1", 5);

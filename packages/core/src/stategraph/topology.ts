@@ -484,8 +484,8 @@ function recoveryGuard(from: DefensiveState): Transition {
   };
 }
 
-/** Phase Zero canonical states. */
-const PHASE_ZERO_STATES: readonly StateName[] = [
+/** Canonical baseline states. */
+const BASELINE_STATES: readonly StateName[] = [
   "IDLE",
   "INGEST_MARKET_DATA",
   "NORMALIZE_MARKET_STATE",
@@ -513,7 +513,7 @@ const ORCHESTRATOR_STATES: readonly StateName[] = [
 
 /** All normal (non-defensive) states. */
 const NORMAL_STATES: readonly StateName[] = [
-  ...PHASE_ZERO_STATES,
+  ...BASELINE_STATES,
   ...ORCHESTRATOR_STATES,
 ];
 

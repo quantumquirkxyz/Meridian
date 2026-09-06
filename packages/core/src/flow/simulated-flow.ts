@@ -22,7 +22,7 @@ import {
 } from "../reconciliation/reconciliation-engine.ts";
 
 /**
- * Simulated opportunity flow (issue #13 AC4, the Phase Zero exit criterion):
+ * Simulated opportunity flow (issue #13 AC4, the baseline exit criterion):
  * walks the StateGraph deterministically from IDLE through the full cycle
  * (detect opportunity -> build intent -> agent review -> risk gate -> simulate
  * execution -> reconcile -> audit) with NO LLM anywhere, and returns the
