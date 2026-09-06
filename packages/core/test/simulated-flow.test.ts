@@ -160,14 +160,16 @@ describe("simulated opportunity flow (issue #13 AC4, baseline exit criterion)", 
     expect(result.path).toContain("EXECUTION_PRECHECK");
     expect(result.path).toContain("EXECUTE_ORDER");
     if (result.riskDecision?.decision === "REDUCE_SIZE") {
-      expect(result.riskDecision.reasonCodes).toContain("MAX_RISK_PER_TRADE");
+      // The default policy now enforces the exposure caps, so the per-token
+      // cap is the governing reducer for a 2M-notional order on a clean slate.
+      expect(result.riskDecision.reasonCodes).toContain("MAX_EXPOSURE_PER_TOKEN");
       expect(result.riskDecision.approvedSize).toBe(
-        DEFAULT_RISK_POLICY.maxRiskPerTradeUsd / 100,
+        DEFAULT_RISK_POLICY.maxExposurePerTokenUsd / 100,
       );
     }
     // The reduction actually governs the simulated execution and reconciliation.
     expect(result.executedSize).toBe(
-      DEFAULT_RISK_POLICY.maxRiskPerTradeUsd / 100,
+      DEFAULT_RISK_POLICY.maxExposurePerTokenUsd / 100,
     );
     // A reduction is audited as an approval-side decision, never a rejection.
     const reasons = result.logs.join(" ");

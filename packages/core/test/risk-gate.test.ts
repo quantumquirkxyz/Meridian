@@ -45,7 +45,14 @@ function baseInput(overrides: Partial<RiskGateInput> = {}): RiskGateInput {
 // ── Rule 1: MAX_RISK_PER_TRADE ──────────────────────────────────────
 
 describe("Rule 1: MAX_RISK_PER_TRADE", () => {
-  const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+  // Isolate rule 1: the default exposure caps (additions from issue #103)
+  // would preempt REDUCE_SIZE before the per-trade rule is reached.
+  const engine = new RiskEngine({
+    ...DEFAULT_RISK_POLICY,
+    maxExposurePerTokenUsd: undefined,
+    maxExposurePerVenueUsd: undefined,
+    maxExposurePerChainUsd: undefined,
+  });
 
   test("approves when notional is below the per-trade cap", () => {
     const decision = engine.evaluate(baseInput());
@@ -606,7 +613,15 @@ describe("Rule priority", () => {
 // ── Approval payload ────────────────────────────────────────────────
 
 describe("Approval payload", () => {
-  const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+  // Isolate the per-trade rule so the reduced payload is deterministic:
+  // the default exposure caps would otherwise REDUCE_SIZE at their own
+  // thresholds (a tighten added by issue #103).
+  const engine = new RiskEngine({
+    ...DEFAULT_RISK_POLICY,
+    maxExposurePerTokenUsd: undefined,
+    maxExposurePerVenueUsd: undefined,
+    maxExposurePerChainUsd: undefined,
+  });
 
   test("approved decision carries size, limits, and expiry", () => {
     const decision = engine.evaluate(
@@ -732,6 +747,92 @@ describe("HALT_SYSTEM action", () => {
     expect(decision.decision).toBe("REJECT");
     if (decision.decision === "REJECT") {
       expect(decision.reasonCodes).toContain("AUDIT_UNAVAILABLE");
+    }
+  });
+});
+
+// ── DEFAULT policy covers the full RISK.md rule set ─────────────────
+
+describe("DEFAULT_RISK_POLICY enforces the full rule set by default", () => {
+  test("activeRules includes exposure, open-order, liquidity, funding, correlation", () => {
+    const rules = activeRules(DEFAULT_RISK_POLICY);
+    for (const expected of [
+      "MAX_EXPOSURE_PER_TOKEN",
+      "MAX_EXPOSURE_PER_VENUE",
+      "MAX_EXPOSURE_PER_CHAIN",
+      "MAX_OPEN_ORDERS",
+      "MIN_LIQUIDITY",
+      "MAX_FUNDING_COST",
+      "MAX_CORRELATION_CONCENTRATION",
+    ] as const) {
+      expect(rules).toContain(expected);
+    }
+  });
+
+  test("default thresholds approve a clean intent", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(
+      baseInput({
+        tokenExposureUsd: 5_000,
+        venueExposureUsd: 10_000,
+        chainExposureUsd: 20_000,
+        openOrderCount: 3,
+        liquidityDepthUsd: 50_000,
+        fundingCostUsd: 5,
+        riskConcentration: 0.3,
+      }),
+    );
+    expect(decision.decision).toBe("APPROVE");
+  });
+
+  test("default exposure cap reduces oversized token exposure", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    // notional 1_000 + existing 50_000 = 51_000 > 50_000
+    const decision = engine.evaluate(
+      baseInput({
+        tokenExposureUsd: 50_000,
+        orderIntent: intent({ quantity: 10, price: 100 }),
+      }),
+    );
+    expect(decision.decision).toBe("REDUCE_SIZE");
+    if (decision.decision === "REDUCE_SIZE") {
+      expect(decision.reasonCodes).toContain("MAX_EXPOSURE_PER_TOKEN");
+    }
+  });
+
+  test("default open-order cap rejects when at limit", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(baseInput({ openOrderCount: 10 }));
+    expect(decision.decision).toBe("REJECT");
+    if (decision.decision === "REJECT") {
+      expect(decision.reasonCodes).toContain("MAX_OPEN_ORDERS");
+    }
+  });
+
+  test("default liquidity floor rejects illiquid routes", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(baseInput({ liquidityDepthUsd: 500 }));
+    expect(decision.decision).toBe("REJECT");
+    if (decision.decision === "REJECT") {
+      expect(decision.reasonCodes).toContain("MIN_LIQUIDITY");
+    }
+  });
+
+  test("default funding cap rejects expensive positions", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(baseInput({ fundingCostUsd: 100 }));
+    expect(decision.decision).toBe("REJECT");
+    if (decision.decision === "REJECT") {
+      expect(decision.reasonCodes).toContain("MAX_FUNDING_COST");
+    }
+  });
+
+  test("default correlation cap rejects concentrated routes", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(baseInput({ riskConcentration: 0.95 }));
+    expect(decision.decision).toBe("REJECT");
+    if (decision.decision === "REJECT") {
+      expect(decision.reasonCodes).toContain("MAX_CORRELATION_CONCENTRATION");
     }
   });
 });

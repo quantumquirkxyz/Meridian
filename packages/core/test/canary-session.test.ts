@@ -731,6 +731,31 @@ describe("CanarySession (issue #34)", () => {
     expect(session.status.capitalDeployedUsd).toBe(0);
   });
 
+  test("executionState tracks exposure per token, venue, and chain", () => {
+    const session = new CanarySession({
+      now: () => FIXED_TS,
+      config: DEFAULT_CANARY_CONFIG,
+    });
+    session.control("start");
+
+    // Notional = 0.01 * 100 = 1
+    session.submitOrder(
+      intent({ quantity: 0.01, price: 100 }),
+      approvedDecision(),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+
+    const state = session.executionState;
+    expect(state.exposurePerToken["BTC"]).toBe(1);
+    expect(state.exposurePerVenue["bybit"]).toBe(1);
+    expect(state.exposurePerChain["bybit"]).toBe(1);
+
+    // Resolving the order releases the tracked exposure.
+    session.notifyOrderResolved("intent-1", "FILLED", 0);
+    expect(session.executionState.exposurePerToken["BTC"]).toBe(0);
+    expect(session.executionState.exposurePerChain["bybit"]).toBe(0);
+  });
+
   test("orders are tracked per day and per week", () => {
     const session = new CanarySession({
       now: () => FIXED_TS,

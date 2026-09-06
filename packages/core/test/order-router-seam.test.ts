@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_CANARY_CONFIG,
+  type ApprovedRiskDecision,
   type OrderIntent,
   type OrderRouteAck,
   type OrderRouter,
+  type RiskDecision,
 } from "@agenttrading/contracts";
 import { type CanaryPreCheckResult } from "@agenttrading/core";
 import { LiveExecutionEngine } from "../src/live/live-execution-engine.ts";
@@ -31,6 +33,20 @@ function intent(overrides: Partial<OrderIntent> = {}): OrderIntent {
   };
 }
 
+function approvedDecision(
+  overrides: Partial<ApprovedRiskDecision> = {},
+): ApprovedRiskDecision {
+  return {
+    decision: "APPROVE",
+    orderIntentIdempotencyKey: "intent-1",
+    evaluatedAtMs: FIXED_TS,
+    approvedSize: 0.01,
+    approvedLimits: { maxSlippageBps: 20 },
+    expiresAtMs: FIXED_TS + 60_000,
+    ...overrides,
+  };
+}
+
 function allowedPreCheck(approvedQuantity?: number): CanaryPreCheckResult {
   return {
     allowed: true,
@@ -54,7 +70,9 @@ describe("LiveExecutionEngine OrderRouter seam (ADR-0011)", () => {
     const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG);
     expect(engine.hasOrderRouter).toBe(false);
 
-    engine.setOrderRouter({ route: async () => ({ orderId: "x", venue: "bybit" }) });
+    engine.setOrderRouter({
+      route: async (_i, _d) => ({ orderId: "x", venue: "bybit" }),
+    });
     expect(engine.hasOrderRouter).toBe(true);
 
     engine.setOrderRouter(undefined);
@@ -68,25 +86,30 @@ describe("LiveExecutionEngine OrderRouter seam (ADR-0011)", () => {
     const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
     expect(engine.hasOrderRouter).toBe(true);
 
-    const ack = await engine.placeLiveOrder(intent(), allowedPreCheck());
+    const ack = await engine.placeLiveOrder(intent(), allowedPreCheck(), approvedDecision());
     expect(ack.orderId).toBe("ex-1");
   });
 
-  test("routes through the attached router and passes the raw intent", async () => {
-    let routed: OrderIntent | undefined;
+  test("routes through the attached router passing the approved intent and decision", async () => {
+    let routedIntent: OrderIntent | undefined;
+    let routedDecision: RiskDecision | undefined;
     const router: OrderRouter = {
-      route: async (intent) => {
-        routed = intent;
+      route: async (intent, riskDecision) => {
+        routedIntent = intent;
+        routedDecision = riskDecision;
         return { orderId: "ex-2", venue: "bybit", externalRef: undefined };
       },
     };
     const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
 
-    const ack = await engine.placeLiveOrder(intent(), allowedPreCheck(0.005));
+    const decision = approvedDecision();
+    const ack = await engine.placeLiveOrder(intent(), allowedPreCheck(0.005), decision);
     expect(ack.orderId).toBe("ex-2");
     expect(ack.venue).toBe("bybit");
-    expect(routed).toBeDefined();
-    expect(routed!.idempotencyKey).toBe("intent-1");
+    expect(routedIntent).toBeDefined();
+    expect(routedIntent!.idempotencyKey).toBe("intent-1");
+    expect(routedDecision!.decision).toBe("APPROVE");
+    expect(routedDecision!.orderIntentIdempotencyKey).toBe("intent-1");
   });
 
   test("refuses to route when the canary pre-check did not approve", async () => {
@@ -99,15 +122,37 @@ describe("LiveExecutionEngine OrderRouter seam (ADR-0011)", () => {
     };
     const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
 
-    await expect(engine.placeLiveOrder(intent(), blockedPreCheck())).rejects.toThrow(
+    await expect(engine.placeLiveOrder(intent(), blockedPreCheck(), approvedDecision())).rejects.toThrow(
       "canary pre-check failed",
     );
     expect(routed).toBe(false);
   });
 
+  test("refuses to route when the Risk Engine did not approve (fail-closed)", async () => {
+    let routed = false;
+    const router: OrderRouter = {
+      route: async () => {
+        routed = true;
+        return { orderId: "never", venue: "bybit" };
+      },
+    };
+    const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
+
+    const rejected: RiskDecision = {
+      decision: "REJECT",
+      orderIntentIdempotencyKey: "intent-1",
+      evaluatedAtMs: FIXED_TS,
+      reasonCodes: ["MIN_EDGE"],
+    };
+    await expect(
+      engine.placeLiveOrder(intent(), allowedPreCheck(), rejected),
+    ).rejects.toThrow("risk decision REQUIRES APPROVE");
+    expect(routed).toBe(false);
+  });
+
   test("simulates the fill and returns a shape-compatible ack without a router", async () => {
     const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG);
-    const ack = await engine.placeLiveOrder(intent({ venue: "bybit" }), allowedPreCheck());
+    const ack = await engine.placeLiveOrder(intent({ venue: "bybit" }), allowedPreCheck(), approvedDecision());
 
     expect(typeof ack.orderId).toBe("string");
     expect(ack.orderId.length).toBeGreaterThan(0);
@@ -131,7 +176,7 @@ describe("Session OrderRouter delegation (ADR-0011)", () => {
 
     const preCheck = session.preCheckIntent(intent());
     expect(preCheck.allowed).toBe(true);
-    const ack = await session.placeLiveOrder(intent(), preCheck);
+    const ack = await session.placeLiveOrder(intent(), preCheck, approvedDecision());
     expect(ack.orderId).toBe("sess-1");
   });
 
@@ -147,7 +192,7 @@ describe("Session OrderRouter delegation (ADR-0011)", () => {
     session.setOrderRouter(router);
 
     const preCheck = session.preCheckIntent(intent());
-    const ack = await session.placeLiveOrder(intent(), preCheck);
+    const ack = await session.placeLiveOrder(intent(), preCheck, approvedDecision());
     expect(ack.orderId).toBe("ts-1");
   });
 
