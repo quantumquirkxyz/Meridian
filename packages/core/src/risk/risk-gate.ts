@@ -37,6 +37,13 @@ import { SIGNAL_MODES } from "../modes.ts";
  * size, limits, and expiry (RISK.md:45).
  *
  * This engine never calls an LLM. It is purely deterministic (ADR-0003).
+ *
+ * Boundary vs. canary pre-check (ADR-0011): the RiskEngine is the policy
+ * authority — it evaluates the full RISK.md rule set and may REDUCE_SIZE or
+ * emit defensive dicta with reason codes. The canary-session pre-check applies
+ * hard operational canary limits (blocks with a blockReason). Their overlap in
+ * loss/exposure/order-count limits is a deliberate fail-closed double gate with
+ * different thresholds and outcomes, not accidental duplication.
  */
 
 // ── Policy ──────────────────────────────────────────────────────────
@@ -107,7 +114,12 @@ export interface RiskPolicy {
   maxCorrelationConcentration?: number;
 }
 
-/** Default policy — only a few rules enforced at production thresholds. */
+/**
+ * Default policy — every input-driven rule from RISK.md is enforced at
+ * conservative production thresholds (the "full policy" set). Rules whose
+ * threshold is undefined are not enforced; callers can relax or tighten any
+ * threshold by spreading this object and overriding fields.
+ */
 export const DEFAULT_RISK_POLICY: Required<
   Pick<
     RiskPolicy,
@@ -117,6 +129,13 @@ export const DEFAULT_RISK_POLICY: Required<
     | "maxSlippageBps"
     | "maxGasUsd"
     | "maxLatencyMs"
+    | "maxExposurePerTokenUsd"
+    | "maxExposurePerVenueUsd"
+    | "maxExposurePerChainUsd"
+    | "maxOpenOrders"
+    | "minLiquidityDepthUsd"
+    | "maxFundingCostUsd"
+    | "maxCorrelationConcentration"
   >
 > = {
   maxRiskPerTradeUsd: 1_000_000,
@@ -125,6 +144,13 @@ export const DEFAULT_RISK_POLICY: Required<
   maxSlippageBps: 50,
   maxGasUsd: 50,
   maxLatencyMs: 5_000,
+  maxExposurePerTokenUsd: 50_000,
+  maxExposurePerVenueUsd: 100_000,
+  maxExposurePerChainUsd: 200_000,
+  maxOpenOrders: 10,
+  minLiquidityDepthUsd: 10_000,
+  maxFundingCostUsd: 20,
+  maxCorrelationConcentration: 0.8,
 };
 
 // ── Input ───────────────────────────────────────────────────────────
@@ -219,6 +245,15 @@ export interface RiskEvaluation {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+/** Non-empty reason-code tuple required by every non-approve decision. */
+type ReasonCodeTuple = [RiskReasonCode, ...RiskReasonCode[]];
+
+function toReasonTuple(codes: RiskReasonCode[]): ReasonCodeTuple {
+  // Every non-approve rule pushes at least one reason code before returning,
+  // so the tuple-upcast is safe (kept typed; never `as any`).
+  return codes as ReasonCodeTuple;
+}
+
 function evaluationToRiskDecision(
   eval_: RiskEvaluation,
   idempotencyKey: string,
@@ -247,13 +282,13 @@ function evaluationToRiskDecision(
         approvedSize: eval_.approvedSize ?? 0,
         approvedLimits: eval_.approvedLimits ?? limits,
         expiresAtMs: eval_.expiresAtMs ?? evaluatedAtMs + RISK_APPROVAL_TTL_MS,
-        reasonCodes: eval_.reasonCodes as any,
+        reasonCodes: toReasonTuple(eval_.reasonCodes),
       };
     case "REJECT":
       return {
         ...base,
         decision: "REJECT" as const,
-        reasonCodes: eval_.reasonCodes as any,
+        reasonCodes: toReasonTuple(eval_.reasonCodes),
       };
     case "EXIT_ONLY":
     case "CANCEL_ONLY":
@@ -261,14 +296,14 @@ function evaluationToRiskDecision(
     case "HALT_SYSTEM":
       return {
         ...base,
-        decision: eval_.decision as any,
-        reasonCodes: eval_.reasonCodes as any,
+        decision: eval_.decision,
+        reasonCodes: toReasonTuple(eval_.reasonCodes),
       };
     default:
       return {
         ...base,
         decision: "REJECT" as const,
-        reasonCodes: eval_.reasonCodes as any,
+        reasonCodes: toReasonTuple(eval_.reasonCodes),
       };
   }
 }
