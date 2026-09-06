@@ -31,7 +31,7 @@ maxIterations: 6
 # Ship Subissue
 
 Merge one approved repository-local subissue PR, including a corrective subissue PR, mark the subissue as completed, and close out the linked issue when needed.
-Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when deciding what metadata to preserve: linked-issue labels and milestone are the source of truth, and the completion note should not introduce conflicting tracker metadata.
+Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md) when deciding what metadata to preserve: linked-issue labels and milestone are the source of truth, and the completion note should not introduce conflicting tracker metadata.
 
 ## Workflow
 

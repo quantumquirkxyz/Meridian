@@ -33,7 +33,7 @@ maxIterations: 6
 Break a plan, spec, or conversation into a set of **tickets** — tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
 The issue tracker and triage label vocabulary should have been provided to you — run `/setup-quirk-skills` if not.
-The canonical work-item metadata shape is documented in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md); follow it so tickets, labels, milestones, and project fields stay aligned with specs and boards.
+The canonical work-item metadata shape is documented in [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md); follow it so tickets, labels, milestones, and project fields stay aligned with specs and boards.
 
 ## Contract
 
