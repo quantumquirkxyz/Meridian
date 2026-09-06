@@ -1,0 +1,25 @@
+{
+  "id": "release-ops-standard",
+  "title": "Production release with monitoring and rollback",
+  "userRequest": "A project is ready to release and needs rollout, monitoring, and rollback rules.",
+  "expectedRoute": [
+    "release-management",
+    "deployment",
+    "observability",
+    "monitoring-alerting"
+  ],
+  "checks": [
+    {
+      "skill": "release-management",
+      "mustMention": ["release decision record", "required", "approval", "rollback"]
+    },
+    {
+      "skill": "deployment",
+      "mustMention": ["artifact", "rollout", "rollback", "deployment safety gates"]
+    },
+    {
+      "skill": "monitoring-alerting",
+      "mustMention": ["owner", "severity", "runbook", "response ownership"]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "pr-review-fix-loop-standard",
+  "title": "PR review finds Standards and Spec defects",
+  "userRequest": "A GitHub PR has review findings and should be repaired before merge.",
+  "expectedRoute": [
+    "review-pr",
+    "plan-review-fixes",
+    "implement-review-fixes",
+    "review-pr",
+    "ship-subissue"
+  ],
+  "checks": [
+    {
+      "skill": "review-pr",
+      "mustMention": ["Standards", "Spec", "publish findings only"],
+      "expectedSideEffects": ["read-only"]
+    },
+    {
+      "skill": "plan-review-fixes",
+      "mustMention": ["Review Fix Plan", "Severity", "Scope guard", "Status: planned"],
+      "expectedSideEffects": ["write-pr-comment"]
+    },
+    {
+      "skill": "implement-review-fixes",
+      "mustMention": ["Review Fix Implementation", "Scope Notes", "Status: implemented"],
+      "expectedSideEffects": ["write-code", "run-tests"]
+    },
+    {
+      "skill": "ship-subissue",
+      "mustMention": ["review is clean", "review-fix-loop", "Never merge with unresolved review findings"]
+    }
+  ]
+}
