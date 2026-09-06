@@ -227,14 +227,11 @@ export class GeneralAgent {
     const votes: Array<{ signal: GeneralAgentSignal; confidence: number; from: string }> = [];
 
     for (const output of params.structuredOutputs) {
-      const payload = output.payload;
-      const voteSignal = this.readDirection(payload);
-      const voteConfidence = this.readConfidence(payload);
-
-      if (voteSignal !== undefined && voteSignal !== "HOLD") {
+      const vote = this.readDirectionalVote(output.payload);
+      if (vote !== undefined) {
         votes.push({
-          signal: voteSignal,
-          confidence: voteConfidence,
+          signal: vote.signal,
+          confidence: vote.confidence,
           from: output.agentId,
         });
       }
@@ -276,24 +273,36 @@ export class GeneralAgent {
     };
   }
 
-  /** Read a directional signal from a sub-agent payload (BUY/SELL/HOLD). */
-  private readDirection(payload: Record<string, unknown>): GeneralAgentSignal | undefined {
-    for (const key of ["signal", "recommendation", "action"]) {
+  /**
+   * Read a strictly-typed directional vote (BUY/SELL + confidence) from a
+   * sub-agent payload. Returns undefined when the payload carries no
+   * directional signal. Payloads stay `Record<string, unknown>` (schema
+   * forward-compat); the optional keys are narrowed to a typed vote here so
+   * the aggregation never touches raw strings.
+   */
+  private readDirectionalVote(
+    payload: Record<string, unknown>,
+  ): { signal: "BUY" | "SELL"; confidence: number } | undefined {
+    let signal: "BUY" | "SELL" | undefined;
+    for (const key of ["signal", "recommendation", "action"] as const) {
       const value = payload[key];
-      if (value === "BUY" || value === "SELL" || value === "HOLD") {
-        return value;
+      if (value === "BUY") {
+        signal = "BUY";
+        break;
+      }
+      if (value === "SELL") {
+        signal = "SELL";
+        break;
       }
     }
-    return undefined;
-  }
+    if (signal === undefined) return undefined;
 
-  /** Read a numeric confidence from a sub-agent payload (0..1). */
-  private readConfidence(payload: Record<string, unknown>): number {
     const raw = payload["confidence"];
-    const numeric = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
-    if (Number.isFinite(numeric)) {
-      return Math.min(1, Math.max(0, numeric));
-    }
-    return 0.5;
+    const numeric =
+      typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    const confidence = Number.isFinite(numeric)
+      ? Math.min(1, Math.max(0, numeric))
+      : 0.5;
+    return { signal, confidence };
   }
 }
