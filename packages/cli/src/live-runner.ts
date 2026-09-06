@@ -34,11 +34,14 @@ import type {
   CanaryControlCommand,
   MarketDataSnapshot,
   OrderIntent,
+  OrderRouteAck,
   OrderUpdate,
   RiskDecision,
   SystemMode,
   AgentInput,
   AgentOutput,
+  TradingScope,
+  GeneralAgentRecommendation,
 } from "@agenttrading/contracts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import {
@@ -52,7 +55,7 @@ import {
   RiskEngine,
   DEFAULT_RISK_POLICY,
 } from "@agenttrading/core";
-import type { TradeRecord, MarketState } from "@agenttrading/core";
+import type { TradeRecord, MarketState, CanaryPreCheckResult } from "@agenttrading/core";
 import {
   BybitRESTClient,
   BybitWebSocketClient,
@@ -71,11 +74,15 @@ import {
   AuditConsultativeAdapter,
   MemoryConsultativeAdapter,
   PolicyConsultativeAdapter,
+  ScopeObserverAdapter,
+  GeneralAgent,
+  deployPerScopeGeneralAgents,
 } from "@agenttrading/agents";
 import { VercelAISDKAdapter } from "@agenttrading/agents/runtimes/vercel";
 import { createOpenRouterGenerateFn } from "@agenttrading/agents/runtimes/openrouter";
 import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
+import { BybitDexOrderRouter } from "./order-router.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -205,6 +212,7 @@ export class LiveRunner {
     llmBaseUrl?: string;
     llmModel?: string;
     wsClient?: BybitWSClientLike;
+    pancakeSwapPools?: readonly PancakeSwapPoolSpec[];
   };
   private readonly nowMs: () => number;
 
@@ -222,6 +230,10 @@ export class LiveRunner {
   private readonly binanceClient?: BinanceRESTClient;
   private readonly pancakeswapMarketData?: PancakeSwapMarketDataConnector;
   private readonly dexExecutor?: DEXExecutor;
+  private readonly orderRouter: BybitDexOrderRouter;
+
+  // Per-scope cognitive layer (ADR-0013)
+  private scopeDeployments: Array<{ scope: TradingScope; agent: GeneralAgent }> = [];
 
   // State
   private running = false;
@@ -252,6 +264,10 @@ export class LiveRunner {
   // Agent observation layer
   private lastAgentObservation: AgentOutput | undefined;
   private agentObservationCount = 0;
+
+  // Per-scope general agent recommendations (ADR-0013) — scopeId → latest
+  private lastScopeRecommendations: Map<string, GeneralAgentRecommendation> = new Map();
+  private scopeRecommendationCount = 0;
   private auditAdapter?: AuditConsultativeAdapter;
   private memoryAdapter?: MemoryConsultativeAdapter;
   private policyAdapter?: PolicyConsultativeAdapter;
@@ -294,6 +310,7 @@ export class LiveRunner {
       llmBaseUrl: config.llmBaseUrl,
       llmModel: config.llmModel,
       wsClient: config.wsClient,
+      pancakeSwapPools: config.pancakeSwapPools,
     };
 
     // AC8: Validate API keys
@@ -380,6 +397,15 @@ export class LiveRunner {
         routerAddress: config.pancakeSwapRouterAddress,
       });
     }
+
+    // ADR-0011: the engine is the single order-sending seam. The router
+    // attached here routes every submitted intent to its venue connector.
+    this.orderRouter = new BybitDexOrderRouter({
+      restClient: this.restClient,
+      dexExecutor: this.dexExecutor,
+      orderCategory: this.config.orderCategory,
+    });
+    this.session.setOrderRouter(this.orderRouter);
 
     // Wire WS events (AC1, AC2)
     const wsEvents: BybitWSClientEvents = {
@@ -506,7 +532,7 @@ export class LiveRunner {
     this.connectInfra();
 
     // Wire consultative agent for market observations
-    this.wireConsultativeAgent();
+    this.deployPerScopeAgents();
 
     // AC2: Connect to Bybit public WS
     console.log(`[live] Connecting to Bybit public WebSocket...`);
@@ -654,18 +680,20 @@ export class LiveRunner {
     console.log("[live] Session ended. Goodbye.");
   }
 
-  // ── Consultative Agent ─────────────────────────────────────────────
+  // ── Per-Scope Cognitive Layer (ADR-0013) ──────────────────────────
 
   /**
-   * Wire consultative agents from the agent catalog. Uses deterministic
-   * behavioral adapters (no LLM) for audit, memory, and policy observations.
+   * Deploy one general agent per trading scope, each backed by the same
+   * consultative catalog. Deterministic behavioral adapters (no LLM) cover
+   * audit, memory, and policy observations; the scope observer covers the
+   * analytical/deliberative agents when no LLM key is configured.
+   *
    * CONTEXT.md §8: "AI Agents do not replace deterministic trading logic;
    * they add a cognitive layer for reasoning, classification, interpretation."
-   *
    * The agents only observe — they never execute or approve risk (ADR-0003).
    */
-  private wireConsultativeAgent(): void {
-    // Build agent config map from catalog
+  private deployPerScopeAgents(): void {
+    // Build agent config map from the catalog
     const agentConfigs = new Map(
       CONSULTATIVE_AGENT_CATALOG.map((def) => [def.id, def.config]),
     );
@@ -674,44 +702,11 @@ export class LiveRunner {
     this.auditAdapter = new AuditConsultativeAdapter(agentConfigs);
     this.memoryAdapter = new MemoryConsultativeAdapter(agentConfigs);
     this.policyAdapter = new PolicyConsultativeAdapter(agentConfigs);
+    const observerAdapter = new ScopeObserverAdapter(agentConfigs);
 
-    // Wire the primary market observer adapter into the session
-    const adapter = {
-      run: (input: AgentInput): AgentOutput => {
-        this.agentObservationCount++;
-        const spreadBps = this.market.bid > 0 && this.market.ask > 0
-          ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
-          : 0;
-        const dataFreshnessMs = this.nowMs() - (this.marketDataSnapshots.values().next().value?.timestampMs ?? this.nowMs());
-
-        const observation: AgentOutput = {
-          kind: "structured",
-          agentId: "market-observer",
-          payload: {
-            regime: this.lastRegime ?? "unknown",
-            marketMid: this.market.mid,
-            spreadBps,
-            dataFreshnessMs,
-            availableCapitalUsd: this.availableCapitalUsd,
-            committedCapitalUsd: this.committedCapitalUsd,
-            openOrders: this.pendingOrders.size,
-            opportunitiesDetected: this.opportunitiesDetected,
-            opportunitiesRejectedByRisk: this.opportunitiesRejectedByRisk,
-            // Agent catalog metadata
-            catalogSize: CONSULTATIVE_AGENT_CATALOG.length,
-            activeAdapters: ["audit", "memory", "policy"],
-          },
-          schemaName: "market-observation",
-          timestampMs: this.nowMs(),
-        };
-        this.lastAgentObservation = observation;
-        return observation;
-      },
-    };
-
-    this.session.wireAgentAdapter(adapter);
-
-    // Wire LLM adapter when API key is available (real agent reasoning).
+    // Wire LLM adapter when API key is available (real agent reasoning for
+    // analytical/deliberative agents only; ADR-0013 keeps control agents on
+    // their deterministic behavioral adapters).
     if (this.config.llmApiKey) {
       const openrouter = createOpenAI({
         apiKey: this.config.llmApiKey,
@@ -734,13 +729,165 @@ export class LiveRunner {
       });
     }
 
-    this.auditLogger.record("AGENT_WIRED", {
-      agentId: "market-observer",
-      role: "consultative",
-      catalogAgents: CONSULTATIVE_AGENT_CATALOG.length,
+    // Per-scope deployment: one general agent per (venue, pair) / pool.
+    const scopes = this.buildTradingScopes();
+    this.scopeDeployments = deployPerScopeGeneralAgents({
+      scopes,
+      configs: agentConfigs,
+      subAgentIds: [...CONSULTATIVE_AGENT_CATALOG.map((def) => def.id)],
+      buildAdapter: (agentId, config) => {
+        switch (agentId) {
+          case "agent-memory":
+            return this.memoryAdapter!;
+          case "agent-audit":
+            return this.auditAdapter!;
+          case "agent-policy":
+            return this.policyAdapter!;
+          default:
+            return this.llmAdapter ?? observerAdapter;
+        }
+      },
+      now: this.nowMs,
+    });
+
+    // Keep a synchronous market observer wired into the session so the
+    // engine's runCycle observes aggregated state each cycle.
+    const adapter = {
+      run: (input: AgentInput): AgentOutput => {
+        this.agentObservationCount++;
+        const spreadBps = this.market.bid > 0 && this.market.ask > 0
+          ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000
+          : 0;
+        const dataFreshnessMs = this.nowMs() - (this.marketDataSnapshots.values().next().value?.timestampMs ?? this.nowMs());
+
+        const scopedReadout = [...this.lastScopeRecommendations.values()].map(
+          (rec) => ({
+            scopeId: rec.scopeId,
+            signal: rec.signal,
+            confidence: rec.confidence,
+          }),
+        );
+
+        const observation: AgentOutput = {
+          kind: "structured",
+          agentId: "market-observer",
+          payload: {
+            regime: this.lastRegime ?? "unknown",
+            marketMid: this.market.mid,
+            spreadBps,
+            dataFreshnessMs,
+            availableCapitalUsd: this.availableCapitalUsd,
+            committedCapitalUsd: this.committedCapitalUsd,
+            openOrders: this.pendingOrders.size,
+            opportunitiesDetected: this.opportunitiesDetected,
+            opportunitiesRejectedByRisk: this.opportunitiesRejectedByRisk,
+            // Per-scope cognitive layer readout (ADR-0013)
+            scopeDeployments: this.scopeDeployments.length,
+            scopeRecommendations: scopedReadout,
+          },
+          schemaName: "market-observation",
+          timestampMs: this.nowMs(),
+        };
+        this.lastAgentObservation = observation;
+        return observation;
+      },
+    };
+
+    this.session.wireAgentAdapter(adapter);
+
+    this.auditLogger.record("SCOPE_AGENTS_DEPLOYED", {
+      scopes: this.scopeDeployments.map((d) => d.scope),
+      generalAgents: this.scopeDeployments.map((d) => d.agent.agentId),
+      subAgentIds: this.scopeDeployments[0]?.agent.subAgentIds.length ?? 0,
       behavioralAdapters: ["audit", "memory", "policy"],
       llmEnabled: !!this.config.llmApiKey,
     });
+  }
+
+  /**
+   * Derive the trading scopes this runner owns from its configuration.
+   * - Bybit order-book scopes: one per configured symbol.
+   * - PancakeSwap pool scopes: one per configured pool.
+   */
+  private buildTradingScopes(): TradingScope[] {
+    const scopes: TradingScope[] = [];
+
+    for (const symbol of this.config.symbols) {
+      const pair =
+        symbol.length > 4 && (symbol.endsWith("USDT") || symbol.endsWith("USDC"))
+          ? `${symbol.slice(0, -4)}/${symbol.slice(-4)}`
+          : symbol;
+      scopes.push({ kind: "CEX", venue: "bybit", pair });
+    }
+
+    for (const pool of this.config.pancakeSwapPools ?? []) {
+      scopes.push({
+        kind: "DEX",
+        venue: "pancakeswap-v4",
+        pool: pool.poolAddress,
+        pair: `${pool.token0Symbol}/${pool.token1Symbol}`,
+        chain: "bsc",
+      });
+    }
+
+    return scopes;
+  }
+
+  /**
+   * Run one cognitive cycle for every deployed general agent (ADR-0013).
+   * Each general agent consults its scoped sub-agents and emits a
+   * department recommendation that is audited and surfaced to the session's
+   * market observer on the next cycle.
+   */
+  private async runScopeAgents(): Promise<void> {
+    if (this.scopeDeployments.length === 0) return;
+
+    const regime = this.lastRegime ?? "unknown";
+
+    for (const { scope, agent } of this.scopeDeployments) {
+      const result = await agent.runCycle({
+        regime,
+        market: this.scopeMarketState(scope),
+      });
+      this.lastScopeRecommendations.set(result.recommendation.scopeId, result.recommendation);
+      this.scopeRecommendationCount++;
+      this.auditLogger.record("SCOPE_RECOMMENDATION", {
+        cycleCount: this.cycleCount,
+        scopeId: result.recommendation.scopeId,
+        agentId: agent.agentId,
+        signal: result.recommendation.signal,
+        confidence: result.recommendation.confidence,
+        invokedSubAgents: result.invokedSubAgents.length,
+      });
+    }
+  }
+
+  /** Resolve the current market state for a trading scope. */
+  private scopeMarketState(scope: TradingScope): {
+    bid: number;
+    ask: number;
+    mid: number;
+    liquidityUsd: number;
+  } {
+    if (scope.kind === "CEX") {
+      const symbol = scope.pair.replace("/", "");
+      const snapshot = this.marketDataSnapshots.get(`${scope.venue}:${symbol}`);
+      if (
+        snapshot &&
+        typeof snapshot.bid === "number" &&
+        typeof snapshot.ask === "number" &&
+        snapshot.bid > 0 &&
+        snapshot.ask > 0
+      ) {
+        return {
+          bid: snapshot.bid,
+          ask: snapshot.ask,
+          mid: snapshot.mid ?? (snapshot.bid + snapshot.ask) / 2,
+          liquidityUsd: snapshot.depth,
+        };
+      }
+    }
+    return { ...this.market };
   }
 
   private validateConfig(): void {
@@ -1220,6 +1367,10 @@ export class LiveRunner {
     // Derive regime input
     const regimeInput = this.deriveRegimeInput();
 
+    // ADR-0013: run the per-scope cognitive layer before opportunity
+    // detection so the general agents consult fresh scoped market state.
+    await this.runScopeAgents();
+
     // REAL OPPORTUNITY DETECTION via OpportunityDetector
     const opportunities = this.opportunityDetector.detectOpportunities();
     this.opportunitiesDetected += opportunities.length;
@@ -1431,102 +1582,40 @@ export class LiveRunner {
       venue: intent.venue,
     });
 
-    // Route by venue: PancakeSwap (DEX) vs Bybit (CEX)
-    if (intent.venue === "pancakeswap-v4") {
-      await this.placeDexOrder(intent, notionalUsd);
-    } else {
-      await this.placeBybitOrder(intent, notionalUsd);
-    }
-  }
-
-  /** Execute an on-chain swap on PancakeSwap for a DEX-routed intent. */
-  private async placeDexOrder(
-    intent: OrderIntent,
-    notionalUsd: number,
-  ): Promise<void> {
-    if (!this.dexExecutor) {
-      this.auditLogger.record("ORDER_FAILED", {
+    // ADR-0011: the engine is the single order-sending seam. Run the canary
+    // pre-check, then hand the intent to the engine which routes it through
+    // the attached OrderRouter (CEX → Bybit REST, DEX → PancakeSwap swap).
+    const preCheck = this.session.preCheckIntent(intent);
+    if (!preCheck.allowed) {
+      this.auditLogger.record("ORDER_BLOCKED", {
         orderId: intent.idempotencyKey,
-        error: "PancakeSwap execution not configured (no private key)",
+        blockReason: preCheck.blockReason,
+        reason: preCheck.reason,
       });
+      this.ordersBlocked++;
+      console.warn(`[live] Order blocked by canary pre-check: ${preCheck.reason}`);
       return;
     }
 
     try {
-      // Token amounts are derived from the intent quantity in the base asset;
-      // this example routes through a quoted path (pool is reverse of intent).
-      // Amount in wei: assume the quote asset has 18 decimals.
-      const amountIn = BigInt(Math.trunc(notionalUsd * 1e18));
-      const gasInfo = await this.dexExecutor.getGasInfo();
-      const amountOutMin = amountIn / BigInt(100); // 1% minimum slippage floor
-      const path: readonly `0x${string}`[] = [
-        intent.symbol.toLowerCase() as `0x${string}`,
-        intent.quoteCurrency.toLowerCase() as `0x${string}`,
-      ];
-
-      const result = await this.dexExecutor.executeSwap({
-        path,
-        amountIn,
-        amountOutMin,
-        to: this.dexExecutor.account,
-        deadlineMs: intent.expiresAtMs,
-      });
-
-      this.committedCapitalUsd += notionalUsd;
-      this.pendingOrders.set(result.txHash, intent);
-
-      this.auditLogger.record("ORDER_ACCEPTED", {
-        orderId: result.txHash,
-        clientOrderId: intent.idempotencyKey,
-        symbol: intent.symbol,
-        side: intent.side,
-        venue: intent.venue,
-      });
-
-      console.log(
-        `[live] PancakeSwap swap submitted (${intent.symbol} ${intent.side}) tx: ${result.txHash}`,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.auditLogger.record("ORDER_FAILED", {
-        orderId: intent.idempotencyKey,
-        error: msg,
-      });
-      console.error(`[live] PancakeSwap order failed: ${msg}`);
-    }
-  }
-
-  /** Place a limit order on Bybit for a CEX-routed (default) intent. */
-  private async placeBybitOrder(
-    intent: OrderIntent,
-    notionalUsd: number,
-  ): Promise<void> {
-    try {
-      const result = await this.restClient.placeOrder({
-        category: this.config.orderCategory,
-        symbol: intent.symbol,
-        side: intent.side === "BUY" ? "Buy" : "Sell",
-        orderType: "Limit",
-        qty: String(intent.quantity),
-        price: String(intent.price),
-        orderLinkId: intent.idempotencyKey,
-      });
+      const ack = await this.session.placeLiveOrder(intent, preCheck);
 
       // Track the pending order (AC6: wait for WS fill confirmation)
-      this.pendingOrders.set(result.orderId, intent);
+      this.pendingOrders.set(ack.orderId, intent);
 
       // Commit capital
       this.committedCapitalUsd += notionalUsd;
 
       this.auditLogger.record("ORDER_ACCEPTED", {
-        orderId: result.orderId,
+        orderId: ack.orderId,
         clientOrderId: intent.idempotencyKey,
         symbol: intent.symbol,
         side: intent.side,
+        venue: ack.venue,
       });
 
       console.log(
-        `[live] Order accepted: ${intent.symbol} ${intent.side} ${intent.quantity} @ $${intent.price} (exchange id: ${result.orderId})`,
+        `[live] Order accepted via ${ack.venue}: ${intent.symbol} ${intent.side} ${intent.quantity} @ $${intent.price} (id: ${ack.orderId})`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
