@@ -1,33 +1,33 @@
 # Operating Flow: Demo -> Live
 
 This repo advances by eliminated operational risk, not by feature count. The
-trading flow is a two-phase gate: demo validation first, live capital last.
+trading flow is a two-mode gate: demo validation first, live capital last.
 
 ## First Principles
 
 Trading infrastructure behaves like a controlled system with coupled feedback
 loops. A profitable signal is only useful if the system can observe state,
 decide under constraints, execute deterministically, reconcile external state,
-and audit the result. Each phase removes a different class of uncertainty:
+and audit the result. Each mode removes a different class of uncertainty:
 
 1. `demo` removes exchange-integration risk against Bybit Demo Trading.
 2. `live` controls capital risk with canary limits and explicit approval.
 
-The phases must not be collapsed. Demo exchange behavior does not prove safe
+The modes must not be collapsed. Demo exchange behavior does not prove safe
 live-capital operation.
 
-## Phase Contract
+## Mode Contract
 
-| Phase | Purpose | Credentials | Execution Surface | Exit Gate |
+| Mode | Purpose | Credentials | Execution Surface | Exit Gate |
 |---|---|---|---|---|
 | `demo` | Validate Bybit REST/WebSocket integration with virtual assets. | Bybit Demo Trading keys only. | Demo REST endpoint, demo private WebSocket, normal public market stream, and virtual balances. | Order lifecycle, private stream confirmation, reconciliation, limits, and audit pass under realistic exchange behavior. |
 | `live` | Run bounded capital canary after demo evidence exists. | Real Bybit keys with withdrawals disabled. | Live Bybit endpoints with real balances. | Explicit human approval, canary config, kill switch, audit, and rollback path. |
 
 ## Invariants
 
-- No AI agent executes, approves risk, signs transactions, moves funds, or modifies risk limits.
+- No AI agent executes, approves risk, signs transactions, moves funds, or modifies risk limits. This applies to general agents (one per trading scope: venue×pool×pair on DEX, venue×pair on CEX) and their sub-agents alike; both remain consultative and observation-only.
 - No OrderIntent exists without deterministic Risk Engine approval.
-- No phase may skip reconciliation or audit.
+- No mode may skip reconciliation or audit.
 - `demo` must not use live credentials or the live runner.
 - `live` must not start without explicit approval, real credentials, disabled withdrawals, canary limits, and a rollback path.
 - Any unresolved data, risk, execution, reconciliation, or audit failure reduces permissions and fails closed.
@@ -50,7 +50,7 @@ Source: https://bybit-exchange.github.io/docs/v5/demo
 
 ## Tracker Hygiene
 
-Do not create implementation issues until the phase contract is stable and each
+Do not create implementation issues until the mode contract is stable and each
 ticket is independently buildable. When tickets are created, keep them as tracer
 bullets tied to this contract: one observable behavior, one owner, one
 validation command, and one clear rollback.
