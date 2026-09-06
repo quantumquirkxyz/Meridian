@@ -147,11 +147,20 @@ export class LiveExecutionEngine {
     return this.orderRouter !== undefined;
   }
 
-  /**
-   * Pre-check: evaluates an OrderIntent against all canary limits
-   * before submission. This is the gate that prevents limit violations
-   * and orphan orders.
-   */
+/**
+ * Pre-check: evaluates an OrderIntent against all canary limits
+ * before submission. This is the gate that prevents limit violations
+ * and orphan orders.
+ *
+ * Boundary vs. the RiskEngine (ADR-0011): both gates are deliberate and
+ * layered — the RiskEngine is the policy authority (produces a typed
+ * RiskDecision, may REDUCE_SIZE, carries reason codes) while this canary
+ * pre-check enforces hard operational canary limits (blacks with a
+ * blockReason). The intentional overlap in loss/exposure/order-count
+ * limits is the fail-closed double gate, not duplicated logic to merge:
+ * the two authorities have different thresholds, sources (policy vs
+ * canary config) and outcomes (reduce vs block).
+ */
   preCheck(
     intent: OrderIntent,
     state: CanaryExecutionState,
@@ -342,16 +351,20 @@ export class LiveExecutionEngine {
   /**
    * Place a real order through the OrderRouter (ADR-0011).
    *
-   * The engine stays the single order-sending seam: canary pre-check is
-   * enforced here, then routing delegates to the attached OrderRouter.
-   * When no router is attached (harness/tests) the order falls back to
-   * the simulated engine so the seam remains exercised everywhere.
+   * The engine stays the single order-sending seam: the canary pre-check is
+   * enforced here, and the Risk Engine's APPROVE decision is required before
+   * any order is sent (ADR-0003, CONTEXT.md — fail closed, never open).
+   * Routing then delegates to the attached OrderRouter. When no router is
+   * attached (harness/tests) the order falls back to the simulated engine so
+   * the seam remains exercised everywhere.
    *
-   * Only callable if `preCheck` returned `allowed: true`.
+   * Only callable if `preCheck` returned `allowed: true` and `riskDecision`
+   * is an APPROVE from the Risk Engine.
    */
   async placeLiveOrder(
     intent: OrderIntent,
     preCheck: CanaryPreCheckResult,
+    riskDecision: RiskDecision,
   ): Promise<OrderRouteAck> {
     if (!preCheck.allowed) {
       throw new Error(
@@ -359,8 +372,15 @@ export class LiveExecutionEngine {
       );
     }
 
+    // Fail closed: never send an order the Risk Engine did not approve (ADR-0003).
+    if (riskDecision.decision !== "APPROVE") {
+      throw new Error(
+        `risk decision REQUIRES APPROVE, got ${riskDecision.decision} for intent ${intent.idempotencyKey}`,
+      );
+    }
+
     if (this.orderRouter) {
-      return this.orderRouter.route(intent);
+      return this.orderRouter.route(intent, riskDecision);
     }
 
     // No router attached (harness path): simulate the fill through the
@@ -369,14 +389,7 @@ export class LiveExecutionEngine {
     const execution = this.submit(
       {
         intent,
-        riskDecision: {
-          decision: "APPROVE",
-          orderIntentIdempotencyKey: intent.idempotencyKey,
-          approvedSize: preCheck.approvedQuantity ?? intent.quantity,
-          approvedLimits: intent.limits,
-          expiresAtMs: intent.expiresAtMs,
-          evaluatedAtMs: intent.createdAtMs,
-        } as RiskDecision,
+        riskDecision,
         market: {
           bid: intent.price * 0.999,
           ask: intent.price * 1.001,
