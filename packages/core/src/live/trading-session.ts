@@ -46,6 +46,8 @@ import type {
   LearningRecommendation,
   MarketGraphSnapshot,
   OrderIntent,
+  OrderRouteAck,
+  OrderRouter,
   PromotionRecord,
   RegimeClassification,
   RegimePolicy,
@@ -59,6 +61,7 @@ import { type RegimeClassifierInput } from "./regime-classifier.ts";
 import { RegimeClassifier } from "./regime-classifier.ts";
 import { RegimePolicyEngine } from "./regime-policy-engine.ts";
 import { CanarySession } from "./canary-session.ts";
+import { type CanaryPreCheckResult } from "./live-execution-engine.ts";
 import { LearningEngine } from "./learning-engine.ts";
 import { RouteEngine } from "./route-engine.ts";
 import { AuditReconstructor } from "./audit-reconstructor.ts";
@@ -244,6 +247,29 @@ export class TradingSession {
   /** Process a control command (delegates to CanarySession). */
   control(command: CanaryControlCommand) {
     return this.canarySession.control(command);
+  }
+
+  /** Late-wire an OrderRouter (ADR-0011) into the canary execution engine. */
+  setOrderRouter(orderRouter?: OrderRouter): void {
+    this.canarySession.setOrderRouter(orderRouter);
+  }
+
+  /** Whether a live OrderRouter is attached (ADR-0011 seam active). */
+  get hasOrderRouter(): boolean {
+    return this.canarySession.hasOrderRouter;
+  }
+
+  /** Canary pre-check for an intent (delegates to CanarySession). */
+  preCheckIntent(intent: OrderIntent): CanaryPreCheckResult {
+    return this.canarySession.preCheckIntent(intent);
+  }
+
+  /** Place a live order through the engine OrderRouter (ADR-0011). */
+  placeLiveOrder(
+    intent: OrderIntent,
+    preCheck: CanaryPreCheckResult,
+  ): Promise<OrderRouteAck> {
+    return this.canarySession.placeLiveOrder(intent, preCheck);
   }
 
   // AgentAdapter interface contract (isolated from LLM framework).
