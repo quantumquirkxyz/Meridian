@@ -11,10 +11,10 @@ import {
   isTradeReport,
   isTimelineEvent,
 } from "@agenttrading/contracts";
-import { AuditReconstructor } from "../src/gamma/audit-reconstructor.ts";
-import { ReportGenerator } from "../src/gamma/report-generator.ts";
-import { AuditExporter } from "../src/gamma/audit-exporter.ts";
-import { CanarySession } from "../src/gamma/canary-session.ts";
+import { AuditReconstructor } from "../src/live/audit-reconstructor.ts";
+import { ReportGenerator } from "../src/live/report-generator.ts";
+import { AuditExporter } from "../src/live/audit-exporter.ts";
+import { CanarySession } from "../src/live/canary-session.ts";
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ function makeEntry(
 ): TradeJournalEntry {
   return {
     tradeId: "trade-1",
-    strategyId: "alpha",
+    strategyId: "strategy-a",
     regime: "trend",
     venue: "bybit",
     symbol: "BTC",
@@ -579,25 +579,25 @@ describe("ReportGenerator", () => {
 
   test("builds strategy breakdown", () => {
     const entries = [
-      makeEntry({ strategyId: "alpha", netPnlUsd: 10 }),
+      makeEntry({ strategyId: "strategy-a", netPnlUsd: 10 }),
       makeEntry({
         tradeId: "t2",
-        strategyId: "beta",
+        strategyId: "strategy-b",
         netPnlUsd: -5,
         outcome: "LOSS",
       }),
-      makeEntry({ strategyId: "alpha", netPnlUsd: 5 }),
+      makeEntry({ strategyId: "strategy-a", netPnlUsd: 5 }),
     ];
 
     const generator = new ReportGenerator(entries, new Map(), () => FIXED_TS);
     const report = generator.generateDailyReport(FIXED_TS);
 
-    expect(report.strategyBreakdown["alpha"].tradeCount).toBe(2);
-    expect(report.strategyBreakdown["alpha"].netPnlUsd).toBe(15);
-    expect(report.strategyBreakdown["alpha"].winRate).toBe(1.0);
+    expect(report.strategyBreakdown["strategy-a"].tradeCount).toBe(2);
+    expect(report.strategyBreakdown["strategy-a"].netPnlUsd).toBe(15);
+    expect(report.strategyBreakdown["strategy-a"].winRate).toBe(1.0);
 
-    expect(report.strategyBreakdown["beta"].tradeCount).toBe(1);
-    expect(report.strategyBreakdown["beta"].netPnlUsd).toBe(-5);
+    expect(report.strategyBreakdown["strategy-b"].tradeCount).toBe(1);
+    expect(report.strategyBreakdown["strategy-b"].netPnlUsd).toBe(-5);
   });
 
   test("builds venue breakdown", () => {
@@ -629,7 +629,7 @@ describe("ReportGenerator", () => {
     reconstructions.set("t1", {
       reconstructionId: "recon-1",
       tradeId: "t1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "BTC",
@@ -692,7 +692,7 @@ describe("AuditExporter", () => {
     return {
       reconstructionId: "recon-1",
       tradeId: "trade-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "BTC",
@@ -798,7 +798,7 @@ describe("AuditExporter", () => {
 
     expect(csv).toContain("reconstructionId");
     expect(csv).toContain("trade-1");
-    expect(csv).toContain("alpha");
+    expect(csv).toContain("strategy-a");
   });
 
   test("CSV escapes values with commas", () => {
@@ -847,7 +847,7 @@ describe("AuditExporter", () => {
 
     expect(txt).toContain("TRADE RECONSTRUCTION REPORT");
     expect(txt).toContain("trade-1");
-    expect(txt).toContain("alpha");
+    expect(txt).toContain("strategy-a");
     expect(txt).toContain("TIMELINE");
     expect(txt).toContain("opportunity_detected");
     expect(txt).toContain("risk_decision");
@@ -1134,7 +1134,7 @@ describe("Audit reconstruction contracts", () => {
     const recon: TradeReconstruction = {
       reconstructionId: "recon-1",
       tradeId: "trade-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "BTC",

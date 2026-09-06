@@ -5,19 +5,19 @@ import {
   type CanaryConfig,
   type OrderIntent,
 } from "@agenttrading/contracts";
-import { type RegimeClassifierInput } from "../src/gamma/regime-classifier.ts";
-import { RegimeClassifier } from "../src/gamma/regime-classifier.ts";
-import { RegimePolicyEngine } from "../src/gamma/regime-policy-engine.ts";
-import { CanarySession } from "../src/gamma/canary-session.ts";
-import { LearningEngine } from "../src/gamma/learning-engine.ts";
-import { AuditReconstructor } from "../src/gamma/audit-reconstructor.ts";
-import { ReportGenerator } from "../src/gamma/report-generator.ts";
-import { AuditExporter } from "../src/gamma/audit-exporter.ts";
+import { type RegimeClassifierInput } from "../src/live/regime-classifier.ts";
+import { RegimeClassifier } from "../src/live/regime-classifier.ts";
+import { RegimePolicyEngine } from "../src/live/regime-policy-engine.ts";
+import { CanarySession } from "../src/live/canary-session.ts";
+import { LearningEngine } from "../src/live/learning-engine.ts";
+import { AuditReconstructor } from "../src/live/audit-reconstructor.ts";
+import { ReportGenerator } from "../src/live/report-generator.ts";
+import { AuditExporter } from "../src/live/audit-exporter.ts";
 import {
   TradingSession,
   type TradingCycleInput,
   type TradingSessionSummary,
-} from "../src/gamma/gamma-session.ts";
+} from "../src/live/trading-session.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -790,7 +790,7 @@ describe("Audit pipeline integration", () => {
 
     reconstructor.addTradeEntry({
       tradeId: "trade-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "BTC",
@@ -819,7 +819,7 @@ describe("Audit pipeline integration", () => {
     const entries = [
       {
         tradeId: "t1",
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -852,7 +852,7 @@ describe("Audit pipeline integration", () => {
     const entries = [
       {
         tradeId: "t1",
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",

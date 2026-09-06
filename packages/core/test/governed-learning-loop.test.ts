@@ -7,10 +7,10 @@ import {
   nextStage,
   stageIndex,
 } from "@agenttrading/contracts";
-import { TradeJournal } from "../src/gamma/trade-journal.ts";
-import { EdgeDecayDetector } from "../src/gamma/edge-decay-detector.ts";
-import { PromotionPipeline } from "../src/gamma/promotion-pipeline.ts";
-import { LearningEngine } from "../src/gamma/learning-engine.ts";
+import { TradeJournal } from "../src/live/trade-journal.ts";
+import { EdgeDecayDetector } from "../src/live/edge-decay-detector.ts";
+import { PromotionPipeline } from "../src/live/promotion-pipeline.ts";
+import { LearningEngine } from "../src/live/learning-engine.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -21,7 +21,7 @@ function makeEntry(
 ): TradeJournalEntry {
   return {
     tradeId: "trade-1",
-    strategyId: "alpha",
+    strategyId: "strategy-a",
     regime: "trend",
     venue: "bybit",
     symbol: "BTC",
@@ -125,7 +125,7 @@ describe("TradeJournal", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const entry = journal.recordFill({
       tradeId: "fill-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "BTC",
@@ -148,7 +148,7 @@ describe("TradeJournal", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const entry = journal.recordFill({
       tradeId: "fill-sell-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "ETH",
@@ -170,7 +170,7 @@ describe("TradeJournal", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const entry = journal.recordFill({
       tradeId: "loss-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "range",
       venue: "bybit",
       symbol: "BTC",
@@ -192,7 +192,7 @@ describe("TradeJournal", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const entry = journal.recordFill({
       tradeId: "be-1",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       regime: "trend",
       venue: "bybit",
       symbol: "BTC",
@@ -211,16 +211,16 @@ describe("TradeJournal", () => {
 
   test("filters entries by strategy, regime, venue", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
-    journal.record(makeEntry({ strategyId: "alpha", regime: "trend", venue: "bybit" }));
-    journal.record(makeEntry({ strategyId: "beta", regime: "trend", venue: "bybit" }));
-    journal.record(makeEntry({ strategyId: "alpha", regime: "range", venue: "bybit" }));
-    journal.record(makeEntry({ strategyId: "alpha", regime: "trend", venue: "binance" }));
+    journal.record(makeEntry({ strategyId: "strategy-a", regime: "trend", venue: "bybit" }));
+    journal.record(makeEntry({ strategyId: "strategy-b", regime: "trend", venue: "bybit" }));
+    journal.record(makeEntry({ strategyId: "strategy-a", regime: "range", venue: "bybit" }));
+    journal.record(makeEntry({ strategyId: "strategy-a", regime: "trend", venue: "binance" }));
 
-    expect(journal.getEntries({ strategyId: "alpha" }).length).toBe(3);
+    expect(journal.getEntries({ strategyId: "strategy-a" }).length).toBe(3);
     expect(journal.getEntries({ regime: "range" }).length).toBe(1);
     expect(journal.getEntries({ venue: "binance" }).length).toBe(1);
     expect(
-      journal.getEntries({ strategyId: "alpha", regime: "trend" }).length,
+      journal.getEntries({ strategyId: "strategy-a", regime: "trend" }).length,
     ).toBe(2);
   });
 
@@ -231,7 +231,7 @@ describe("TradeJournal", () => {
     for (let i = 0; i < 10; i++) {
       journal.recordFill({
         tradeId: `win-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -245,7 +245,7 @@ describe("TradeJournal", () => {
       });
     }
 
-    const perf = journal.computePerformance("alpha", 600_000, FIXED_TS + 600_000);
+    const perf = journal.computePerformance("strategy-a", 600_000, FIXED_TS + 600_000);
     expect(perf).not.toBeNull();
     expect(perf!.tradeCount).toBe(10);
     expect(perf!.winCount).toBe(10);
@@ -258,7 +258,7 @@ describe("TradeJournal", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     journal.record(makeEntry());
 
-    const perf = journal.computePerformance("alpha", 600_000, FIXED_TS);
+    const perf = journal.computePerformance("strategy-a", 600_000, FIXED_TS);
     expect(perf).toBeNull(); // Only 1 trade
   });
 
@@ -268,7 +268,7 @@ describe("TradeJournal", () => {
       const isWin = i % 3 !== 0; // ~66% win rate
       journal.recordFill({
         tradeId: `count-${i}`,
-        strategyId: "beta",
+        strategyId: "strategy-b",
         regime: "range",
         venue: "bybit",
         symbol: "ETH",
@@ -282,18 +282,18 @@ describe("TradeJournal", () => {
       });
     }
 
-    const perf = journal.computePerformanceByCount("beta", 10);
+    const perf = journal.computePerformanceByCount("strategy-b", 10);
     expect(perf).not.toBeNull();
     expect(perf!.tradeCount).toBe(10);
   });
 
   test("distinctStrategyIds and distinctRegimes", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
-    journal.record(makeEntry({ strategyId: "alpha", regime: "trend" }));
-    journal.record(makeEntry({ strategyId: "beta", regime: "range" }));
-    journal.record(makeEntry({ strategyId: "alpha", regime: "trend" }));
+    journal.record(makeEntry({ strategyId: "strategy-a", regime: "trend" }));
+    journal.record(makeEntry({ strategyId: "strategy-b", regime: "range" }));
+    journal.record(makeEntry({ strategyId: "strategy-a", regime: "trend" }));
 
-    expect(journal.distinctStrategyIds()).toEqual(["alpha", "beta"]);
+    expect(journal.distinctStrategyIds()).toEqual(["strategy-a", "strategy-b"]);
     expect(journal.distinctRegimes()).toEqual(["trend", "range"]);
   });
 });
@@ -309,7 +309,7 @@ describe("EdgeDecayDetector", () => {
     for (let i = 0; i < 5; i++) {
       journal.recordFill({
         tradeId: `few-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -323,7 +323,7 @@ describe("EdgeDecayDetector", () => {
       });
     }
 
-    const signal = detector.detect("alpha");
+    const signal = detector.detect("strategy-a");
     expect(signal).toBeNull();
   });
 
@@ -340,7 +340,7 @@ describe("EdgeDecayDetector", () => {
     for (let i = 0; i < 40; i++) {
       journal.recordFill({
         tradeId: `consistent-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -354,7 +354,7 @@ describe("EdgeDecayDetector", () => {
       });
     }
 
-    const signal = detector.detect("alpha");
+    const signal = detector.detect("strategy-a");
     expect(signal).toBeNull(); // No decay
   });
 
@@ -372,7 +372,7 @@ describe("EdgeDecayDetector", () => {
     for (let i = 0; i < 15; i++) {
       journal.recordFill({
         tradeId: `good-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -390,7 +390,7 @@ describe("EdgeDecayDetector", () => {
     for (let i = 0; i < 10; i++) {
       journal.recordFill({
         tradeId: `bad-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -404,9 +404,9 @@ describe("EdgeDecayDetector", () => {
       });
     }
 
-    const signal = detector.detect("alpha");
+    const signal = detector.detect("strategy-a");
     expect(signal).not.toBeNull();
-    expect(signal!.strategyId).toBe("alpha");
+    expect(signal!.strategyId).toBe("strategy-a");
     expect(signal!.severity).toBeDefined();
     expect(signal!.recommendation).toBeDefined();
     expect(signal!.currentSharpe).toBeLessThan(signal!.previousSharpe);
@@ -424,8 +424,8 @@ describe("EdgeDecayDetector", () => {
     // Scenario: consistent wins (no decay).
     for (let i = 0; i < 30; i++) {
       journal.recordFill({
-        tradeId: `alpha-${i}`,
-        strategyId: "alpha",
+        tradeId: `strategy-a-${i}`,
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -442,8 +442,8 @@ describe("EdgeDecayDetector", () => {
     // Scenario: wins then losses (decay).
     for (let i = 0; i < 15; i++) {
       journal.recordFill({
-        tradeId: `beta-good-${i}`,
-        strategyId: "beta",
+        tradeId: `strategy-b-good-${i}`,
+        strategyId: "strategy-b",
         regime: "trend",
         venue: "bybit",
         symbol: "ETH",
@@ -458,8 +458,8 @@ describe("EdgeDecayDetector", () => {
     }
     for (let i = 0; i < 10; i++) {
       journal.recordFill({
-        tradeId: `beta-bad-${i}`,
-        strategyId: "beta",
+        tradeId: `strategy-b-bad-${i}`,
+        strategyId: "strategy-b",
         regime: "trend",
         venue: "bybit",
         symbol: "ETH",
@@ -475,7 +475,7 @@ describe("EdgeDecayDetector", () => {
 
     const signals = detector.detectAll();
     // a decay signal should exist a decay signal.
-    const betaSignal = signals.find((s) => s.strategyId === "beta");
+    const betaSignal = signals.find((s) => s.strategyId === "strategy-b");
     expect(betaSignal).toBeDefined();
   });
 });
@@ -487,7 +487,7 @@ describe("PromotionPipeline", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, config(), () => FIXED_TS);
 
-    const record = pipeline.createPromotion("alpha", "Improve mean reversion");
+    const record = pipeline.createPromotion("strategy-a", "Improve mean reversion");
     expect(record.currentStage).toBe("hypothesis");
     expect(record.active).toBe(true);
     expect(record.humanApproved).toBe(false);
@@ -504,7 +504,7 @@ describe("PromotionPipeline", () => {
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
-    const record = pipeline.createPromotion("alpha", "Test promotion");
+    const record = pipeline.createPromotion("strategy-a", "Test promotion");
 
     // Advance from hypothesis to backtest (hypothesis always passes).
     const updated = pipeline.advanceStage(record.promotionId);
@@ -513,7 +513,7 @@ describe("PromotionPipeline", () => {
     // Advance from backtest to review (with passing performance).
     const updated2 = pipeline.advanceStage(record.promotionId, {
       performance: {
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         tradeCount: 100,
         winCount: 60,
         lossCount: 40,
@@ -538,7 +538,7 @@ describe("PromotionPipeline", () => {
     const journal = new TradeJournal(cfg, () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
-    const record = pipeline.createPromotion("alpha", "Test promotion");
+    const record = pipeline.createPromotion("strategy-a", "Test promotion");
     pipeline.advanceStage(record.promotionId); // hypothesis → backtest
 
     // Try to advance to review with insufficient data.
@@ -560,7 +560,7 @@ describe("PromotionPipeline", () => {
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
     const passingPerf = {
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       tradeCount: 10,
       winCount: 6,
       lossCount: 4,
@@ -575,7 +575,7 @@ describe("PromotionPipeline", () => {
       windowEndMs: FIXED_TS + 3_600_000,
     };
 
-    const record = pipeline.createPromotion("alpha", "Test");
+    const record = pipeline.createPromotion("strategy-a", "Test");
     pipeline.advanceStage(record.promotionId); // hypothesis -> backtest
     pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> review
 
@@ -598,7 +598,7 @@ describe("PromotionPipeline", () => {
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
     const passingPerf = {
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       tradeCount: 10,
       winCount: 6,
       lossCount: 4,
@@ -613,7 +613,7 @@ describe("PromotionPipeline", () => {
       windowEndMs: FIXED_TS + 3_600_000,
     };
 
-    const record = pipeline.createPromotion("alpha", "Test");
+    const record = pipeline.createPromotion("strategy-a", "Test");
     pipeline.advanceStage(record.promotionId); // hypothesis -> backtest
     pipeline.advanceStage(record.promotionId, { performance: passingPerf }); // backtest -> review
     pipeline.approveReview(record.promotionId, true, "LGTM");
@@ -638,7 +638,7 @@ describe("PromotionPipeline", () => {
     const pipeline = new PromotionPipeline(journal, cfg, () => FIXED_TS);
 
     const passingPerf = {
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       tradeCount: 100,
       winCount: 60,
       lossCount: 40,
@@ -653,7 +653,7 @@ describe("PromotionPipeline", () => {
       windowEndMs: FIXED_TS + 3_600_000,
     };
 
-    const record = pipeline.createPromotion("alpha", "Full pipeline test");
+    const record = pipeline.createPromotion("strategy-a", "Full pipeline test");
 
     // hypothesis → backtest
     pipeline.advanceStage(record.promotionId);
@@ -679,7 +679,7 @@ describe("PromotionPipeline", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, config(), () => FIXED_TS);
 
-    const record = pipeline.createPromotion("alpha", "Test");
+    const record = pipeline.createPromotion("strategy-a", "Test");
     // Manually skip a stage.
     record.stageOutcomes.backtest = "skipped";
 
@@ -694,7 +694,7 @@ describe("PromotionPipeline", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, config(), () => FIXED_TS);
 
-    const record = pipeline.createPromotion("alpha", "Test");
+    const record = pipeline.createPromotion("strategy-a", "Test");
     const rejected = pipeline.reject(record.promotionId, "Failed risk review");
     expect(rejected.active).toBe(false);
     expect(rejected.stageOutcomes.hypothesis).toBe("fail");
@@ -705,13 +705,13 @@ describe("PromotionPipeline", () => {
     const journal = new TradeJournal(config(), () => FIXED_TS);
     const pipeline = new PromotionPipeline(journal, config(), () => FIXED_TS);
 
-    pipeline.createPromotion("alpha", "Active one");
-    const rejected = pipeline.createPromotion("beta", "Rejected one");
+    pipeline.createPromotion("strategy-a", "Active one");
+    const rejected = pipeline.createPromotion("strategy-b", "Rejected one");
     pipeline.reject(rejected.promotionId, "Nope");
 
     const active = pipeline.getActivePromotions();
     expect(active.length).toBe(1);
-    expect(active[0].strategyId).toBe("alpha");
+    expect(active[0].strategyId).toBe("strategy-a");
   });
 });
 
@@ -721,8 +721,8 @@ describe("LearningEngine", () => {
   test("records trades and passes to journal", () => {
     const engine = new LearningEngine(config(), () => FIXED_TS);
 
-    engine.recordTrade(makeEntry({ strategyId: "alpha" }));
-    engine.recordTrade(makeEntry({ strategyId: "beta" }));
+    engine.recordTrade(makeEntry({ strategyId: "strategy-a" }));
+    engine.recordTrade(makeEntry({ strategyId: "strategy-b" }));
 
     expect(engine.journal.size).toBe(2);
   });
@@ -734,7 +734,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 5; i++) {
       engine.recordFill({
         tradeId: `few-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -766,7 +766,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 15; i++) {
       engine.recordFill({
         tradeId: `good-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -784,7 +784,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 10; i++) {
       engine.recordFill({
         tradeId: `bad-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -803,7 +803,7 @@ describe("LearningEngine", () => {
       (r) => r.type === "demote" || r.type === "pause" || r.type === "adjust_parameters",
     );
     expect(decayRecs.length).toBeGreaterThan(0);
-    expect(decayRecs[0].strategyId).toBe("alpha");
+    expect(decayRecs[0].strategyId).toBe("strategy-a");
     expect(decayRecs[0].requiresApproval).toBe(true);
   });
 
@@ -814,7 +814,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 30; i++) {
       engine.recordFill({
         tradeId: `trade-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -851,7 +851,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 15; i++) {
       engine.recordFill({
         tradeId: `good-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -867,7 +867,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 10; i++) {
       engine.recordFill({
         tradeId: `bad-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -911,7 +911,7 @@ describe("LearningEngine", () => {
     for (let i = 0; i < 50; i++) {
       engine.recordFill({
         tradeId: `strong-${i}`,
-        strategyId: "alpha",
+        strategyId: "strategy-a",
         regime: "trend",
         venue: "bybit",
         symbol: "BTC",
@@ -943,7 +943,7 @@ describe("LearningEngine", () => {
     engine["recommendations"].push({
       recommendationId: "rec-1",
       type: "promote",
-      strategyId: "alpha",
+      strategyId: "strategy-a",
       summary: "Promote alpha",
       evidence: {},
       confidence: 0.8,
@@ -954,8 +954,8 @@ describe("LearningEngine", () => {
     engine["recommendations"].push({
       recommendationId: "rec-2",
       type: "demote",
-      strategyId: "beta",
-      summary: "Demote beta",
+      strategyId: "strategy-b",
+      summary: "Demote strategy-b",
       evidence: {},
       confidence: 0.9,
       requiresApproval: true,
@@ -963,7 +963,7 @@ describe("LearningEngine", () => {
       actedUpon: false,
     });
 
-    expect(engine.getRecommendations({ strategyId: "alpha" }).length).toBe(1);
+    expect(engine.getRecommendations({ strategyId: "strategy-a" }).length).toBe(1);
     expect(engine.getRecommendations({ type: "demote" }).length).toBe(1);
     expect(engine.getRecommendations({ acknowledged: false }).length).toBe(2);
 
