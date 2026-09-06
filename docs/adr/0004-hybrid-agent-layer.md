@@ -20,14 +20,17 @@ The cognitive layer lives behind an in-house `AgentAdapter` contract (`run(input
 
 **LLM Runtime:** OpenRouter is the LLM provider, accessed through the Vercel AI SDK adapter. The concrete `generateText` function from the `ai` package is injected via a `generateFn` parameter — the agents package never imports `ai` or `@ai-sdk/openai` directly. This keeps ARCHITECTURE.md boundaries clean: `agents` depends only on `contracts`.
 
-**Behavioral Runtimes:** Three deterministic adapters operate without any LLM:
+**Behavioral Runtimes:** Deterministic adapters operate without any LLM:
 - `AuditConsultativeAdapter` — scores decision quality and emits summaries
 - `MemoryConsultativeAdapter` — recalls prior incidents from durable JSON storage
 - `PolicyConsultativeAdapter` — reviews internal limits and blocked venues
+- `ScopeObserverAdapter` — emits scoped, directional observations for the analytical/deliberative agents from market geometry (ADR-0013 per-scope general agents run on this adapter when no LLM is configured)
 
 These are always available regardless of LLM configuration.
 
-**Agent Catalog:** 11 consultative agents are defined in `CONSULTATIVE_AGENT_CATALOG` with explicit configurations, permissions, runtime declarations, and fallback strategies. When `LLM_API_KEY` is configured, deliberative agents (Bull, Bear, Skeptic, Risk Analyst, Execution Advisor) activate with real LLM reasoning via OpenRouter. Without an LLM, the system operates deterministically using behavioral adapters. Deployment of the catalog is defined in ADR-0013: one general agent per trading scope, with the catalog agents bound to that scope as sub-agents.
+**Mastra runtime:** The `MastraAdapter` (subpath `@agenttrading/agents/runtimes/mastra`) is a second LLM runtime behind `AgentAdapter`. Catalog agents that route to `runtime: "mastra"` — Bull, Bear, Skeptic, Memory, Audit — execute through it, gaining Mastra's durable memory and eval capabilities for debate and control workflows.
+
+**Agent Catalog:** 11 consultative agents are defined in `CONSULTATIVE_AGENT_CATALOG` with explicit configurations, permissions, runtime declarations, and fallback strategies. When `LLM_API_KEY` is configured, deliberative agents (Bull, Bear, Skeptic, Risk Analyst, Execution Advisor) activate with real LLM reasoning via OpenRouter. Without an LLM, the analytic/deliberative agents run through `ScopeObserverAdapter` and the system operates deterministically. Deployment of the catalog is defined in ADR-0013: one general agent per trading scope, with the catalog agents bound to that scope as sub-agents.
 
 **Wiring:** The `VercelAISDKAdapter` and `createOpenRouterGenerateFn` are available via subpath exports (`@agenttrading/agents/runtimes/vercel`, `@agenttrading/agents/runtimes/openrouter`). The CLI package imports `ai` and `@ai-sdk/openai` and creates the concrete `generateFn` — the LLM dependency lives at the wiring layer, not in the agents package.
 
@@ -35,7 +38,7 @@ These are always available regardless of LLM configuration.
 
 1. **Direct LLM import in agents package** — rejected. Would violate ARCHITECTURE.md boundary rules and create compile-time coupling to a specific LLM framework.
 
-2. **Mastra as primary runtime** — deferred. Mastra adds value for durable memory, evals, and debate workflows, but the current operational need is satisfied by OpenRouter + Vercel AI SDK. Mastra can be added as a second runtime when debate workflows are activated.
+2. **Mastra as secondary runtime** — adopted. Mastra adds value for durable memory, evals, and debate workflows; the catalog routes the debate (Bull/Bear/Skeptic) and control (Memory/Audit) agents to `runtime: "mastra"`. OpenRouter + Vercel AI SDK remains the LLM path for the analytical and deliberative agents that declare `runtime: "vercel-ai-sdk"`.
 
 3. **No LLM at all (deterministic only)** — rejected. The system needs cognitive reasoning for regime interpretation, opportunity debate, and context-aware risk narration. Behavioral runtimes provide fallback, not primary reasoning.
 
@@ -45,4 +48,4 @@ These are always available regardless of LLM configuration.
 - **Positive:** Behavioral runtimes ensure the system works without any LLM configured. Deterministic fallback is always available.
 - **Positive:** The `generateFn` injection pattern means the same `VercelAISDKAdapter` works with OpenRouter, OpenAI, Anthropic, or any OpenAI-compatible provider.
 - **Negative:** The CLI package now depends on `ai` and `@ai-sdk/openai`, adding ~2MB to the dependency tree. This is acceptable since the CLI is the wiring layer.
-- **Follow-up:** When debate workflows (Bull/Bear/Skeptic) are activated, evaluate adding Mastra as a second runtime for its durable memory and eval capabilities.
+- **Follow-up:** Evaluate surfacing Mastra for the remaining analytical agents once debate workflows mature; the two-runtime split (Vercel AI SDK + Mastra) is stable behind `AgentAdapter`.

@@ -34,3 +34,13 @@ Additional mode-shape rules locked in by this decision:
 - Negative: the runner depends on Bybit Demo availability; if `api-demo.bybit.com` is down, `demo` cannot be exercised (it cannot silently fall back to a synthetic-only mode without breaking the contract).
 - Negative: the `LiveExecutionEngine` must be refactored to delegate to the Bybit connectors instead of wrapping `SimulatedExecutionEngine` as the order path. The simulator remains as a harness/test utility.
 - Follow-up: when `live` is authorized, the same `AppConfig` shape must accept live endpoints and canary limits; the canary limits are not part of this ADR (canary territory).
+
+## Update 2026-09-06
+
+The execution seam is implemented as the `OrderRouter`:
+
+- `OrderRouter` (contracts/src/order-router.ts) is the single interface for placing real orders: `route(intent) → OrderRouteAck`. It lives in `contracts` so `core` never depends on a venue connector; implementations live in `cli`.
+- `LiveExecutionEngine` accepts an optional `OrderRouter`. When attached, `placeLiveOrder(intent, preCheck)` routes through it; without one it simulates (harness/tests). The engine still enforces the canary pre-check before routing.
+- `CanarySession` and `TradingSession` expose `setOrderRouter`, `hasOrderRouter`, `preCheckIntent`, and `placeLiveOrder`.
+- `BybitDexOrderRouter` (cli/src/order-router.ts) routes CEX intents to `BybitRESTClient.placeOrder` and DEX intents to `DEXExecutor.executeSwap`.
+- `LiveRunner` attaches the router at construction and places every accepted intent via `session.placeLiveOrder`, so the connector path (demo or mainnet endpoints) is decided solely by the runner's `bybitEndpoints` wiring.

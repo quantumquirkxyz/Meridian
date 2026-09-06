@@ -34,6 +34,8 @@ import {
 } from "@agenttrading/contracts";
 import {
   type OrderIntent,
+  type OrderRouteAck,
+  type OrderRouter,
   type RiskDecision,
 } from "@agenttrading/contracts";
 import { type FillParams, type AuditAvailability, DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
@@ -223,6 +225,20 @@ export class CanarySession {
   }
 
   /**
+   * Late-wire an OrderRouter into the execution engine (ADR-0011).
+   * When attached, the engine places real orders through the router;
+   * otherwise it simulates (harness/tests).
+   */
+  setOrderRouter(orderRouter?: OrderRouter): void {
+    this.execution.setOrderRouter(orderRouter);
+  }
+
+  /** Whether a live OrderRouter is attached (ADR-0011 seam active). */
+  get hasOrderRouter(): boolean {
+    return this.execution.hasOrderRouter;
+  }
+
+  /**
    * Pre-check an order intent against canary limits.
    */
   preCheckIntent(intent: OrderIntent): CanaryPreCheckResult {
@@ -247,6 +263,19 @@ export class CanarySession {
       };
     }
     return this.execution.preCheck(intent, this.buildExecutionState());
+  }
+
+  /**
+   * Place a real order through the execution engine's OrderRouter
+   * (ADR-0011). The engine enforces the canary pre-check once more and
+   * routes via the attached OrderRouter; without a router it falls back
+   * to simulation (harness/tests).
+   */
+  placeLiveOrder(
+    intent: OrderIntent,
+    preCheck: CanaryPreCheckResult,
+  ): Promise<OrderRouteAck> {
+    return this.execution.placeLiveOrder(intent, preCheck);
   }
 
   /**

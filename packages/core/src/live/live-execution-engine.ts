@@ -17,6 +17,8 @@
 import {
   type CanaryConfig,
   type OrderIntent,
+  type OrderRouteAck,
+  type OrderRouter,
   type RiskDecision,
 } from "@agenttrading/contracts";
 import {
@@ -119,13 +121,30 @@ export interface CanaryPreCheckResult {
 export class LiveExecutionEngine {
   private readonly config: CanaryConfig;
   private readonly simEngine: SimulatedExecutionEngine;
+  private orderRouter?: OrderRouter;
 
   constructor(
     config: CanaryConfig,
     simEngine: SimulatedExecutionEngine = new SimulatedExecutionEngine(),
+    orderRouter?: OrderRouter,
   ) {
     this.config = { ...config };
     this.simEngine = simEngine;
+    this.orderRouter = orderRouter;
+  }
+
+  /**
+   * Late-wire an OrderRouter (ADR-0011): the engine becomes the single
+   * order-sending seam once a router is attached. Without a router the
+   * engine remains a harness that simulates fills.
+   */
+  setOrderRouter(orderRouter?: OrderRouter): void {
+    this.orderRouter = orderRouter;
+  }
+
+  /** Whether a live OrderRouter is attached (ADR-0011 seam active). */
+  get hasOrderRouter(): boolean {
+    return this.orderRouter !== undefined;
   }
 
   /**
@@ -318,6 +337,61 @@ export class LiveExecutionEngine {
     }
 
     return this.simEngine.submit(adjustedInput);
+  }
+
+  /**
+   * Place a real order through the OrderRouter (ADR-0011).
+   *
+   * The engine stays the single order-sending seam: canary pre-check is
+   * enforced here, then routing delegates to the attached OrderRouter.
+   * When no router is attached (harness/tests) the order falls back to
+   * the simulated engine so the seam remains exercised everywhere.
+   *
+   * Only callable if `preCheck` returned `allowed: true`.
+   */
+  async placeLiveOrder(
+    intent: OrderIntent,
+    preCheck: CanaryPreCheckResult,
+  ): Promise<OrderRouteAck> {
+    if (!preCheck.allowed) {
+      throw new Error(
+        `canary pre-check failed: ${preCheck.blockReason} — ${preCheck.reason}`,
+      );
+    }
+
+    if (this.orderRouter) {
+      return this.orderRouter.route(intent);
+    }
+
+    // No router attached (harness path): simulate the fill through the
+    // engine's own submit(), so pre-check enforcement and approved-quantity
+    // adjustment stay in a single place and the ack keeps the same shape.
+    const execution = this.submit(
+      {
+        intent,
+        riskDecision: {
+          decision: "APPROVE",
+          orderIntentIdempotencyKey: intent.idempotencyKey,
+          approvedSize: preCheck.approvedQuantity ?? intent.quantity,
+          approvedLimits: intent.limits,
+          expiresAtMs: intent.expiresAtMs,
+          evaluatedAtMs: intent.createdAtMs,
+        } as RiskDecision,
+        market: {
+          bid: intent.price * 0.999,
+          ask: intent.price * 1.001,
+          mid: intent.price,
+          liquidityUsd: 10_000,
+        },
+        submittedAtMs: intent.createdAtMs,
+      },
+      preCheck,
+    );
+
+    return {
+      orderId: execution.orderId,
+      venue: intent.venue,
+    };
   }
 
   /**

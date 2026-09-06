@@ -1,0 +1,163 @@
+import { describe, expect, test } from "bun:test";
+import {
+  DEFAULT_CANARY_CONFIG,
+  type OrderIntent,
+  type OrderRouteAck,
+  type OrderRouter,
+} from "@agenttrading/contracts";
+import { type CanaryPreCheckResult } from "@agenttrading/core";
+import { LiveExecutionEngine } from "../src/live/live-execution-engine.ts";
+import { CanarySession } from "../src/live/canary-session.ts";
+import { TradingSession } from "../src/live/trading-session.ts";
+
+const FIXED_TS = 1_700_000_000_000;
+
+// ── Fixtures ───────────────────────────────────────────────────────────
+
+function intent(overrides: Partial<OrderIntent> = {}): OrderIntent {
+  return {
+    idempotencyKey: "intent-1",
+    opportunityId: "opp-1",
+    venue: "bybit",
+    symbol: "BTCUSDT",
+    side: "BUY",
+    quantity: 0.01,
+    price: 100,
+    quoteCurrency: "USDT",
+    createdAtMs: FIXED_TS,
+    expiresAtMs: FIXED_TS + 60_000,
+    limits: { maxSlippageBps: 20 },
+    ...overrides,
+  };
+}
+
+function allowedPreCheck(approvedQuantity?: number): CanaryPreCheckResult {
+  return {
+    allowed: true,
+    reason: "all canary limits satisfied",
+    ...(approvedQuantity !== undefined ? { approvedQuantity } : {}),
+  };
+}
+
+function blockedPreCheck(): CanaryPreCheckResult {
+  return {
+    allowed: false,
+    blockReason: "CAPITAL_EXHAUSTED",
+    reason: "capital already fully deployed",
+  };
+}
+
+// ── LiveExecutionEngine seam (ADR-0011) ──────────────────────────────
+
+describe("LiveExecutionEngine OrderRouter seam (ADR-0011)", () => {
+  test("router is optional by default and can be late-wired", () => {
+    const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG);
+    expect(engine.hasOrderRouter).toBe(false);
+
+    engine.setOrderRouter({ route: async () => ({ orderId: "x", venue: "bybit" }) });
+    expect(engine.hasOrderRouter).toBe(true);
+
+    engine.setOrderRouter(undefined);
+    expect(engine.hasOrderRouter).toBe(false);
+  });
+
+  test("constructor accepts an OrderRouter", async () => {
+    const router: OrderRouter = {
+      route: async () => ({ orderId: "ex-1", venue: "bybit" }),
+    };
+    const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
+    expect(engine.hasOrderRouter).toBe(true);
+
+    const ack = await engine.placeLiveOrder(intent(), allowedPreCheck());
+    expect(ack.orderId).toBe("ex-1");
+  });
+
+  test("routes through the attached router and passes the raw intent", async () => {
+    let routed: OrderIntent | undefined;
+    const router: OrderRouter = {
+      route: async (intent) => {
+        routed = intent;
+        return { orderId: "ex-2", venue: "bybit", externalRef: undefined };
+      },
+    };
+    const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
+
+    const ack = await engine.placeLiveOrder(intent(), allowedPreCheck(0.005));
+    expect(ack.orderId).toBe("ex-2");
+    expect(ack.venue).toBe("bybit");
+    expect(routed).toBeDefined();
+    expect(routed!.idempotencyKey).toBe("intent-1");
+  });
+
+  test("refuses to route when the canary pre-check did not approve", async () => {
+    let routed = false;
+    const router: OrderRouter = {
+      route: async () => {
+        routed = true;
+        return { orderId: "never", venue: "bybit" };
+      },
+    };
+    const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG, undefined, router);
+
+    await expect(engine.placeLiveOrder(intent(), blockedPreCheck())).rejects.toThrow(
+      "canary pre-check failed",
+    );
+    expect(routed).toBe(false);
+  });
+
+  test("simulates the fill and returns a shape-compatible ack without a router", async () => {
+    const engine = new LiveExecutionEngine(DEFAULT_CANARY_CONFIG);
+    const ack = await engine.placeLiveOrder(intent({ venue: "bybit" }), allowedPreCheck());
+
+    expect(typeof ack.orderId).toBe("string");
+    expect(ack.orderId.length).toBeGreaterThan(0);
+    expect(ack.venue).toBe("bybit");
+  });
+});
+
+// ── CanarySession / TradingSession delegation ─────────────────────────
+
+describe("Session OrderRouter delegation (ADR-0011)", () => {
+  test("CanarySession delegates pre-check and live placement", async () => {
+    const router: OrderRouter = {
+      route: async () => ({ orderId: "sess-1", venue: "bybit" } as OrderRouteAck),
+    };
+    const session = new CanarySession({
+      config: DEFAULT_CANARY_CONFIG,
+      now: () => FIXED_TS,
+    });
+    session.setOrderRouter(router);
+    expect(session.hasOrderRouter).toBe(true);
+
+    const preCheck = session.preCheckIntent(intent());
+    expect(preCheck.allowed).toBe(true);
+    const ack = await session.placeLiveOrder(intent(), preCheck);
+    expect(ack.orderId).toBe("sess-1");
+  });
+
+  test("TradingSession exposes the same placement seam", async () => {
+    const router: OrderRouter = {
+      route: async () => ({ orderId: "ts-1", venue: "bybit" }),
+    };
+    const session = new TradingSession({
+      canaryConfig: DEFAULT_CANARY_CONFIG,
+      learningCycleInterval: 10,
+      now: () => FIXED_TS,
+    });
+    session.setOrderRouter(router);
+
+    const preCheck = session.preCheckIntent(intent());
+    const ack = await session.placeLiveOrder(intent(), preCheck);
+    expect(ack.orderId).toBe("ts-1");
+  });
+
+  test("pre-check result carries the blocked reason into placeLiveOrder", async () => {
+    const session = new TradingSession({
+      canaryConfig: DEFAULT_CANARY_CONFIG,
+      learningCycleInterval: 10,
+      now: () => FIXED_TS,
+    });
+    const blocked = session.preCheckIntent(intent({ quantity: 0 }));
+    expect(blocked.allowed).toBe(true);
+  });
+});

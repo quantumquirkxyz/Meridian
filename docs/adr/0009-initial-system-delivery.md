@@ -56,6 +56,10 @@ packages/
 
 Total: 1114 tests across 60 files, 0 failures.
 
+## Update 2026-09-06
+
+The initial-delivery inventory above records the foundation as it shipped. The current workspace is 10 packages: `contracts`, `core`, `events`, `connectors`, `chain` (ADR-0012), `graph`, `harness`, `agents` (ADR-0004/0013, 11-agent catalog + per-scope general agents), `infra`, and `cli` (ADR-0011 LiveRunner). Full suite is now 1175 tests across 65 files, 0 failures.
+
 ## Exit criteria — all met
 
 | Criterion | Status | Evidence |
