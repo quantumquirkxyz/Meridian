@@ -75,8 +75,8 @@ General rule: on technical failure, reduce activity; never increase exposure.
 | Non-critical agent | Continue without it |
 | Mandatory agent for review | Reject the operation |
 | Risk Engine | `HALT` — never execute |
-| Execution Engine | Reconcile, `CANCEL_ONLY_MODE`, alert |
-| Failed reconciliation | `HALT` / `REDUCE_ONLY_MODE`, no new positions |
+| Execution Engine | Reconcile, `CANCEL_ONLY`, alert |
+| Failed reconciliation | `HALT` / `REDUCE_ONLY`, no new positions |
 | DEX / RPC | Disable DEX routes, CEX-only if allowed |
 | CEX API | Block venue, reconcile on recovery |
 | Audit unavailable | Do not trade |

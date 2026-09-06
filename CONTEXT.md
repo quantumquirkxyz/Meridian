@@ -28,7 +28,7 @@ The system follows a mandatory flow: **data → graph → candidate → review �
 
 **Execution Engine** is the only component that sends orders. It only accepts `OrderIntent` objects approved by the Risk Engine. Fails closed, never open.
 
-**Reconciliation** compares internal state against exchange state. On mismatch, the system enters defensive mode and blocks new positions. If WebSocket drops with an active partial fill, the system immediately transitions to `CANCEL_ONLY_MODE` and only returns to `NORMAL` after exact mathematical reconciliation.
+**Reconciliation** compares internal state against exchange state. On mismatch, the system enters defensive mode and blocks new positions. If WebSocket drops with an active partial fill, the system immediately transitions to `CANCEL_ONLY` and only returns to `NORMAL` after exact mathematical reconciliation.
 
 **Audit** records every transition, decision, order, fill, and state change to JSONL. The `AuditReconstructor` can rebuild the full timeline from data ingestion to PnL for any trade.
 
@@ -158,7 +158,7 @@ Classification of market state (trend, range, high volatility, low liquidity, ch
 _Avoid_: fixed limits ignoring market state.
 
 **SystemMode:**
-Global permission state: `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. Modes can only reduce activity, never increase it. Defensive states are suffixed (`CASH_ONLY_MODE`, `CANCEL_ONLY_MODE`, `REDUCE_ONLY_MODE`) while modes are not.
+Global permission state: `NORMAL`, `OBSERVE_ONLY`, `SIGNAL_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`, `CASH_ONLY`, `HALT`. Modes can only reduce activity, never increase it. Defensive states are reachable as `SystemMode` values with no mode suffix (`CASH_ONLY`, `CANCEL_ONLY`, `REDUCE_ONLY`).
 _Avoid_: trading always active; conflating mode names across namespaces.
 
 **TradingSession:**

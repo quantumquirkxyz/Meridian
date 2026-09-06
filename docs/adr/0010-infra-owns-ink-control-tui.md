@@ -26,7 +26,7 @@ Accept the dependency: `infra` depends on `contracts`, `events`, `ink`, and
 They must not become a path for LLM frameworks, connectors, or deterministic
 core imports into `infra`.
 
-**TUI authority rule (2026-08-27):** The TUI is a pure event emitter, not a mutation layer. When the operator presses the panic button, `infra` publishes a typed event (e.g. `OperatorHaltRequested`) to the event bus — it does not set `SystemMode` or transition `StateGraph`. The `StateGraph` / orchestrator consumes this event, evaluates it deterministically, and transitions the system to `HALT` / `CANCEL_ONLY_MODE` with mandatory audit. The `Execution Engine` blocks or rejects pending `OrderIntent` according to the new mode. Permitting the TUI to mutate state directly would break traceability and introduce a race condition where a recently approved `OrderIntent` could reach the market before the mode change takes effect.
+**TUI authority rule (2026-08-27):** The TUI is a pure event emitter, not a mutation layer. When the operator presses the panic button, `infra` publishes a typed event (e.g. `OperatorHaltRequested`) to the event bus — it does not set `SystemMode` or transition `StateGraph`. The `StateGraph` / orchestrator consumes this event, evaluates it deterministically, and transitions the system to `HALT` / `CANCEL_ONLY` with mandatory audit. The `Execution Engine` blocks or rejects pending `OrderIntent` according to the new mode. Permitting the TUI to mutate state directly would break traceability and introduce a race condition where a recently approved `OrderIntent` could reach the market before the mode change takes effect.
 
 ## Consequences
 

@@ -20,7 +20,7 @@ No parallel `DemoRunner` or `LiveRunner` exists. `AgentAdapter` is identical acr
 
 Additional mode-shape rules locked in by this decision:
 
-- **Continuous reconciliation in `demo`**: every demo order is confirmed via the private WebSocket. Mismatches that exceed a threshold transition the system to `CANCEL_ONLY_MODE`. `AuditReconstructor` must be able to rebuild the full cycle before `live` is authorized. `live` keeps the same protocol; the rule is the same, only the exchange is real.
+- **Continuous reconciliation in `demo`**: every demo order is confirmed via the private WebSocket. Mismatches that exceed a threshold transition the system to `CANCEL_ONLY`. `AuditReconstructor` must be able to rebuild the full cycle before `live` is authorized. `live` keeps the same protocol; the rule is the same, only the exchange is real.
 - **Permissive regime policy in `demo`**: `RegimeClassifier` and `RegimePolicyEngine` operate identically in both modes, but in `demo` the policy may allow more activity (no real capital → maximize integration stress-testing). `live` tightens the same policy.
 - **Identical kill switch in both modes**: manual TUI operator halt + automatic drawdown-triggered halt must be validated against Bybit Demo before `live` is authorized.
 - **Manual review exit gate `demo` → `live`**: promotion requires a human review with documentary evidence (exported JSON/CSV/TXT reports, audit reconstruction, loop-stability evidence, explicit operator approval). Pure automated metrics are insufficient.
