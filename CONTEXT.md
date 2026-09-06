@@ -6,7 +6,7 @@ AgentTrading is a multi-agent algorithmic trading infrastructure for hybrid cryp
 
 The system observes market data from multiple venues, detects opportunities by computing net profit after full cost stacks (fees, slippage, gas, bridges, funding, latency), evaluates them through deterministic risk rules, executes approved orders, reconciles state against exchanges, and records every decision for audit.
 
-**Current operational state:** Multi-agent system configured for live trading across Bybit (CEX) and PancakeSwap (DEX). 11 consultative agents defined. Source health tracking enabled. OpenRouter LLM adapter wired for agent reasoning when configured. Full audit trail with JSONL logging.
+**Current operational state:** Multi-agent system configured for live trading across Bybit (CEX) and PancakeSwap (DEX). The cognitive layer runs one general agent per trading scope — (venue, pool, pair) on DEX venues, (venue, pair) on CEX venues — each coordinating the catalog of 11 consultative agents as sub-agents. Source health tracking enabled. OpenRouter LLM adapter wired for agent reasoning when configured. Full audit trail with JSONL logging.
 
 ## 2. Why it exists
 
@@ -22,7 +22,7 @@ The system follows a mandatory flow: **data → graph → candidate → review �
 
 **Opportunity Detection** traverses the graph to find profitable routes — arbitrage cycles, cross-venue spreads, funding basis trades — and produces `OpportunityCandidate` objects with expected net profit after the complete cost stack.
 
-**Agent Layer** provides cognitive reasoning through consultative agents (observation only, never execution). When an LLM is configured via OpenRouter, agents can reason about market context, classify regimes, debate candidates, and produce structured analyses. Without an LLM, the system operates deterministically using behavioral adapters (audit, memory, policy).
+**Agent Layer** provides cognitive reasoning through consultative agents — the umbrella category for observation-only intelligence. One **general agent** is deployed per trading scope: (venue, pool, pair) on a DEX, (venue, pair) on a CEX where liquidity lives in the venue's order book. Each general agent coordinates the 11 catalog sub-agents (planner-supervisor, arbitrage-alpha, market-regime, bull, bear, skeptic, risk-analyst, execution-advisor, memory, audit, policy), scopes their inputs to its venue/pool/pair, aggregates their structured outputs, and emits one recommendation per cycle for the mandatory Risk Engine gate. The agent layer is observation only and never executes; no agent of any kind approves risk or moves funds. When an LLM is configured via OpenRouter, sub-agents reason about market context, classify regimes, debate candidates, and produce structured analyses; without an LLM, the system operates deterministically using behavioral adapters (audit, memory, policy).
 
 **Risk Engine** is the deterministic authority. It approves, rejects, reduces, or blocks every `OrderIntent`. No agent has `APPROVE_RISK` permission. The Risk Engine can trigger `HALT_SYSTEM` — a dictamen that instructs the orchestrator to enter `HALT` mode, but never sets `SystemMode` directly.
 
@@ -56,7 +56,8 @@ Risk is the dominant property of the system, not a secondary module. The Risk En
 - **Not a manual trading tool.** It operates algorithmically with no human intervention in the execution path.
 - **Not a black box.** Every decision is auditable with full traceability from data to PnL.
 - **Not a single-exchange bot.** It operates across multiple venues with inventory-aware routing.
-- **Not autonomous.** AI agents observe and reason, but the Risk Engine governs action. No agent executes orders.
+- **Not autonomous.** AI agents observe and reason, but the Risk Engine governs action. No agent — general or sub-agent — executes orders.
+- **Not a single global agent.** The cognitive layer is decomposed: one general agent per trading scope — (venue, pool, pair) on DEX, (venue, pair) on CEX — each delegating to the catalog of role-specialized sub-agents. There is no all-seeing agent covering every venue at once.
 - **Not a commercial product.** Personal project without KYC/AML. Regulatory knowledge is used only to understand structural risks. See ADR-0005.
 - **Not infinitely adaptable.** No statistical advantage is eternal. The system must detect when a strategy loses edge and stop trading.
 
@@ -64,13 +65,25 @@ Risk is the dominant property of the system, not a secondary module. The Risk En
 
 ## System Language
 
-**Agent:**
-A specialized module that produces typed observations, hypotheses, evaluations, or recommendations. It never executes orders, does not approve risk, and does not move funds.
+**Consultative Agent:**
+The umbrella category for every agent in the cognitive layer: a specialized module that produces typed observations, hypotheses, evaluations, or recommendations and never executes orders, approves risk, or moves funds. It manifests in two forms — a **general agent** (cognitive coordinator of one trading scope) and **sub-agents** (catalog roles bound to a general agent's scope).
 _Avoid_: autonomous bot, entity with freedom of action, executing agent.
 
+**General Agent:**
+An agent instance deployed over one trading scope — (venue, pool, pair) on a DEX, (venue, pair) on a CEX (such as BTC/USDT on Bybit or WBNB/BTCB in a PancakeSwap v4 pool). It is the cognitive coordinator of that scope: it decides which sub-agents to invoke, scopes their inputs to its venue/pool/pair (or venue/pair), aggregates their structured outputs, and emits one recommendation for the Risk Engine. It never executes orders, does not approve risk, and does not move funds.
+_Avoid_: one global agent covering every venue; an autonomous per-exchange bot.
+
+**Sub-agent:**
+A consultative agent from the catalog of 11 (planner-supervisor, arbitrage-alpha, market-regime, bull, bear, skeptic, risk-analyst, execution-advisor, memory, audit, policy) bound to a general agent's scope. Each implements one cognitive function — planning, arbitrage, regime classification, bull/bear/skeptic debate, risk narration, execution planning, memory recall, audit scoring, policy review — and carries the same observation-only permissions as the general agent. A general agent may skip a non-mandatory sub-agent without blocking its cycle; no sub-agent exists outside a scope (there is exactly one "free" deployment per scope in the canary).
+_Avoid_: free-roaming global expert; execution-capable worker.
+
 **Loop:**
-A closed perception → decision → action → learning cycle, with explicit frequency, inputs, outputs, permissions, and stopping criteria. Reads balances from `Reconciliation`, not from `MarketGraph`. Never mutates `MarketGraph`; never uses untyped agent output.
+A governed recurring subsystem — a closed perception → decision → action → learning cycle with explicit frequency, inputs, outputs, permissions, and stopping criteria. Reads balances from `Reconciliation`, not from `MarketGraph`. Never mutates `MarketGraph`; never uses untyped agent output. A single pass of a loop is a **Cycle**.
 _Avoid_: reactive processing without frequency or stopping criteria; treating the graph as inventory; allowing agent suggestions to become `OrderIntent` without `OpportunityCandidate`.
+
+**Cycle:**
+One concrete iteration of a **Loop** — e.g. a session's main runCycle (regime → detect → risk → execute → reconcile → audit).
+_Avoid_: using "cycle" and "loop" interchangeably.
 
 **MarketGraph:**
 Representation of the market as a directed, weighted graph. Nodes: assets, venues, chains, pools. Edges: order book, swap, bridge, transfer, funding, correlation. Weights: price, fee, gas cost, expected slippage, latency, liquidity, funding cost, failure probability, confidence, risk.
@@ -88,6 +101,22 @@ _Avoid_: treating the exchange's REST/WebSocket connector as the venue itself.
 A decentralized exchange venue (`venueModel: "dex"`), such as PancakeSwap, where trading occurs against on-chain liquidity pools via smart contracts.
 _Avoid_: conflating a pool with a venue; a venue hosts multiple pools.
 
+**Pool:**
+A smart contract that holds reserves of one pair of tokens and executes swaps automatically; the engine of DEX venues. A pool hosts exactly one pair; a DEX venue hosts multiple pools (e.g. one per fee tier). Pools do not exist on a CEX — there the functional equivalent is the venue's **order book** for that pair.
+_Avoid_: calling a CEX order book a "pool"; conflating with staking or mining pools; conflating a pool with its venue.
+
+**Order Book:**
+The list of open buy and sell orders for one pair on a CEX, priced by supply and demand and matched by the venue's matching engine. It is the CEX counterpart of a DEX **pool**: the liquidity context where a pair trades.
+_Avoid_: naming an order book "pool"; treating the order book as a component the system operates (the system only reads it as market data).
+
+**Trading Scope:**
+The deployment unit of a **general agent** and the liquidity context of a pair at a venue: (venue, pool, pair) on a DEX, (venue, pair) on a CEX — on a CEX the liquidity context is the venue's **order book**. Each trading scope gets exactly one general agent with its bound sub-agents.
+_Avoid_: a scope covering multiple venues; confusing a scope with a route in the `MarketGraph`.
+
+**Pair:**
+The tradable two-token instrument with an identity independent of the venue — base/quote, e.g. `BTC/USDT` (encoded as the symbol `BTCUSDT` on Bybit). It is the "pair" dimension of a trading scope.
+_Avoid_: "symbol" as a synonym — a symbol is a venue's opaque encoding of a pair.
+
 **Connector:**
 A venue-specific adapter that translates external market data (CEX REST/WebSocket, DEX RPC) into the shared `MarketDataSnapshot` contract that feeds the `MarketGraph`. Each venue has its own connector implementation. Connectors are the isolation boundary between venue-specific I/O and the normalized graph; the core never imports them directly.
 _Avoid_: treating the venue's raw API client as the connector; importing connector internals into the core.
@@ -97,8 +126,12 @@ The on-chain execution component for DEX venues. It connects to EVM-compatible c
 _Avoid_: using a DEX market-data connector as if it could execute swaps; treating the executor as the venue itself.
 
 **OpportunityCandidate:**
-An opportunity hypothesis with expected net profit (after fees, slippage, gas, bridges, funding, latency, and safety buffer), route, costs, and invalidation reasons.
-_Avoid_: arbitrage signal without net costs.
+A prospective tradable opportunity with expected net profit (after fees, slippage, gas, bridges, funding, latency, and safety buffer), route, costs, and invalidation reasons. It is the only analysis artifact that enters the operational cycle toward `OrderIntent`.
+_Avoid_: signal without net costs; conflating with **Hypothesis**.
+
+**Hypothesis:**
+A retrospective analysis artifact produced by the **Learning Loop** — patterns, lessons, and edge-decay observations derived from trade outcomes. It never becomes an `OrderIntent`; it only proposes candidate definitions for human review, then iteration.
+_Avoid_: prospective signal; synonym of `OpportunityCandidate`.
 
 **OpportunityDetector:**
 Component that ingests market data, feeds the `MarketGraph`, discovers profitable routes, and produces `OpportunityCandidate` objects with `OrderIntent` pairs for risk evaluation.
