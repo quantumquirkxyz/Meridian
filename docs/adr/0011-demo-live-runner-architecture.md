@@ -5,7 +5,7 @@ Date: 2026-08-31
 
 ## Context
 
-`OPERATING_FLOW.md` defines a two-phase gate: `demo` (Bybit Demo Trading, virtual assets, exchange-integrated) then `live` (real capital, bounded canary). The connectors (`BybitRESTClient`, `BybitWebSocketClient`) already expose `DEMO_BASE_URL` and `DEMO_PRIVATE_WS_URL`. The execution layer (Beta.5 `SimulatedExecutionEngine`) currently sits inside `LiveExecutionEngine` and is the only place orders are placed. There is no runner that wires the Bybit connectors to a real exchange with reconciliation and audit under both modes, and no explicit decision about how the runner, regime policy, reconciliation, and kill switch behave across `demo` and `live`.
+`OPERATING_FLOW.md` defines a two-mode gate: `demo` (Bybit Demo Trading, virtual assets, exchange-integrated) then `live` (real capital, bounded canary). The connectors (`BybitRESTClient`, `BybitWebSocketClient`) already expose `DEMO_BASE_URL` and `DEMO_PRIVATE_WS_URL`. The execution layer (`SimulatedExecutionEngine`) currently sits inside `LiveExecutionEngine` and is the only place orders are placed. There is no runner that wires the Bybit connectors to a real exchange with reconciliation and audit under both modes, and no explicit decision about how the runner, regime policy, reconciliation, and kill switch behave across `demo` and `live`.
 
 Without a single explicit decision the project risks two parallel runners (drift), or a permissive demo that hides integration defects that only show up against real capital, or a too-restrictive demo that never exercises the full integration surface.
 
