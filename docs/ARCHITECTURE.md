@@ -22,9 +22,11 @@ OpportunityDetector → OpportunityCandidate with full cost stack
 StateGraph Orchestrator
     ↓
 AI Advisory Layer → only observes/classifies/debates/explains
+    ↓  (general agents: one per trading scope — venue×pool×pair on DEX, venue×pair on CEX)
+    ↓  (sub-agents: the 11-agent consultative catalog, scoped to their general agent)
     ↓  (when LLM configured: OpenRouter via Vercel AI SDK)
     ↓  (without LLM: deterministic behavioral adapters)
-Risk Engine → authority: approve/reject/reduce
+    Risk Engine → authority: approve/reject/reduce
     ↓
 Execution Engine → the only component that sends approved orders
     ↓
@@ -35,7 +37,7 @@ Audit / Event Store → JSONL + SQLite
 Learning Loop → generates hypotheses, does not mutate production
 ```
 
-Mandatory flow per signal: **data → graph → candidate signal → agent review → Risk Engine → OrderIntent → Execution Engine → Reconciliation → Audit → Learning**. No step may skip the Risk Engine.
+Mandatory flow per signal: **data → graph → candidate → agent review → Risk Engine → OrderIntent → Execution Engine → Reconciliation → Audit → Learning**. No step may skip the Risk Engine.
 
 ## StateGraph (deterministic core)
 
@@ -49,19 +51,24 @@ Base contracts: `StateName`, `StateContext`, `StateNode`, `Transition`, `Transit
 
 ## Agent layers
 
-1. **Perception** — interpret market state, data quality, liquidity, microstructure (Market Data Sentinel, Graph Builder, Liquidity & Microstructure).
-2. **Analytical** — generate hypotheses (Arbitrage, Strategy Research, Market Regime, Inventory).
-3. **Deliberative** — compare and debate (Planner/Supervisor, Bull, Bear, Skeptic, Risk Analyst, Execution Advisor). Activate with LLM (OpenRouter); deterministic fallback without.
-4. **Control and audit** — consistency and traceability (Audit, Learning, Memory, Policy, Infrastructure Guardian, Reconciliation). Behavioral runtimes always available.
-5. **Deterministic non-agentic** — the real authority: Risk Engine, Execution Engine, Reconciliation Engine, Circuit Breakers, Kill Switch.
+Deployment is per **trading scope**: one **general agent** per (venue, pool, pair) on a DEX and per (venue, pair) on a CEX — a pool is DEX-only smart-contract liquidity, so on a CEX the liquidity context of the scope is the venue's **order book** (e.g. BTC/USDT on Bybit, or WBNB/BTCB in a PancakeSwap v4 pool). Each general agent is the cognitive coordinator of its scope — it decides which sub-agents to run, feeds them scoped inputs, aggregates their structured outputs, and emits a single recommendation per cycle for the Risk Engine.
 
-Data path: `Market data → Graph state → Agent analysis → Candidate signal → Risk decision → Order intent → Execution → Reconciliation → Audit`.
+The complete catalog of **11 consultative agents** (planner-supervisor, arbitrage-alpha, market-regime, bull, bear, skeptic, risk-analyst, execution-advisor, memory, audit, policy) is the **sub-agent** library; every general agent binds these roles to its scope. Grouped by layer:
+
+1. **Analytical** — generate candidate signals (Arbitrage-Alpha, Market Regime).
+2. **Deliberative** — plan and debate (Planner/Supervisor, Bull, Bear, Skeptic, Execution Advisor). Activate with LLM (OpenRouter); deterministic fallback without.
+3. **Control and audit** — consistency and traceability (Risk Analyst, Memory, Audit, Policy). Behavioral runtimes always available.
+4. **Deterministic non-agentic** — the real authority: Risk Engine, Execution Engine, Reconciliation Engine, Circuit Breakers, Kill Switch, plus the deterministic loops (data quality, graph build, liquidity/microstructure, strategy research, inventory, infrastructure guardian, learning).
+
+A general agent may skip a non-mandatory sub-agent without blocking its cycle. Sub-agents never execute, approve risk, or move funds; the Risk Engine remains the sole execution authority for every scope (ADR-0003).
+
+Data path: `Market data → Graph state → Scoped agent analysis (general agent + sub-agents) → Candidate → Risk decision → Order intent → Execution → Reconciliation → Audit`.
 
 ## Permission model
 
 - **Never granted to agents**: `APPROVE_RISK`, `SUBMIT_ORDER`, `SIGN_TRANSACTION`, `MOVE_FUNDS`, `MODIFY_RISK_LIMITS`.
 - **Only deterministic engines**: Risk Engine (`APPROVE_RISK`), Execution Engine (`SUBMIT_ORDER`, `CANCEL_ORDER`, `SIGN_TRANSACTION` depending on mode).
-- Typical agents: market/state/audit reads + `PROPOSE_SIGNAL` / `PROPOSE_EXECUTION_PLAN` / `PROPOSE_RISK_REVIEW` / `REQUEST_MORE_DATA`. Reconciliation and Infrastructure Guardian may `TRIGGER_DEGRADED_MODE` / `TRIGGER_CANCEL_ONLY`.
+- Typical agents: market/state/audit reads + `PROPOSE_SIGNAL` / `PROPOSE_EXECUTION_PLAN` / `PROPOSE_RISK_REVIEW` / `REQUEST_MORE_DATA`. The Reconciliation and Infrastructure engines may `TRIGGER_DEGRADED_MODE` / `TRIGGER_CANCEL_ONLY`.
 
 ## Fallbacks (fail closed)
 
@@ -89,7 +96,7 @@ packages/
   chain        on-chain execution (DEXExecutor via viem) — PancakeSwap swaps
   graph        MarketGraph, pathfinder, arbitrage-cycles, systemic-risk
   harness      backtest, replay, simulators (fill/gas/funding/latency/failure), stress
-  agents       AgentAdapter + catalog (11 agents) + behavioral runtimes + OpenRouter adapter
+  agents       AgentAdapter + general-agent deployment (per trading scope: venue×pool×pair on DEX, venue×pair on CEX) + consultative sub-agent catalog (11) + behavioral runtimes + OpenRouter adapter
   infra        DataQualityMonitor, ObservabilityService, InfrastructureEngine, CanaryControlTUI
   cli          LiveRunner (demo/live), config, manifest, status display
 ```
