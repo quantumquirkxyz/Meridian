@@ -83,6 +83,7 @@ import { createOpenRouterGenerateFn } from "@agenttrading/agents/runtimes/openro
 import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { BybitDexOrderRouter } from "./order-router.ts";
+import { buildRecommendationIntent } from "./recommendation-intent.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -268,6 +269,7 @@ export class LiveRunner {
   // Per-scope general agent recommendations (ADR-0013) — scopeId → latest
   private lastScopeRecommendations: Map<string, GeneralAgentRecommendation> = new Map();
   private scopeRecommendationCount = 0;
+  private recommendationsRejectedByRisk = 0;
   private auditAdapter?: AuditConsultativeAdapter;
   private memoryAdapter?: MemoryConsultativeAdapter;
   private policyAdapter?: PolicyConsultativeAdapter;
@@ -887,6 +889,26 @@ export class LiveRunner {
         };
       }
     }
+
+    if (scope.kind === "DEX") {
+      // PancakeSwap pool snapshots carry a mid quote plus pool depth, but no
+      // order-book bid/ask. Derive a conservative synthetic half-spread (10
+      // bps) around the pool's own mid so the scoped readout uses the pool's
+      // data, not the last global market (ADR-0013 venue/pool/pair scoping).
+      const snapshot = this.marketDataSnapshots.get(
+        `${scope.venue}:${scope.pair.toUpperCase()}`,
+      );
+      if (snapshot && typeof snapshot.mid === "number" && snapshot.mid > 0) {
+        const halfSpread = (snapshot.mid * 10) / 10_000;
+        return {
+          bid: snapshot.mid - halfSpread,
+          ask: snapshot.mid + halfSpread,
+          mid: snapshot.mid,
+          liquidityUsd: snapshot.depth,
+        };
+      }
+    }
+
     return { ...this.market };
   }
 
@@ -1399,6 +1421,44 @@ export class LiveRunner {
       }
     }
 
+    // ADR-0013: route the per-scope general agent recommendations through the
+    // same mandatory Risk Engine gate. Directional (BUY/SELL) recommendations
+    // become intents at the scope's current mid and join the approved set so
+    // they place through the engine seam like any other approved intent.
+    for (const rec of this.lastScopeRecommendations.values()) {
+      if (rec.signal === "HOLD") continue;
+
+      const intent = buildRecommendationIntent(rec, this.scopeMarketState(rec.scope), {
+        now: this.nowMs,
+        maxSlippageBps: this.config.feeBps,
+      });
+      if (!intent) continue;
+
+      rec.suggestedIntent = intent;
+      const riskDecision = this.evaluateRisk(intent, 0);
+
+      if (riskDecision.decision === "APPROVE") {
+        approvedIntents.push(intent);
+        approvedRiskDecisions.push(riskDecision);
+        this.auditLogger.record("RECOMMENDATION_APPROVED", {
+          cycleCount: this.cycleCount,
+          scopeId: rec.scopeId,
+          agentId: rec.agentId,
+          signal: rec.signal,
+          confidence: rec.confidence,
+        });
+      } else {
+        this.recommendationsRejectedByRisk++;
+        this.auditLogger.record("RECOMMENDATION_REJECTED_BY_RISK", {
+          cycleCount: this.cycleCount,
+          scopeId: rec.scopeId,
+          agentId: rec.agentId,
+          decision: riskDecision.decision,
+          reasonCodes: "reasonCodes" in riskDecision ? riskDecision.reasonCodes : [],
+        });
+      }
+    }
+
     // Run TradingSession cycle with approved intents and their risk decisions
     const result = this.session.runCycle({
       regime: regimeInput,
@@ -1458,7 +1518,9 @@ export class LiveRunner {
       submitted: result.submittedCount,
       blocked: result.blockedCount,
       opportunitiesDetected: opportunities.length,
-      opportunitiesRejectedByRisk: opportunities.length - approvedIntents.length,
+      opportunitiesRejectedByRisk: this.opportunitiesRejectedByRisk,
+      recommendations: this.lastScopeRecommendations.size,
+      recommendationsRejectedByRisk: this.recommendationsRejectedByRisk,
       ordersFilled: this.ordersFilled,
       killSwitchActive: this.session.status.killSwitchActive,
     });

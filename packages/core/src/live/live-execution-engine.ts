@@ -363,31 +363,30 @@ export class LiveExecutionEngine {
       return this.orderRouter.route(intent);
     }
 
-    // No router attached (harness path): simulate the fill and return an
-    // ack derived from the simulated snapshot so downstream tracking is
-    // identical in shape.
-    const adjustedIntent = { ...intent };
-    if (preCheck.approvedQuantity !== undefined) {
-      adjustedIntent.quantity = preCheck.approvedQuantity;
-    }
-    const execution = this.simEngine.submit({
-      intent: adjustedIntent,
-      riskDecision: {
-        decision: "APPROVE",
-        orderIntentIdempotencyKey: intent.idempotencyKey,
-        approvedSize: preCheck.approvedQuantity ?? intent.quantity,
-        approvedLimits: intent.limits,
-        expiresAtMs: intent.expiresAtMs,
-        evaluatedAtMs: intent.createdAtMs,
-      } as RiskDecision,
-      market: {
-        bid: intent.price * 0.999,
-        ask: intent.price * 1.001,
-        mid: intent.price,
-        liquidityUsd: 10_000,
+    // No router attached (harness path): simulate the fill through the
+    // engine's own submit(), so pre-check enforcement and approved-quantity
+    // adjustment stay in a single place and the ack keeps the same shape.
+    const execution = this.submit(
+      {
+        intent,
+        riskDecision: {
+          decision: "APPROVE",
+          orderIntentIdempotencyKey: intent.idempotencyKey,
+          approvedSize: preCheck.approvedQuantity ?? intent.quantity,
+          approvedLimits: intent.limits,
+          expiresAtMs: intent.expiresAtMs,
+          evaluatedAtMs: intent.createdAtMs,
+        } as RiskDecision,
+        market: {
+          bid: intent.price * 0.999,
+          ask: intent.price * 1.001,
+          mid: intent.price,
+          liquidityUsd: 10_000,
+        },
+        submittedAtMs: intent.createdAtMs,
       },
-      submittedAtMs: intent.createdAtMs,
-    });
+      preCheck,
+    );
 
     return {
       orderId: execution.orderId,
