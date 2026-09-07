@@ -52,10 +52,11 @@ computeImpactBps(input: {
 Reuse the `simulateSwap` math (`dex-executor.ts:248-256`): given `reserveIn`, `reserveOut`
 and an in-ratio of the order, compute `priceImpact` and convert to bps:
 `priceImpactBps = priceImpact * 10_000`. This is the AMM's own answer to "how far does the
-execution price move" — no coefficient, no calibration constant. The graph already reads raw
-`reserve0`/`reserve1` from `MarketDataSnapshot`; the impact function consumes **reserves
-directly**, never the summed `depth` (which for PancakeSwap is a raw mixed-token sum, not
-quote notional — a calibration bug to be fixed rather than fed into the model).
+execution price move" — no coefficient, no calibration constant. The impact function consumes
+**reserves directly** once they are carried onto edge weights (see field decision below —
+today `opportunity-detector.ts` drops them at edge-write time), never the summed `depth`
+(which for PancakeSwap is a raw mixed-token sum, not quote notional — a calibration bug to be
+fixed rather than fed into the model).
 
 ### CEX / ORDER_BOOK — depth ladder walk
 
