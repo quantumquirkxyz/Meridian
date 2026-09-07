@@ -282,6 +282,10 @@ export function runSimulatedOpportunityFlow(
     expectedNetProfitUsd: candidate.expectedNetProfitUsd,
     mode: graph.currentMode,
     dataQualityScore: scenario.dataQualityScore,
+    // Simulated flow starts on a clean slate: no losses inside the rolling
+    // 24h/7d windows (rules 2-3 fail closed when this state is missing).
+    dailyLossUsd: 0,
+    weeklyLossUsd: 0,
     evaluatedAtMs: timestampMs,
   });
   audit.record({

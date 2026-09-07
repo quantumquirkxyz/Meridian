@@ -46,6 +46,67 @@ import { SIGNAL_MODES } from "../modes.ts";
  * different thresholds and outcomes, not accidental duplication.
  */
 
+// ── Rolling loss windows ────────────────────────────────────────────
+
+/**
+ * Length of the daily loss window: 24 hours.
+ * Rule 2 (MAX_DAILY_LOSS) rolls over every 24h, never at a calendar-day
+ * boundary — a loss realized 25h ago counts for the weekly rule but no
+ * longer for the daily rule (ADR-0014).
+ */
+export const DAILY_LOSS_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Length of the weekly loss window: 7 days (rolling, not calendar week). */
+export const WEEKLY_LOSS_WINDOW_MS = 7 * DAILY_LOSS_WINDOW_MS;
+
+/** One realized PnL observation used to aggregate trailing-window loss. */
+export interface RealizedPnlEvent {
+  /** Realized PnL in USD; negative = net loss. */
+  pnlUsd: number;
+  /** Unix ms when the PnL was realized. */
+  atMs: number;
+}
+
+/**
+ * True when a realization at `atMs` falls strictly inside the trailing
+ * `windowMs` ending at `nowMs`. This is the single canonical membership rule
+ * for rolling loss windows: an event at exactly `nowMs - windowMs` rolls out.
+ * Both `trailingWindowLoss` (risk) and the canary-session's signed net-PnL
+ * loop share it, so the two loss figures cannot drift apart.
+ */
+export function isWithinRollingWindow(
+  atMs: number,
+  nowMs: number,
+  windowMs: number,
+): boolean {
+  return atMs > nowMs - windowMs;
+}
+
+/**
+ * Cumulative loss (USD) realized inside the trailing `windowMs` ending at
+ * `nowMs`. Events at or before `nowMs - windowMs` roll out of the window
+ * (rolling semantics — no calendar-day/week reset). Net PnL over the window
+ * below zero is floored at 0, matching `dailyLossUsd`/`weeklyLossUsd` input
+ * semantics (negative PnL = loss).
+ *
+ * This is the canonical rollover for the rules 2-3 loss figures; a caller
+ * that tracks realized fills feeds them here, then passes the result to
+ * `RiskEngine.evaluate`.
+ */
+export function trailingWindowLoss(
+  events: readonly RealizedPnlEvent[],
+  nowMs: number,
+  windowMs: number,
+): number {
+  let pnlUsd = 0;
+  for (const event of events) {
+    if (isWithinRollingWindow(event.atMs, nowMs, windowMs)) {
+      pnlUsd += event.pnlUsd;
+    }
+  }
+  return Math.max(0, -pnlUsd);
+}
+
 // ── Policy ──────────────────────────────────────────────────────────
 
 /**
@@ -58,11 +119,11 @@ export interface RiskPolicy {
   maxRiskPerTradeUsd?: number;
 
   // Rule 2: MAX_DAILY_LOSS
-  /** Maximum cumulative loss (USD) allowed in a calendar day. */
+  /** Maximum cumulative loss (USD) allowed over a trailing 24h window (rolling). */
   maxDailyLossUsd?: number;
 
   // Rule 3: MAX_WEEKLY_LOSS
-  /** Maximum cumulative loss (USD) allowed in a calendar week. */
+  /** Maximum cumulative loss (USD) allowed over a trailing 7d window (rolling). */
   maxWeeklyLossUsd?: number;
 
   // Rule 4: MAX_EXPOSURE_PER_TOKEN
@@ -136,6 +197,8 @@ export const DEFAULT_RISK_POLICY: Required<
     | "minLiquidityDepthUsd"
     | "maxFundingCostUsd"
     | "maxCorrelationConcentration"
+    | "maxDailyLossUsd"
+    | "maxWeeklyLossUsd"
   >
 > = {
   maxRiskPerTradeUsd: 1_000_000,
@@ -151,6 +214,10 @@ export const DEFAULT_RISK_POLICY: Required<
   minLiquidityDepthUsd: 10_000,
   maxFundingCostUsd: 20,
   maxCorrelationConcentration: 0.8,
+  // Rules 2-3 active by default (ADR-0014), thresholded to the canary
+  // capital limits (canary-live.json:7-8) over rolling 24h / 7d windows.
+  maxDailyLossUsd: 50,
+  maxWeeklyLossUsd: 100,
 };
 
 // ── Input ───────────────────────────────────────────────────────────
@@ -173,9 +240,13 @@ export interface RiskGateInput {
   dataQualityScore?: number;
 
   // Rule 2 & 3: MAX_DAILY_LOSS / MAX_WEEKLY_LOSS
-  /** Cumulative loss (USD) since start of day. Negative = profit. */
+  /** Cumulative loss (USD) realized in the trailing 24h window ending at
+   * `evaluatedAtMs` (rolling, not calendar-day). Negative = profit. Mandatory
+   * when the daily loss limit is configured — absence fails closed. */
   dailyLossUsd?: number;
-  /** Cumulative loss (USD) since start of week. Negative = profit. */
+  /** Cumulative loss (USD) realized in the trailing 7d window ending at
+   * `evaluatedAtMs` (rolling, not calendar-week). Negative = profit. Mandatory
+   * when the weekly loss limit is configured — absence fails closed. */
   weeklyLossUsd?: number;
 
   // Rules 4–6: exposure
@@ -384,28 +455,44 @@ export class RiskEngine {
 
     // ── Loss limits ─────────────────────────────────────────────────
 
-    // Rule 2: MAX_DAILY_LOSS
-    if (
-      this.policy.maxDailyLossUsd !== undefined &&
-      input.dailyLossUsd !== undefined &&
-      input.dailyLossUsd >= this.policy.maxDailyLossUsd
-    ) {
-      result.decision = "CASH_ONLY";
-      result.reasonCodes.push("MAX_DAILY_LOSS");
-      result.notes = `daily loss ${input.dailyLossUsd} >= limit ${this.policy.maxDailyLossUsd}`;
-      return result;
+    // Rule 2: MAX_DAILY_LOSS. When the limit is configured the loss state is
+    // mandatory: absence fails closed instead of silently disabling the rule.
+    // LOSS_STATE_MISSING (not MAX_DAILY_LOSS) is emitted so callers can tell a
+    // real loss breach apart from missing loss data (review-pr S1).
+    if (this.policy.maxDailyLossUsd !== undefined) {
+      if (input.dailyLossUsd === undefined) {
+        result.decision = "REJECT";
+        result.reasonCodes.push("LOSS_STATE_MISSING");
+        result.notes =
+          "daily loss state missing; cannot evaluate MAX_DAILY_LOSS (fail closed)";
+        return result;
+      }
+      if (input.dailyLossUsd >= this.policy.maxDailyLossUsd) {
+        result.decision = "CASH_ONLY";
+        result.reasonCodes.push("MAX_DAILY_LOSS");
+        result.notes = `daily loss ${input.dailyLossUsd} >= limit ${this.policy.maxDailyLossUsd}`;
+        return result;
+      }
     }
 
-    // Rule 3: MAX_WEEKLY_LOSS
-    if (
-      this.policy.maxWeeklyLossUsd !== undefined &&
-      input.weeklyLossUsd !== undefined &&
-      input.weeklyLossUsd >= this.policy.maxWeeklyLossUsd
-    ) {
-      result.decision = "CANCEL_ONLY";
-      result.reasonCodes.push("MAX_WEEKLY_LOSS");
-      result.notes = `weekly loss ${input.weeklyLossUsd} >= limit ${this.policy.maxWeeklyLossUsd}`;
-      return result;
+    // Rule 3: MAX_WEEKLY_LOSS. When the limit is configured the loss state is
+    // mandatory: absence fails closed instead of silently disabling the rule.
+    // LOSS_STATE_MISSING (not MAX_WEEKLY_LOSS) is emitted so callers can tell a
+    // real loss breach apart from missing loss data (review-pr S1).
+    if (this.policy.maxWeeklyLossUsd !== undefined) {
+      if (input.weeklyLossUsd === undefined) {
+        result.decision = "REJECT";
+        result.reasonCodes.push("LOSS_STATE_MISSING");
+        result.notes =
+          "weekly loss state missing; cannot evaluate MAX_WEEKLY_LOSS (fail closed)";
+        return result;
+      }
+      if (input.weeklyLossUsd >= this.policy.maxWeeklyLossUsd) {
+        result.decision = "CANCEL_ONLY";
+        result.reasonCodes.push("MAX_WEEKLY_LOSS");
+        result.notes = `weekly loss ${input.weeklyLossUsd} >= limit ${this.policy.maxWeeklyLossUsd}`;
+        return result;
+      }
     }
 
     // ── Exposure limits ─────────────────────────────────────────────

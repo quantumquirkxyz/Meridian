@@ -52,6 +52,13 @@ import {
   type CanaryPreCheckResult,
 } from "./live-execution-engine.ts";
 import {
+  DAILY_LOSS_WINDOW_MS,
+  WEEKLY_LOSS_WINDOW_MS,
+  isWithinRollingWindow,
+  trailingWindowLoss,
+  type RealizedPnlEvent,
+} from "../risk/risk-gate.ts";
+import {
   type OrderSnapshot,
 } from "../execution/simulated-execution-engine.ts";
 import { type TradeJournal } from "./trade-journal.ts";
@@ -130,8 +137,6 @@ export class CanarySession {
   private autoKillTrigger?: string;
 
   // Cumulative state
-  private dailyPnlUsd = 0;
-  private weeklyPnlUsd = 0;
   private ordersToday: CanaryOrderRecord[] = [];
   private ordersThisWeek: CanaryOrderRecord[] = [];
   private openOrders: CanaryOrderRecord[] = [];
@@ -146,6 +151,11 @@ export class CanarySession {
   // Day/week tracking
   private currentDay: DayKey = "" as DayKey;
   private currentWeek: WeekKey = "" as WeekKey;
+
+  // Rolling loss tracking (ADR-0014, ticket #130): realized fills stamped with
+  // their resolution time feed DAILY_LOSS_WINDOW_MS / WEEKLY_LOSS_WINDOW_MS so
+  // rules 2-3 roll over 24h/7d instead of resetting at a calendar boundary.
+  private realizedPnlEvents: RealizedPnlEvent[] = [];
 
   constructor(options: CanarySessionOptions = {}) {
     this.config = options.config ?? DEFAULT_CANARY_CONFIG;
@@ -181,8 +191,8 @@ export class CanarySession {
       capitalDeployedUsd: this.capitalDeployedUsd,
       capitalRemainingUsd:
         this.config.capitalLimits.maxCapitalUsd - this.capitalDeployedUsd,
-      dailyPnlUsd: this.dailyPnlUsd,
-      weeklyPnlUsd: this.weeklyPnlUsd,
+      dailyPnlUsd: this.rollingDailyPnlUsd(nowMs),
+      weeklyPnlUsd: this.rollingWeeklyPnlUsd(nowMs),
       orphanOrderCount: this.orphanOrders.length,
       reconciliationUnresolved: this.reconciliationUnresolved,
       autoKillTrigger: this.autoKillTrigger,
@@ -461,8 +471,15 @@ export class CanarySession {
       (this.exposurePerChain[record.venue] ?? 0) - record.notionalUsd;
 
     if (state === "FILLED") {
-      this.dailyPnlUsd += pnlUsd;
-      this.weeklyPnlUsd += pnlUsd;
+      // Rolling: record the realized PnL with a timestamp so rules 2-3 use a
+      // trailing 24h/7d window (ADR-0014) rather than a calendar reset.
+      const atMs = this.now();
+      this.realizedPnlEvents.push({ pnlUsd, atMs });
+      // Prune events older than the widest window so the buffer stays bounded.
+      const cutoff = atMs - WEEKLY_LOSS_WINDOW_MS;
+      this.realizedPnlEvents = this.realizedPnlEvents.filter(
+        (e) => e.atMs > cutoff,
+      );
 
       // Auto-record filled trade to journal (AC1).
       if (this.journal !== undefined) {
@@ -545,15 +562,42 @@ export class CanarySession {
     if (day !== this.currentDay) {
       this.currentDay = day;
       this.ordersToday = [];
-      this.dailyPnlUsd = 0;
     }
 
     const week = toWeekKey(nowMs);
     if (week !== this.currentWeek) {
       this.currentWeek = week;
       this.ordersThisWeek = [];
-      this.weeklyPnlUsd = 0;
     }
+  }
+
+  /** Loss (USD) realized inside the trailing window; canonical rollover. */
+  private rollingLossUsd(nowMs: number, windowMs: number): number {
+    return trailingWindowLoss(this.realizedPnlEvents, nowMs, windowMs);
+  }
+
+  /**
+   * Signed net PnL (USD) realized inside the trailing daily window ending at
+   * `nowMs`. Negative = loss. Uses its own signed loop because the floored
+   * loss figure from `trailingWindowLoss` cannot recover a profitable net;
+   * window membership shares `isWithinRollingWindow`.
+   */
+  private rollingDailyPnlUsd(nowMs: number): number {
+    return this.netPnlInWindow(nowMs, DAILY_LOSS_WINDOW_MS);
+  }
+
+  /** Signed net PnL (USD) realized inside the trailing 7d window. Negative = loss. */
+  private rollingWeeklyPnlUsd(nowMs: number): number {
+    return this.netPnlInWindow(nowMs, WEEKLY_LOSS_WINDOW_MS);
+  }
+
+  /** Signed net PnL (USD) realized inside a trailing window. Negative = loss. */
+  private netPnlInWindow(nowMs: number, windowMs: number): number {
+    let net = 0;
+    for (const event of this.realizedPnlEvents) {
+      if (isWithinRollingWindow(event.atMs, nowMs, windowMs)) net += event.pnlUsd;
+    }
+    return net;
   }
 
   // ── Command Handlers ─────────────────────────────────────────────────
@@ -661,14 +705,15 @@ export class CanarySession {
   private evaluateAutoKillSwitch(): void {
     if (this.killSwitchActive) return;
 
+    const now = this.now();
     const input: KillSwitchInput = {
       alreadyActive: this.killSwitchActive,
-      dailyLossUsd: Math.max(0, -this.dailyPnlUsd),
-      weeklyLossUsd: Math.max(0, -this.weeklyPnlUsd),
+      dailyLossUsd: this.rollingLossUsd(now, DAILY_LOSS_WINDOW_MS),
+      weeklyLossUsd: this.rollingLossUsd(now, WEEKLY_LOSS_WINDOW_MS),
       ordersToday: this.ordersToday.length,
       orphanOrderCount: this.orphanOrders.length,
       reconciliationUnresolved: this.reconciliationUnresolved,
-      nowMs: this.now(),
+      nowMs: now,
       lastAutoKillAtMs: this.lastAutoKillAtMs,
     };
 
@@ -702,7 +747,8 @@ export class CanarySession {
   }
 
   private buildExecutionState(): CanaryExecutionState {
-    this.resetCountersIfNeeded(this.now());
+    const nowMs = this.now();
+    this.resetCountersIfNeeded(nowMs);
     return {
       ordersToday: this.ordersToday,
       ordersThisWeek: this.ordersThisWeek,
@@ -711,8 +757,8 @@ export class CanarySession {
       exposurePerVenue: this.exposurePerVenue,
       exposurePerChain: this.exposurePerChain,
       capitalDeployedUsd: this.capitalDeployedUsd,
-      dailyPnlUsd: this.dailyPnlUsd,
-      weeklyPnlUsd: this.weeklyPnlUsd,
+      dailyPnlUsd: this.rollingDailyPnlUsd(nowMs),
+      weeklyPnlUsd: this.rollingWeeklyPnlUsd(nowMs),
     };
   }
 

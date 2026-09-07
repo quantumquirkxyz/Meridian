@@ -12,6 +12,7 @@ import { isCanaryControlCommand, isCanaryControlStatus } from "@agenttrading/con
 import { KillSwitch } from "../src/live/kill-switch.ts";
 import { LiveExecutionEngine, type CanaryExecutionState } from "../src/live/live-execution-engine.ts";
 import { CanarySession } from "../src/live/canary-session.ts";
+import { DAILY_LOSS_WINDOW_MS } from "../src/risk/risk-gate.ts";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -651,6 +652,142 @@ describe("CanarySession (issue #34)", () => {
 
     expect(session.status.killSwitchActive).toBe(true);
     expect(session.status.autoKillTrigger).toBe("daily-loss");
+  });
+
+  test("rolling daily loss survives a UTC-midnight boundary (no calendar reset)", () => {
+    // 2026-09-06T23:30Z; +2h crosses into 2026-09-07 (also a Sun->Mon week
+    // key change). A calendar-day / calendar-week reset would clear the loss;
+    // rolling semantics must keep it in both windows.
+    const t0 = Date.UTC(2026, 8, 6, 23, 30, 0);
+    let nowMs = t0;
+    const session = new CanarySession({
+      now: () => nowMs,
+      config: canaryConfig({
+        killSwitch: {
+          autoHaltDailyLossUsd: 50,
+          autoHaltWeeklyLossUsd: 300,
+          autoHaltOnOrphans: true,
+          autoHaltOnReconciliationMismatch: true,
+        },
+      }),
+    });
+    session.control("start");
+    session.submitOrder(
+      intent({ idempotencyKey: "loss-order" }),
+      approvedDecision({ orderIntentIdempotencyKey: "loss-order" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    session.notifyOrderResolved("loss-order", "FILLED", -60);
+
+    expect(session.status.killSwitchActive).toBe(true);
+    expect(session.status.dailyPnlUsd).toBe(-60);
+    expect(session.status.weeklyPnlUsd).toBe(-60);
+
+    nowMs = t0 + 2 * 60 * 60 * 1000;
+    expect(session.status.dailyPnlUsd).toBe(-60);
+    expect(session.status.weeklyPnlUsd).toBe(-60);
+    expect(session.status.killSwitchActive).toBe(true);
+  });
+
+  test("rolling daily pnl drops a fill exactly at the window cutoff (agrees with trailingWindowLoss)", () => {
+    // Mirrors the risk-gate cutoff rule (event.atMs > nowMs - windowMs): an
+    // event realized exactly `windowMs` ago rolls out of the trailing window
+    // but stays in the window an instant earlier. Both the session's signed
+    // loop and trailingWindowLoss must use the same cutoff, or the kill
+    // switch (trailingWindowLoss) and the pre-check/gate (signed loop) would
+    // enforce different windows.
+    let nowMs = FIXED_TS;
+    const session = new CanarySession({
+      now: () => nowMs,
+      config: canaryConfig({
+        killSwitch: {
+          autoHaltDailyLossUsd: 1_000,
+          autoHaltWeeklyLossUsd: 1_000,
+          autoHaltOnOrphans: true,
+          autoHaltOnReconciliationMismatch: true,
+        },
+      }),
+    });
+    session.control("start");
+    session.submitOrder(
+      intent({ idempotencyKey: "loss-order" }),
+      approvedDecision({ orderIntentIdempotencyKey: "loss-order" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    session.notifyOrderResolved("loss-order", "FILLED", -60);
+
+    nowMs = FIXED_TS + DAILY_LOSS_WINDOW_MS - 1;
+    expect(session.status.dailyPnlUsd).toBe(-60);
+
+    nowMs = FIXED_TS + DAILY_LOSS_WINDOW_MS;
+    expect(session.status.dailyPnlUsd).toBe(0);
+  });
+
+  test("rolling daily loss still blocks the canary pre-check after a calendar boundary", () => {
+    const t0 = Date.UTC(2026, 8, 6, 23, 30, 0);
+    let nowMs = t0;
+    const session = new CanarySession({
+      now: () => nowMs,
+      config: canaryConfig({
+        capitalLimits: {
+          ...DEFAULT_CANARY_CONFIG.capitalLimits,
+          maxDailyLossUsd: 40,
+        },
+        killSwitch: {
+          autoHaltDailyLossUsd: 1_000,
+          autoHaltWeeklyLossUsd: 1_000,
+          autoHaltOnOrphans: true,
+          autoHaltOnReconciliationMismatch: true,
+        },
+      }),
+    });
+    session.control("start");
+    session.submitOrder(
+      intent({ idempotencyKey: "loss-order" }),
+      approvedDecision({ orderIntentIdempotencyKey: "loss-order" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    session.notifyOrderResolved("loss-order", "FILLED", -60);
+
+    const first = session.submitOrder(
+      intent({ idempotencyKey: "next-order" }),
+      approvedDecision({ orderIntentIdempotencyKey: "next-order" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    expect(first.preCheck.allowed).toBe(false);
+    expect(first.preCheck.blockReason).toBe("DAILY_LOSS_LIMIT");
+
+    nowMs = t0 + 2 * 60 * 60 * 1000;
+    const afterMidnight = session.submitOrder(
+      intent({ idempotencyKey: "after-midnight" }),
+      approvedDecision({ orderIntentIdempotencyKey: "after-midnight" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    expect(afterMidnight.preCheck.allowed).toBe(false);
+    expect(afterMidnight.preCheck.blockReason).toBe("DAILY_LOSS_LIMIT");
+  });
+
+  test("rolling loss rolls out of the 24h window but stays in the 7d window", () => {
+    const t0 = Date.UTC(2026, 9, 1, 12, 0, 0);
+    let nowMs = t0;
+    const session = new CanarySession({
+      now: () => nowMs,
+      config: DEFAULT_CANARY_CONFIG,
+    });
+    session.control("start");
+    session.submitOrder(
+      intent({ idempotencyKey: "loss-order" }),
+      approvedDecision({ orderIntentIdempotencyKey: "loss-order" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    session.notifyOrderResolved("loss-order", "FILLED", -60);
+
+    expect(session.status.dailyPnlUsd).toBe(-60);
+    expect(session.status.weeklyPnlUsd).toBe(-60);
+
+    nowMs = t0 + 25 * 60 * 60 * 1000;
+    expect(session.status.dailyPnlUsd).toBe(0);
+    expect(session.status.weeklyPnlUsd).toBe(-60);
   });
 
   test("automatic kill switch triggers on orphan orders", () => {

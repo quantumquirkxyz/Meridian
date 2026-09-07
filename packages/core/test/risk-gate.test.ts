@@ -9,6 +9,9 @@ import {
   RiskEngine,
   activeRules,
   RISK_APPROVAL_TTL_MS,
+  DAILY_LOSS_WINDOW_MS,
+  WEEKLY_LOSS_WINDOW_MS,
+  trailingWindowLoss,
   type RiskPolicy,
   type RiskGateInput,
 } from "../src/risk/risk-gate.ts";
@@ -37,6 +40,10 @@ function baseInput(overrides: Partial<RiskGateInput> = {}): RiskGateInput {
     orderIntent: intent(),
     expectedNetProfitUsd: 5,
     mode: "NORMAL",
+    // Rules 2-3 are active in the default policy: clean slate with no losses
+    // inside the rolling 24h/7d windows.
+    dailyLossUsd: 0,
+    weeklyLossUsd: 0,
     evaluatedAtMs: 0,
     ...overrides,
   };
@@ -107,6 +114,18 @@ describe("Rule 2: MAX_DAILY_LOSS", () => {
     expect(decision.decision).toBe("CASH_ONLY");
   });
 
+  test("fails closed when daily loss state is missing", () => {
+    const decision = engine.evaluate(
+      baseInput({ dailyLossUsd: undefined }),
+    );
+    expect(decision.decision).toBe("REJECT");
+    if (decision.decision === "REJECT") {
+      expect(decision.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(decision.reasonCodes).not.toContain("MAX_DAILY_LOSS");
+    }
+    expect(decision.notes).toMatch(/missing/i);
+  });
+
   test("rule not enforced when policy field is undefined", () => {
     const engine2 = new RiskEngine({
       ...DEFAULT_RISK_POLICY,
@@ -141,6 +160,18 @@ describe("Rule 3: MAX_WEEKLY_LOSS", () => {
   test("blocks with CANCEL_ONLY when weekly loss exceeds limit", () => {
     const decision = engine.evaluate(baseInput({ weeklyLossUsd: 3_000 }));
     expect(decision.decision).toBe("CANCEL_ONLY");
+  });
+
+  test("fails closed when weekly loss state is missing", () => {
+    const decision = engine.evaluate(
+      baseInput({ weeklyLossUsd: undefined }),
+    );
+    expect(decision.decision).toBe("REJECT");
+    if (decision.decision === "REJECT") {
+      expect(decision.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(decision.reasonCodes).not.toContain("MAX_WEEKLY_LOSS");
+    }
+    expect(decision.notes).toMatch(/missing/i);
   });
 
   test("rule not enforced when policy field is undefined", () => {
@@ -769,6 +800,71 @@ describe("DEFAULT_RISK_POLICY enforces the full rule set by default", () => {
     }
   });
 
+  test("default policy activates daily/weekly loss limits at canary thresholds", () => {
+    expect(DEFAULT_RISK_POLICY.maxDailyLossUsd).toBe(50);
+    expect(DEFAULT_RISK_POLICY.maxWeeklyLossUsd).toBe(100);
+    const rules = activeRules(DEFAULT_RISK_POLICY);
+    expect(rules).toContain("MAX_DAILY_LOSS");
+    expect(rules).toContain("MAX_WEEKLY_LOSS");
+    expect(rules).not.toContain("LOSS_STATE_MISSING");
+  });
+
+  test("default policy rejects when rolling-24h loss reaches the daily cap", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(
+      baseInput({ dailyLossUsd: 50, weeklyLossUsd: 40 }),
+    );
+    expect(decision.decision).toBe("CASH_ONLY");
+    if (decision.decision === "CASH_ONLY") {
+      expect(decision.reasonCodes).toContain("MAX_DAILY_LOSS");
+    }
+  });
+
+  test("default policy rejects when rolling-7d loss reaches the weekly cap", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(
+      baseInput({ dailyLossUsd: 40, weeklyLossUsd: 100 }),
+    );
+    expect(decision.decision).toBe("CANCEL_ONLY");
+    if (decision.decision === "CANCEL_ONLY") {
+      expect(decision.reasonCodes).toContain("MAX_WEEKLY_LOSS");
+    }
+  });
+
+  test("default policy approves when losses stay under both caps", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const decision = engine.evaluate(
+      baseInput({
+        dailyLossUsd: 40,
+        weeklyLossUsd: 80,
+        tokenExposureUsd: 5_000,
+        venueExposureUsd: 10_000,
+        chainExposureUsd: 20_000,
+        openOrderCount: 3,
+        liquidityDepthUsd: 50_000,
+        fundingCostUsd: 5,
+        riskConcentration: 0.3,
+      }),
+    );
+    expect(decision.decision).toBe("APPROVE");
+  });
+
+  test("default policy fails closed when loss state is omitted", () => {
+    const engine = new RiskEngine(DEFAULT_RISK_POLICY);
+    const daily = engine.evaluate(baseInput({ dailyLossUsd: undefined }));
+    expect(daily.decision).toBe("REJECT");
+    if (daily.decision === "REJECT") {
+      expect(daily.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(daily.reasonCodes).not.toContain("MAX_DAILY_LOSS");
+    }
+    const weekly = engine.evaluate(baseInput({ weeklyLossUsd: undefined }));
+    expect(weekly.decision).toBe("REJECT");
+    if (weekly.decision === "REJECT") {
+      expect(weekly.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(weekly.reasonCodes).not.toContain("MAX_WEEKLY_LOSS");
+    }
+  });
+
   test("default thresholds approve a clean intent", () => {
     const engine = new RiskEngine(DEFAULT_RISK_POLICY);
     const decision = engine.evaluate(
@@ -834,6 +930,41 @@ describe("DEFAULT_RISK_POLICY enforces the full rule set by default", () => {
     if (decision.decision === "REJECT") {
       expect(decision.reasonCodes).toContain("MAX_CORRELATION_CONCENTRATION");
     }
+  });
+});
+
+// ── Rolling loss windows (rules 2-3, ADR-0014) ──────────────────────
+
+describe("Rolling loss windows", () => {
+  test("daily window is 24h and weekly window is 7 days", () => {
+    expect(DAILY_LOSS_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
+    expect(WEEKLY_LOSS_WINDOW_MS).toBe(7 * 86_400_000);
+  });
+
+  test("trailingWindowLoss counts only losses inside the window (rolling reset)", () => {
+    const nowMs = 10_000_000;
+    // 25h ago: rolls out of the 24h window but stays in the 7d window.
+    const events = [
+      { pnlUsd: -60, atMs: nowMs - 25 * 60 * 60 * 1000 },
+      { pnlUsd: -20, atMs: nowMs - 2 * 60 * 60 * 1000 },
+    ];
+    expect(trailingWindowLoss(events, nowMs, DAILY_LOSS_WINDOW_MS)).toBe(20);
+    expect(trailingWindowLoss(events, nowMs, WEEKLY_LOSS_WINDOW_MS)).toBe(80);
+  });
+
+  test("trailingWindowLoss floors net profit at zero", () => {
+    const nowMs = 10_000_000;
+    const events = [
+      { pnlUsd: 10, atMs: nowMs - 60_000 },
+      { pnlUsd: -4, atMs: nowMs - 30_000 },
+    ];
+    expect(trailingWindowLoss(events, nowMs, DAILY_LOSS_WINDOW_MS)).toBe(0);
+  });
+
+  test("trailingWindowLoss drops the event exactly at the window cutoff", () => {
+    const nowMs = 10_000_000;
+    const events = [{ pnlUsd: -50, atMs: nowMs - DAILY_LOSS_WINDOW_MS }];
+    expect(trailingWindowLoss(events, nowMs, DAILY_LOSS_WINDOW_MS)).toBe(0);
   });
 });
 
