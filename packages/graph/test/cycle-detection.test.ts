@@ -278,8 +278,10 @@ describe("detectCycleCandidates", () => {
       ],
     );
     // Product: 15 * 3000 * (1/42000) = 45000/42000 ≈ 1.071 (profitable)
+    // Failure risk at the bottleneck (30_000 x combined p ~0.116) is
+    // ~3_466 as an expected loss, so the spread must clear that.
     const candidates = detectCycleCandidates(snap, {
-      grossSpreadUsd: 100,
+      grossSpreadUsd: 5_000,
     });
     expect(candidates.length).toBeGreaterThanOrEqual(1);
 
