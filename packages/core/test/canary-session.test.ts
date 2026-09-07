@@ -12,6 +12,7 @@ import { isCanaryControlCommand, isCanaryControlStatus } from "@agenttrading/con
 import { KillSwitch } from "../src/live/kill-switch.ts";
 import { LiveExecutionEngine, type CanaryExecutionState } from "../src/live/live-execution-engine.ts";
 import { CanarySession } from "../src/live/canary-session.ts";
+import { DAILY_LOSS_WINDOW_MS } from "../src/risk/risk-gate.ts";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -686,6 +687,40 @@ describe("CanarySession (issue #34)", () => {
     expect(session.status.dailyPnlUsd).toBe(-60);
     expect(session.status.weeklyPnlUsd).toBe(-60);
     expect(session.status.killSwitchActive).toBe(true);
+  });
+
+  test("rolling daily pnl drops a fill exactly at the window cutoff (agrees with trailingWindowLoss)", () => {
+    // Mirrors the risk-gate cutoff rule (event.atMs > nowMs - windowMs): an
+    // event realized exactly `windowMs` ago rolls out of the trailing window
+    // but stays in the window an instant earlier. Both the session's signed
+    // loop and trailingWindowLoss must use the same cutoff, or the kill
+    // switch (trailingWindowLoss) and the pre-check/gate (signed loop) would
+    // enforce different windows.
+    let nowMs = FIXED_TS;
+    const session = new CanarySession({
+      now: () => nowMs,
+      config: canaryConfig({
+        killSwitch: {
+          autoHaltDailyLossUsd: 1_000,
+          autoHaltWeeklyLossUsd: 1_000,
+          autoHaltOnOrphans: true,
+          autoHaltOnReconciliationMismatch: true,
+        },
+      }),
+    });
+    session.control("start");
+    session.submitOrder(
+      intent({ idempotencyKey: "loss-order" }),
+      approvedDecision({ orderIntentIdempotencyKey: "loss-order" }),
+      { bid: 99, ask: 101, mid: 100, liquidityUsd: 10_000 },
+    );
+    session.notifyOrderResolved("loss-order", "FILLED", -60);
+
+    nowMs = FIXED_TS + DAILY_LOSS_WINDOW_MS - 1;
+    expect(session.status.dailyPnlUsd).toBe(-60);
+
+    nowMs = FIXED_TS + DAILY_LOSS_WINDOW_MS;
+    expect(session.status.dailyPnlUsd).toBe(0);
   });
 
   test("rolling daily loss still blocks the canary pre-check after a calendar boundary", () => {

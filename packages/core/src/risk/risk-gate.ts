@@ -68,6 +68,21 @@ export interface RealizedPnlEvent {
 }
 
 /**
+ * True when a realization at `atMs` falls strictly inside the trailing
+ * `windowMs` ending at `nowMs`. This is the single canonical membership rule
+ * for rolling loss windows: an event at exactly `nowMs - windowMs` rolls out.
+ * Both `trailingWindowLoss` (risk) and the canary-session's signed net-PnL
+ * loop share it, so the two loss figures cannot drift apart.
+ */
+export function isWithinRollingWindow(
+  atMs: number,
+  nowMs: number,
+  windowMs: number,
+): boolean {
+  return atMs > nowMs - windowMs;
+}
+
+/**
  * Cumulative loss (USD) realized inside the trailing `windowMs` ending at
  * `nowMs`. Events at or before `nowMs - windowMs` roll out of the window
  * (rolling semantics — no calendar-day/week reset). Net PnL over the window
@@ -83,10 +98,9 @@ export function trailingWindowLoss(
   nowMs: number,
   windowMs: number,
 ): number {
-  const cutoff = nowMs - windowMs;
   let pnlUsd = 0;
   for (const event of events) {
-    if (event.atMs > cutoff) {
+    if (isWithinRollingWindow(event.atMs, nowMs, windowMs)) {
       pnlUsd += event.pnlUsd;
     }
   }

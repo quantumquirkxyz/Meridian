@@ -54,6 +54,7 @@ import {
 import {
   DAILY_LOSS_WINDOW_MS,
   WEEKLY_LOSS_WINDOW_MS,
+  isWithinRollingWindow,
   trailingWindowLoss,
   type RealizedPnlEvent,
 } from "../risk/risk-gate.ts";
@@ -578,7 +579,8 @@ export class CanarySession {
   /**
    * Signed net PnL (USD) realized inside the trailing daily window ending at
    * `nowMs`. Negative = loss. Uses its own signed loop because the floored
-   * loss figure from `trailingWindowLoss` cannot recover a profitable net.
+   * loss figure from `trailingWindowLoss` cannot recover a profitable net;
+   * window membership shares `isWithinRollingWindow`.
    */
   private rollingDailyPnlUsd(nowMs: number): number {
     return this.netPnlInWindow(nowMs, DAILY_LOSS_WINDOW_MS);
@@ -593,7 +595,7 @@ export class CanarySession {
   private netPnlInWindow(nowMs: number, windowMs: number): number {
     let net = 0;
     for (const event of this.realizedPnlEvents) {
-      if (event.atMs > nowMs - windowMs) net += event.pnlUsd;
+      if (isWithinRollingWindow(event.atMs, nowMs, windowMs)) net += event.pnlUsd;
     }
     return net;
   }
