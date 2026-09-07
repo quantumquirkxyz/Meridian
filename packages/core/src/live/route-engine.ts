@@ -23,7 +23,6 @@
 
 import { computeRouteCost } from "@agenttrading/graph";
 import type {
-  CostBreakdown,
   MarketEdge,
   MarketGraphSnapshot,
   MarketNode,
@@ -94,20 +93,6 @@ function avgConcentration(concentrations: Record<string, number>): number {
   const values = Object.values(concentrations);
   if (values.length === 0) return 0;
   return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
-
-/** Sum the full RISK.md net-profit cost stack (ADR-0014). */
-function totalCost(costs: CostBreakdown): number {
-  return (
-    costs.tradingFeesUsd +
-    costs.slippageUsd +
-    costs.gasUsd +
-    costs.bridgeCostUsd +
-    costs.fundingCostUsd +
-    costs.latencyRiskUsd +
-    costs.failureRiskUsd +
-    costs.safetyBufferUsd
-  );
 }
 
 /**
@@ -304,11 +289,11 @@ export class RouteEngine {
     enrichConcentrationFromNodes(pathNodes, riskConcentration);
 
     // Canonical expected net profit (ADR-0014, issue #134): the gross
-    // spread minus the full RISK.md cost stack. The cost stack is
-    // aggregated by @agenttrading/graph — the single source of truth —
-    // and no longer by a local min-edge model.
+    // spread minus the full RISK.md cost stack. The cost stack and its
+    // single sum are aggregated by @agenttrading/graph — the single
+    // source of truth — and no longer by a local min-edge model.
     const routeCost = computeRouteCost(snapshot, path.nodes);
-    const expectedNetProfitUsd = grossSpreadUsd - totalCost(routeCost.costs);
+    const expectedNetProfitUsd = grossSpreadUsd - routeCost.totalCostUsd;
 
     // Score the route.
     const score = computeScore(

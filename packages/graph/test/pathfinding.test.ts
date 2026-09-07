@@ -237,6 +237,10 @@ describe("computeRouteCost", () => {
     expect(cost.costs.slippageUsd).toBe(3); // 2 + 1
     expect(cost.costs.gasUsd).toBe(15); // 10 + 5
     expect(cost.costs.latencyRiskUsd).toBeCloseTo(0.15); // 150 * 0.001
+    // totalCostUsd exposes the single RISK.md sum (ADR-0014, issue #134):
+    // 8 fees + 3 slippage + 15 gas + 0 bridge + 0 funding +
+    // 0.15 latency + 0 failure risk + 1.0 safety buffer = 27.15.
+    expect(cost.totalCostUsd).toBeCloseTo(27.15, 2);
     expect(cost.hops).toBe(2);
   });
 
@@ -244,6 +248,7 @@ describe("computeRouteCost", () => {
     const snap = makeSnapshot([], []);
     const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
     expect(cost.costs.tradingFeesUsd).toBe(Infinity);
+    expect(cost.totalCostUsd).toBe(Infinity);
     // No deployable capital (bottleneck 0) on a non-executable route,
     // so the failure risk is a defined 0, never the legacy forced 100.
     expect(cost.costs.failureRiskUsd).toBe(0);
