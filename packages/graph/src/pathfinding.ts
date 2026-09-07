@@ -358,7 +358,9 @@ export function computeRouteCost(
 
     // BRIDGE edges carry their cost in the dedicated bridgeCostUsd weight;
     // they have no trading fee to accumulate.
-    if (edge.type !== "BRIDGE") {
+    if (edge.type === "BRIDGE") {
+      bridgeCostUsd += w.bridgeCostUsd ?? 0;
+    } else {
       tradingFeesUsd += w.fee ?? 0;
     }
     slippageUsd += w.expectedSlippage ?? 0;
@@ -375,11 +377,6 @@ export function computeRouteCost(
     const pFail = w.failureProbability ?? 0;
     if (pFail > 0) {
       failuresSeen *= 1 - pFail;
-    }
-
-    // BRIDGE edges carry a dedicated bridge cost weight.
-    if (edge.type === "BRIDGE") {
-      bridgeCostUsd += w.bridgeCostUsd ?? 0;
     }
   }
 
