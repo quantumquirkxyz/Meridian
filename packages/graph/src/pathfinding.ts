@@ -386,6 +386,12 @@ export function computeRouteCost(
   combinedFailureProb = 1 - failuresSeen;
   if (!Number.isFinite(bottleneckLiquidity)) bottleneckLiquidity = 0;
 
+  // Expected loss on the maximum capital the route can deploy: the
+  // bottleneck (minimum) liquidity, scaled by the combined failure
+  // probability (ADR-0014). maxCapitalUsd = 0 when the route is
+  // non-executable, so its failure risk is zero.
+  const failureRiskUsd = bottleneckLiquidity * combinedFailureProb;
+
   const costs: CostBreakdown = {
     tradingFeesUsd,
     slippageUsd,
@@ -393,7 +399,7 @@ export function computeRouteCost(
     bridgeCostUsd,
     fundingCostUsd,
     latencyRiskUsd,
-    failureRiskUsd: combinedFailureProb * 100, // scale to USD estimate
+    failureRiskUsd,
     safetyBufferUsd,
   };
 
@@ -418,7 +424,7 @@ function makeInfiniteCost(route: Route): RouteCost {
       bridgeCostUsd: 0,
       fundingCostUsd: 0,
       latencyRiskUsd: 0,
-      failureRiskUsd: 100,
+      failureRiskUsd: 0,
       safetyBufferUsd: 0,
     },
     bottleneckLiquidityUsd: 0,
