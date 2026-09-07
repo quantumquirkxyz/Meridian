@@ -125,9 +125,29 @@ _Avoid_: treating the venue's raw API client as the connector; importing connect
 The on-chain execution component for DEX venues. It connects to EVM-compatible chains via RPC, manages nonces and gas, simulates swaps, and signs and submits transactions on-chain.
 _Avoid_: using a DEX market-data connector as if it could execute swaps; treating the executor as the venue itself.
 
-**OpportunityCandidate:**
-A prospective tradable opportunity with expected net profit (after fees, slippage, gas, bridges, funding, latency, and safety buffer), route, costs, and invalidation reasons. It is the only analysis artifact that enters the operational cycle toward `OrderIntent`.
-_Avoid_: signal without net costs; conflating with **Hypothesis**.
+**Expected Net Profit (`expectedNetProfitUsd`):**
+The single canonical net-profit figure after the full cost stack prescribed by the net profit formula: `grossSpreadUsd` minus trading fees, slippage, gas, bridge cost, funding, latency risk, failure risk, and safety buffer (ADR-0014). It is the money number the Risk Engine checks (`MIN_EDGE`).
+_Avoid_: per-edge minimum margins; any net-profit figure not produced by the canonical cost-stack sum.
+
+**Cost Stack:**
+The complete set of costs a route must clear for an opportunity to exist: trading fees, slippage, gas, bridge cost, funding, latency risk, failure risk, and safety buffer.
+_Avoid_: gross spread without costs; a partial cost list treated as the full stack.
+
+**Failure Risk (`failureRiskUsd`):**
+The expected loss of a route: `maxCapitalUsd × combinedFailureProbability`. It is a USD figure, not a raw probability.
+_Avoid_: a probability scaled by an arbitrary constant; an averaged per-edge failure probability in place of the combined one.
+
+**Combined Failure Probability:**
+`1 − ∏(1 − pᵢ)` over a route's edges, the probability that at least one edge fails assuming independent edge failures.
+_Avoid_: a plain average of per-edge failure probabilities.
+
+**Bridge Cost (`bridgeCostUsd`):**
+A dedicated weight on `BRIDGE` edges (cost, latency, and failure of the bridge), summed along the route. It is not a trading fee and must not be folded into the trading-fee weight.
+_Avoid_: a flat per-edge surcharge; reusing the trading-fee weight `w.fee` for bridges.
+
+**Loss Limit (daily/weekly):**
+The maximum cumulative loss allowed over a rolling 24h / 7d window before the system defers or reduces activity. Enforced by default in the risk policy.
+_Avoid_: calendar-day/week interpretation that resets on local midnight; treating daily/weekly loss as optional policy.
 
 **Hypothesis:**
 A retrospective analysis artifact produced by the **Learning Loop** — patterns, lessons, and edge-decay observations derived from trade outcomes. It never becomes an `OrderIntent`; it only proposes candidate definitions for human review, then iteration.
