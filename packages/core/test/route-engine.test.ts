@@ -10,6 +10,12 @@ import { DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
 import { scoreRoute } from "@agenttrading/graph";
 import { RouteEngine } from "../src/live/route-engine.ts";
 import { SystemicRiskOverlayEngine } from "../src/live/systemic-risk-overlay.ts";
+import {
+  ORDER_BOOK_GROSS_SPREAD_USD,
+  ORDER_BOOK_ROUTE,
+  ORDER_BOOK_TOTAL_COST_USD,
+  orderBookEdges,
+} from "./fixtures/order-book.ts";
 
 // ── Test helpers ────────────────────────────────────────────────────
 
@@ -863,61 +869,31 @@ describe("Route scoring", () => {
 
 // ── Canonical net profit (issue #134) ───────────────────────────────
 
-/**
- * Two-hop ORDER_BOOK route: asset:BTC → venue:bybit → asset:ETH.
- * Weights are fixed so the canonical cost stack is a known figure:
- *   fees 0.4+0.3 = 0.7, slippage 0.1+0.15 = 0.25, gas 0.2+0.15 = 0.35,
- *   latency (50+40)*0.001 = 0.09, failure 60_000 * (1 - .999*.998) = 179.88,
- *   safety buffer 1.0  →  totalCost = 182.27.
- */
-const BYBIT_ROUTE = [
-  node("asset:BTC", "ASSET"),
-  node("venue:bybit", "VENUE"),
-  node("asset:ETH", "ASSET"),
-];
+const bybitRouteNodes: MarketNode[] = ORDER_BOOK_ROUTE.map((id) =>
+  node(id, id.startsWith("venue:") ? "VENUE" : "ASSET"),
+);
 
 function bybitRouteEdges(price1: number, price2: number): MarketEdge[] {
-  return [
-    edge("e1", "asset:BTC", "venue:bybit", "ORDER_BOOK", {
-      price: price1,
-      fee: 0.4,
-      expectedSlippage: 0.1,
-      gasCost: 0.2,
-      latencyMs: 50,
-      liquidityUsd: 80_000,
-      confidence: 0.92,
-      riskScore: 0.05,
-      failureProbability: 0.001,
-    }),
-    edge("e2", "venue:bybit", "asset:ETH", "ORDER_BOOK", {
-      price: price2,
-      fee: 0.3,
-      expectedSlippage: 0.15,
-      gasCost: 0.15,
-      latencyMs: 40,
-      liquidityUsd: 60_000,
-      confidence: 0.88,
-      riskScore: 0.06,
-      failureProbability: 0.002,
-    }),
-  ];
+  return orderBookEdges(price1, price2).map((def, i) =>
+    edge(`e${i + 1}`, def.from, def.to, def.type, def.weights),
+  );
 }
 
 describe("Canonical net profit (issue #134)", () => {
   test("parity: route-engine expectedNetProfitUsd equals graph scoreRoute", () => {
     // Non-profitable route: gross 12+8=20 < totalCost 182.27 → net -162.27.
-    const losingSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(12, 8));
+    const losingSnap = snapshot(bybitRouteNodes, bybitRouteEdges(12, 8));
     const engine = new RouteEngine(config(), () => NOW_MS);
     const losingResult = engine.discover(losingSnap, NOW_MS);
 
     const losingRoute = losingResult.routes.find(
-      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+      (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(losingRoute).toBeDefined();
 
     const losingCandidate = scoreRoute(
       losingSnap,
-      ["asset:BTC", "venue:bybit", "asset:ETH"],
+      [...ORDER_BOOK_ROUTE],
       20,
     );
     expect(losingCandidate).toBeDefined();
@@ -925,38 +901,41 @@ describe("Canonical net profit (issue #134)", () => {
       losingCandidate!.expectedNetProfitUsd,
       10,
     );
-    expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(20 - 182.27, 2);
+    expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(20 - ORDER_BOOK_TOTAL_COST_USD, 2);
 
     // Profitable route: gross 150+120=270 → net 87.73.
-    const winningSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(150, 120));
+    const winningSnap = snapshot(bybitRouteNodes, bybitRouteEdges(150, 120));
     const winningResult = engine.discover(winningSnap, NOW_MS);
 
     const winningRoute = winningResult.routes.find(
-      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+      (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(winningRoute).toBeDefined();
 
     const winningCandidate = scoreRoute(
       winningSnap,
-      ["asset:BTC", "venue:bybit", "asset:ETH"],
-      270,
+      [...ORDER_BOOK_ROUTE],
+      ORDER_BOOK_GROSS_SPREAD_USD,
     );
     expect(winningCandidate).toBeDefined();
     expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(
       winningCandidate!.expectedNetProfitUsd,
       10,
     );
-    expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(270 - 182.27, 2);
+    expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(
+      ORDER_BOOK_GROSS_SPREAD_USD - ORDER_BOOK_TOTAL_COST_USD,
+      2,
+    );
   });
 
   test("MIN_EDGE gating uses the canonical figure", () => {
     // Non-profitable route is not executable under the canonical cost stack.
-    const losingSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(12, 8));
+    const losingSnap = snapshot(bybitRouteNodes, bybitRouteEdges(12, 8));
     const engine = new RouteEngine(config(), () => NOW_MS);
     const losingResult = engine.discover(losingSnap, NOW_MS);
 
     const losingRoute = losingResult.routes.find(
-      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+      (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(losingRoute).toBeDefined();
     expect(losingRoute!.status).toBe("EXPIRED");
@@ -965,18 +944,18 @@ describe("Canonical net profit (issue #134)", () => {
     // The graph aggregator agrees: the same figure yields INVALID + MIN_EDGE.
     const losingCandidate = scoreRoute(
       losingSnap,
-      ["asset:BTC", "venue:bybit", "asset:ETH"],
+      [...ORDER_BOOK_ROUTE],
       20,
     );
     expect(losingCandidate!.status).toBe("INVALID");
     expect(losingCandidate!.invalidationReasons).toContain("MIN_EDGE");
 
     // Profitable route stays LIVE and unmatched by any MIN_EDGE gate.
-    const winningSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(150, 120));
+    const winningSnap = snapshot(bybitRouteNodes, bybitRouteEdges(150, 120));
     const winningResult = engine.discover(winningSnap, NOW_MS);
 
     const winningRoute = winningResult.routes.find(
-      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+      (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(winningRoute).toBeDefined();
     expect(winningRoute!.status).toBe("LIVE");

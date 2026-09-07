@@ -361,7 +361,6 @@ export class LiveRunner {
     this.opportunityDetector = new OpportunityDetector({
       minNetProfitUsd: 0.1,
       feeBps: this.config.feeBps,
-      safetyBufferUsd: 0.1,
       maxRouteLength: 3,
     }, this.nowMs);
 

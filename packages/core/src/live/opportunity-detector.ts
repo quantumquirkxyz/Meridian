@@ -8,7 +8,8 @@
  *   2. Builds/updates a MarketGraph with ASSET and VENUE nodes
  *   3. Creates ORDER_BOOK edges with price/fee/liquidity weights
  *   4. Uses RouteEngine to discover profitable cycles
- *   5. Converts routes to OpportunityCandidates with full cost breakdown
+ *   5. Converts routes to OpportunityCandidates scored on the canonical
+ *      expectedNetProfitUsd with the canonical cost breakdown (ADR-0014)
  *
  * CONTEXT.md compliance:
  *   - §2: Exploits liquidity fragmentation (price differences between venues)
@@ -17,8 +18,6 @@
  */
 
 import type {
-  CostBreakdown,
-  MarketEdge,
   MarketDataSnapshot,
   OpportunityCandidate,
   OrderIntent,
@@ -27,7 +26,7 @@ import type {
   Route,
 } from "@agenttrading/contracts";
 import { CANDIDATE_STATUS, DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
-import { MarketGraph } from "@agenttrading/graph";
+import { computeRouteCost, MarketGraph } from "@agenttrading/graph";
 import { RouteEngine } from "./route-engine.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -37,8 +36,6 @@ export interface OpportunityDetectorConfig {
   minNetProfitUsd: number;
   /** Trading fee rate in basis points (default: 10 = 0.1%). */
   feeBps: number;
-  /** Safety buffer in USD added to costs. */
-  safetyBufferUsd: number;
   /** Maximum route length (hops) to consider. */
   maxRouteLength: number;
 }
@@ -46,7 +43,6 @@ export interface OpportunityDetectorConfig {
 export const DEFAULT_OPPORTUNITY_DETECTOR_CONFIG: OpportunityDetectorConfig = {
   minNetProfitUsd: 0.5,
   feeBps: 10,
-  safetyBufferUsd: 0.25,
   maxRouteLength: 4,
 };
 
@@ -214,7 +210,14 @@ export class OpportunityDetector {
   }
 
   /**
-   * Convert a discovered Route into an OpportunityCandidate with full cost breakdown.
+   * Convert a discovered Route into an OpportunityCandidate with the canonical
+   * cost breakdown.
+   *
+   * The candidate is scored on `route.expectedNetProfitUsd` — the same figure
+   * the route engine gates (MIN_EDGE) and the risk gate evaluates. The cost
+   * breakdown and its single sum come from `computeRouteCost` in
+   * `@agenttrading/graph`, the single source of truth for the RISK.md net
+   * profit formula (ADR-0014). This detector owns no cost math.
    */
   private routeToCandidate(
     route: Route,
@@ -222,9 +225,8 @@ export class OpportunityDetector {
   ): OpportunityCandidate | null {
     if (route.nodes.length < 2) return null;
 
-    const costs = this.computeCostBreakdown(route);
-    const grossSpreadUsd = route.expectedNetProfitUsd + this.totalCosts(costs);
-    const netProfit = grossSpreadUsd - this.totalCosts(costs);
+    const routeCost = computeRouteCost(snapshot, route.nodes);
+    const netProfit = route.expectedNetProfitUsd;
 
     const invalidationReasons: RiskReasonCode[] = [];
     if (netProfit < this.config.minNetProfitUsd) {
@@ -235,107 +237,16 @@ export class OpportunityDetector {
       id: `opp:${route.routeId}:${this.now()}`,
       snapshotId: snapshot.snapshotId,
       route: route.nodes,
-      grossSpreadUsd,
-      costs,
+      grossSpreadUsd: netProfit + routeCost.totalCostUsd,
+      costs: routeCost.costs,
       expectedNetProfitUsd: netProfit,
       createdAtMs: this.now(),
       status: invalidationReasons.length > 0 ? "INVALID" : CANDIDATE_STATUS,
       invalidationReasons: invalidationReasons.length > 0 ? invalidationReasons : undefined,
-      maxCapitalUsd: route.maxCapitalUsd,
+      maxCapitalUsd: routeCost.bottleneckLiquidityUsd,
       confidence: route.confidence,
       riskConcentration: route.riskConcentration,
     };
-  }
-
-  /**
-   * Compute the full cost breakdown for a route.
-   */
-  private computeCostBreakdown(route: Route): CostBreakdown {
-    const tradingFeesUsd = this.aggregateEdgeWeight(route, "fee");
-    const slippageUsd = this.aggregateEdgeWeight(route, "expectedSlippage");
-    const gasUsd = this.aggregateEdgeWeight(route, "gasCost");
-    const fundingCostUsd = this.aggregateEdgeWeight(route, "fundingCost");
-
-    const bridgeCostUsd = this.countBridgeEdges(route) * 0.5;
-    const latencyRiskUsd = this.aggregateEdgeWeight(route, "latencyMs") * 0.001;
-    const failureRiskUsd = route.maxCapitalUsd
-      ? route.maxCapitalUsd * this.averageFailureProbability(route)
-      : 0;
-
-    return {
-      tradingFeesUsd,
-      slippageUsd,
-      gasUsd,
-      bridgeCostUsd,
-      fundingCostUsd,
-      latencyRiskUsd,
-      failureRiskUsd,
-      safetyBufferUsd: this.config.safetyBufferUsd,
-    };
-  }
-
-  /**
-   * Aggregate a specific weight field across all edges in a route.
-   */
-  private aggregateEdgeWeight(
-    route: Route,
-    field: "fee" | "expectedSlippage" | "gasCost" | "fundingCost" | "latencyMs",
-  ): number {
-    const edges = this.resolveEdges(route);
-    let total = 0;
-    for (const edge of edges) {
-      const value = edge.weights[field];
-      if (typeof value === "number") total += value;
-    }
-    return total;
-  }
-
-  /**
-   * Count the number of BRIDGE edges in a route.
-   */
-  private countBridgeEdges(route: Route): number {
-    const edges = this.resolveEdges(route);
-    return edges.filter((e) => e.type === "BRIDGE").length;
-  }
-
-  /**
-   * Compute average failure probability across route edges.
-   */
-  private averageFailureProbability(route: Route): number {
-    const edges = this.resolveEdges(route);
-    if (edges.length === 0) return 0;
-    let total = 0;
-    for (const edge of edges) {
-      total += edge.weights.failureProbability ?? 0;
-    }
-    return total / edges.length;
-  }
-
-  /**
-   * Resolve edge IDs in a route to MarketEdge objects.
-   */
-  private resolveEdges(route: Route): MarketEdge[] {
-    const allEdges = this.graph.getEdges();
-    const edgeMap = new Map(allEdges.map((e) => [e.id, e]));
-    return route.edges
-      .map((id) => edgeMap.get(id))
-      .filter((e): e is MarketEdge => e !== undefined);
-  }
-
-  /**
-   * Sum all costs in a CostBreakdown.
-   */
-  private totalCosts(costs: CostBreakdown): number {
-    return (
-      costs.tradingFeesUsd +
-      costs.slippageUsd +
-      costs.gasUsd +
-      costs.bridgeCostUsd +
-      costs.fundingCostUsd +
-      costs.latencyRiskUsd +
-      costs.failureRiskUsd +
-      costs.safetyBufferUsd
-    );
   }
 
   /**
