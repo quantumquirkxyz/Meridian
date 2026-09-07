@@ -356,7 +356,13 @@ export function computeRouteCost(
 
     const w = edge.weights;
 
-    tradingFeesUsd += w.fee ?? 0;
+    // BRIDGE edges carry their cost in the dedicated bridgeCostUsd weight;
+    // they have no trading fee to accumulate.
+    if (edge.type === "BRIDGE") {
+      bridgeCostUsd += w.bridgeCostUsd ?? 0;
+    } else {
+      tradingFeesUsd += w.fee ?? 0;
+    }
     slippageUsd += w.expectedSlippage ?? 0;
     gasUsd += (w.gasCost ?? 0) * gasMultiplier;
     fundingCostUsd += w.fundingCost ?? 0;
@@ -372,17 +378,16 @@ export function computeRouteCost(
     if (pFail > 0) {
       failuresSeen *= 1 - pFail;
     }
-
-    // BRIDGE edges carry an explicit bridge cost in their fee weight.
-    if (edge.type === "BRIDGE") {
-      bridgeCostUsd += w.fee ?? 0;
-      // Don't double-count the fee.
-      tradingFeesUsd -= w.fee ?? 0;
-    }
   }
 
   combinedFailureProb = 1 - failuresSeen;
   if (!Number.isFinite(bottleneckLiquidity)) bottleneckLiquidity = 0;
+
+  // Expected loss on the maximum capital the route can deploy: the
+  // bottleneck (minimum) liquidity, scaled by the combined failure
+  // probability (ADR-0014). maxCapitalUsd = 0 when the route is
+  // non-executable, so its failure risk is zero.
+  const failureRiskUsd = bottleneckLiquidity * combinedFailureProb;
 
   const costs: CostBreakdown = {
     tradingFeesUsd,
@@ -391,7 +396,7 @@ export function computeRouteCost(
     bridgeCostUsd,
     fundingCostUsd,
     latencyRiskUsd,
-    failureRiskUsd: combinedFailureProb * 100, // scale to USD estimate
+    failureRiskUsd,
     safetyBufferUsd,
   };
 
@@ -416,7 +421,7 @@ function makeInfiniteCost(route: Route): RouteCost {
       bridgeCostUsd: 0,
       fundingCostUsd: 0,
       latencyRiskUsd: 0,
-      failureRiskUsd: 100,
+      failureRiskUsd: 0,
       safetyBufferUsd: 0,
     },
     bottleneckLiquidityUsd: 0,

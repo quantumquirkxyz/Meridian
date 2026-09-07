@@ -244,6 +244,9 @@ describe("computeRouteCost", () => {
     const snap = makeSnapshot([], []);
     const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
     expect(cost.costs.tradingFeesUsd).toBe(Infinity);
+    // No deployable capital (bottleneck 0) on a non-executable route,
+    // so the failure risk is a defined 0, never the legacy forced 100.
+    expect(cost.costs.failureRiskUsd).toBe(0);
   });
 
   test("tracks bottleneck liquidity", () => {
@@ -271,17 +274,90 @@ describe("computeRouteCost", () => {
     expect(cost.combinedFailureProbability).toBeCloseTo(0.28, 2);
   });
 
-  test("bridge edges add to bridgeCostUsd instead of tradingFeesUsd", () => {
+  test("combined failure probability is order independent", () => {
+    const route = ["asset:A", "asset:B", "asset:C"] as const;
+    const edgesForward = [
+      swapEdge("asset:A", "asset:B", { failureProbability: 0.1 }),
+      swapEdge("asset:B", "asset:C", { failureProbability: 0.2 }),
+    ];
+    // Same edges, listed in the reverse traversal order.
+    const edgesBackward = edgesForward.slice().reverse();
+    const forward = computeRouteCost(
+      makeSnapshot([asset("A"), asset("B"), asset("C")], edgesForward),
+      [...route],
+    );
+    const backward = computeRouteCost(
+      makeSnapshot([asset("A"), asset("B"), asset("C")], edgesBackward),
+      [...route],
+    );
+    expect(forward.combinedFailureProbability).toBeCloseTo(0.28, 2);
+    expect(forward.combinedFailureProbability).toBeCloseTo(
+      backward.combinedFailureProbability,
+      10,
+    );
+  });
+
+  test("failureRiskUsd is maxCapitalUsd x combined failure probability", () => {
+    const snap = makeSnapshot(
+      [asset("A"), asset("B"), asset("C")],
+      [
+        swapEdge("asset:A", "asset:B", {
+          liquidityUsd: 10_000,
+          failureProbability: 0.1,
+        }),
+        swapEdge("asset:B", "asset:C", {
+          liquidityUsd: 5_000,
+          failureProbability: 0.2,
+        }),
+      ],
+    );
+    const cost = computeRouteCost(snap, ["asset:A", "asset:B", "asset:C"]);
+    // maxCapitalUsd = min liquidity = 5_000; combined p = 0.28.
+    expect(cost.bottleneckLiquidityUsd).toBe(5_000);
+    expect(cost.combinedFailureProbability).toBeCloseTo(0.28, 2);
+    expect(cost.costs.failureRiskUsd).toBeCloseTo(5_000 * 0.28, 2);
+  });
+
+  test("failureRiskUsd is zero when no liquidity is exposed", () => {
+    const snap = makeSnapshot(
+      [asset("A"), asset("B")],
+      [swapEdge("asset:A", "asset:B", { failureProbability: 0.9 })],
+    );
+    const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
+    // No liquidityUsd on any edge -> bottleneck 0 -> no capital at risk.
+    expect(cost.costs.failureRiskUsd).toBe(0);
+  });
+
+  test("bridge edges use the dedicated bridgeCostUsd weight", () => {
     const snap = makeSnapshot(
       [asset("A"), asset("B")],
       [
-        bridgeEdge("asset:A", "asset:B", { fee: 10, gasCost: 5 }),
+        bridgeEdge("asset:A", "asset:B", {
+          bridgeCostUsd: 10,
+          gasCost: 5,
+        }),
       ],
     );
     const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
     expect(cost.costs.bridgeCostUsd).toBe(10);
     expect(cost.costs.tradingFeesUsd).toBe(0);
     expect(cost.costs.gasUsd).toBe(5);
+  });
+
+  test("bridge edge fee does not pollute trading fees or bridge cost", () => {
+    const snap = makeSnapshot(
+      [asset("A"), asset("B"), asset("C")],
+      [
+        swapEdge("asset:A", "asset:B", { fee: 2 }),
+        bridgeEdge("asset:B", "asset:C", {
+          fee: 6,
+          bridgeCostUsd: 4,
+        }),
+      ],
+    );
+    const cost = computeRouteCost(snap, ["asset:A", "asset:B", "asset:C"]);
+    expect(cost.costs.tradingFeesUsd).toBe(2);
+    expect(cost.costs.bridgeCostUsd).toBe(4);
   });
 
   test("applies safety buffer from options", () => {
@@ -319,6 +395,47 @@ describe("scoreRoute", () => {
     expect(candidate).toBeDefined();
     expect(candidate?.status).toBe("CANDIDATE");
     expect(candidate?.expectedNetProfitUsd).toBeGreaterThan(0);
+  });
+
+  test("expectedNetProfitUsd is grossSpreadUsd minus the full RISK.md cost sum", () => {
+    const snap = makeSnapshot(
+      [asset("A"), asset("B"), asset("C")],
+      [
+        swapEdge("asset:A", "asset:B", {
+          fee: 1,
+          expectedSlippage: 0.5,
+          gasCost: 0.5,
+          latencyMs: 100,
+          liquidityUsd: 10_000,
+          failureProbability: 0.1,
+        }),
+        bridgeEdge("asset:B", "asset:C", {
+          bridgeCostUsd: 3,
+          fundingCost: 1,
+          latencyMs: 50,
+          liquidityUsd: 5_000,
+          failureProbability: 0.2,
+        }),
+      ],
+    );
+    const candidate = scoreRoute(snap, ["asset:A", "asset:B", "asset:C"], 20, {
+      safetyBufferUsd: 2,
+    });
+    expect(candidate).toBeDefined();
+    const costs = candidate!.costs;
+    // fees + slippage + gas + bridge + funding + latency + failure + buffer
+    // failureRiskUsd = bottleneck (5_000) x combined p (0.28) = 1_400.
+    const totalCost =
+      costs.tradingFeesUsd +
+      costs.slippageUsd +
+      costs.gasUsd +
+      costs.bridgeCostUsd +
+      costs.fundingCostUsd +
+      costs.latencyRiskUsd +
+      costs.failureRiskUsd +
+      costs.safetyBufferUsd;
+    expect(totalCost).toBeCloseTo(1 + 0.5 + 0.5 + 3 + 1 + 0.15 + 1_400 + 2, 2);
+    expect(candidate!.expectedNetProfitUsd).toBeCloseTo(20 - totalCost, 2);
   });
 
   test("produces INVALID when net profit <= 0", () => {
