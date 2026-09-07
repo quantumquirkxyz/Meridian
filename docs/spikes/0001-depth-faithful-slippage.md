@@ -41,7 +41,7 @@ reporting seam and the cost stack. One function, two branches, both driven by re
 ```
 computeImpactBps(input: {
   orderSizeUsd: number;
-  edge: { type: "ORDER_BOOK" | "SWAP"; venue: string };
+  edgeType: "ORDER_BOOK" | "SWAP";
   book?: { levels: { price, size }[] };   // CEX ladder (new normalization)
   reserves?: { reserveIn, reserveOut };   // DEX constant-product (existing)
 }): number
@@ -69,20 +69,24 @@ an explicit, tagged fallback (so `slippageUsd` = 0-depth-safe), not silently.
 
 ### How it feeds the cost stack — field decision
 
-**The stack keeps its existing `slippageUsd` dollar term; it is fed from a new weight field.**
+**One seam: the edge stores depth input, the canonical aggregator derives the cost.** The
+weight is declared by connectors/updaters per edge, but only as depth data (reserves /
+ladder / `liquidityUsd`); the bps figure is computed at aggregation time.
 
-- New primary weight: `expectedSlippageBps` on `EdgeWeights`
-  (`packages/contracts/src/graph.ts:53-70`), set by the connectors/updaters from
-  `computeImpactBps` at the order's intended notional.
-- The cost stack converts once: `slippageUsd = notionalUsd * expectedSlippageBps / 10_000`,
-  summed as today (`pathfinding.ts:360`, `opportunity-detector.ts:255`). Additive, in USD, fits
-  the RISK.md sum formula (`docs/RISK.md:48-62`) unchanged.
-- `expectedSlippage` (half-spread) is **not removed**; it becomes the documented fallback when
-  no depth data is available (conservative floor), keeping `isEdgeWeights` and every consumer
-  backward compatible.
-- `computeSlippageBps` (the linear function at `slippage.ts`) is replaced by
-  `computeImpactBps`; `live-runner.ts:1050` calls the shared function so the reporting seam and
-  the money number can never disagree again.
+- Edge weights carry depth inputs only. Today `opportunity-detector.ts` writes
+  `liquidityUsd: snapshot.depth` per edge but drops `reserve0`/`reserve1`; the DEX impact
+  branch therefore needs reserves added to the edge weights (additive field), while CEX
+  `ORDER_BOOK` edges carry `liquidityUsd` now and gain the optional `levels` ladder later.
+- The canonical aggregator evaluates the depth-faithful figure when it knows the order:
+  `slippageUsd = notionalUsd * computeImpactBps(orderSizeUsd, edge) / 10_000`, summed as
+  today (`pathfinding.ts:360`, `opportunity-detector.ts:255`). Additive, in USD, fits the
+  RISK.md sum formula (`docs/RISK.md:48-62`) unchanged.
+- `expectedSlippage` (half-spread) is **not removed**; with no depth data it stays the
+  default fallback (conservative floor), keeping `isEdgeWeights` and every consumer backward
+  compatible. `computeImpactBps` supersedes it only where depth is available.
+- `computeSlippageBps` (the linear function at `slippage.ts`) is replaced at the reporting
+  seam by `computeImpactBps`; `live-runner.ts:1050` calls the shared function so the
+  reporting seam and the money number can never disagree again.
 
 ### Consequence: slippage becomes order-size-dependent
 
@@ -90,30 +94,37 @@ Today `slippageUsd` is a constant per edge, summable before sizing. Depth-faithf
 a function of the actual order size, so the canonical aggregator must evaluate it at the
 **intended notional** (route `maxCapitalUsd` / bottleneck), not as a per-edge constant summed
 first. This is a real interaction with ADR-0014: when ADR-0014 lands, the canonical
-`computeRouteCost` should accept a sizing notional and re-derive `expectedSlippageBps` per edge
-at that size before summing. Design risk to call out in that spec's implementation: an
+`computeRouteCost` should accept a sizing notional and re-derive each edge's impact bps at
+that size before summing, so `slippageUsd` is evaluated against the notional that will
+actually trade. Design risk to call out in that spec's implementation: an
 arbitrage sized down to survive the book may flip from profitable to unprofitable as depth
 falls — the gate must re-check net profit at the reduced size, not just at the original.
 
 ## Feed-through / rollout path (tracer bullets)
 
-1. Add `expectedSlippageBps` to `EdgeWeights` + `expectedSlippage` legacy fallback semantics
-   (contracts only; additive validator update).
+1. No new bps weight needed. Slippage stays on the **existing** `slippageUsd` term; depth
+   inputs (`liquidityUsd`, DEX reserves, later the CEX `levels` ladder) feed the aggregator.
+   `expectedSlippage` keeps legacy fallback semantics (contracts only; additive validator
+   update).
 2. Add shared `computeImpactBps` to `packages/core/src/utils/slippage.ts` with the DEX
    constant-product branch wired to reserves; unit-test against `simulateSwap`.
-3. Wire `opportunity-detector.ts` edge writing to set `expectedSlippageBps` when reserves exist;
-   keep `expectedSlippage` fallback. Convert to USD in the two aggregators.
+3. Wire `opportunity-detector.ts` edge writing to carry DEX reserves onto edge weights
+   (currently dropped — only `liquidityUsd` is written); keep `expectedSlippage` fallback.
+   Convert to USD in the two aggregators via `computeImpactBps` at route notional.
 4. CEX ladder: normalize `levels` on `MarketDataSnapshot` from `bybit-ws`; implement the ladder
    walk branch; then it is exercised on live CEX edges too.
 5. Deprecate `computeSlippageBps` linear usage in `live-runner.ts`; route it through
    `computeImpactBps`.
-6. Post-ADR-0014: integrate notional-dependent re-derivation in the canonical aggregator and
-   re-run the ANALYSIS.md leak-vector review.
+6. Post-ADR-0014: the canonical aggregator accepts a sizing notional and re-derives each
+   edge's impact bps at that notional before summing; re-run the ANALYSIS.md leak-vector
+   review.
 
 ## Declarations
 
-- **New weight field:** `EdgeWeights.expectedSlippageBps` feeds `slippageUsd`; the existing
-  `slippageUsd` term and the `slippageUsd` field in `CostBreakdown` are unchanged.
+- **No new weight field for slippage.** Slippage feeds the cost stack through the **existing**
+  `slippageUsd` term, derived at aggregation time from depth inputs on the edge: `liquidityUsd`
+  today, DEX `reserve0`/`reserve1` once carried onto edge weights, later the CEX `levels`
+  ladder. The existing `slippageUsd` field in `CostBreakdown` is unchanged.
 - **Existing field retained:** `expectedSlippage` stays as the no-depth-data fallback.
 - **No behavior change to:** the net-profit sum formula, `expectedNetProfitUsd`, MIN_EDGE, or
   any cost aggregator beyond how `slippageUsd` is computed.
