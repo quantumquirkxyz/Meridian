@@ -24,6 +24,7 @@ export const RISK_REASON_CODES = [
   "RECONCILIATION_UNRESOLVED",
   "INVENTORY_BLOCKED",
   "AUDIT_UNAVAILABLE",
+  "LOSS_STATE_MISSING",
 ] as const;
 
 export type RiskReasonCode = (typeof RISK_REASON_CODES)[number];

@@ -443,10 +443,12 @@ export class RiskEngine {
 
     // Rule 2: MAX_DAILY_LOSS. When the limit is configured the loss state is
     // mandatory: absence fails closed instead of silently disabling the rule.
+    // LOSS_STATE_MISSING (not MAX_DAILY_LOSS) is emitted so callers can tell a
+    // real loss breach apart from missing loss data (review-pr S1).
     if (this.policy.maxDailyLossUsd !== undefined) {
       if (input.dailyLossUsd === undefined) {
         result.decision = "REJECT";
-        result.reasonCodes.push("MAX_DAILY_LOSS");
+        result.reasonCodes.push("LOSS_STATE_MISSING");
         result.notes =
           "daily loss state missing; cannot evaluate MAX_DAILY_LOSS (fail closed)";
         return result;
@@ -461,10 +463,12 @@ export class RiskEngine {
 
     // Rule 3: MAX_WEEKLY_LOSS. When the limit is configured the loss state is
     // mandatory: absence fails closed instead of silently disabling the rule.
+    // LOSS_STATE_MISSING (not MAX_WEEKLY_LOSS) is emitted so callers can tell a
+    // real loss breach apart from missing loss data (review-pr S1).
     if (this.policy.maxWeeklyLossUsd !== undefined) {
       if (input.weeklyLossUsd === undefined) {
         result.decision = "REJECT";
-        result.reasonCodes.push("MAX_WEEKLY_LOSS");
+        result.reasonCodes.push("LOSS_STATE_MISSING");
         result.notes =
           "weekly loss state missing; cannot evaluate MAX_WEEKLY_LOSS (fail closed)";
         return result;

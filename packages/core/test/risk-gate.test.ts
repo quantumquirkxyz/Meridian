@@ -120,7 +120,8 @@ describe("Rule 2: MAX_DAILY_LOSS", () => {
     );
     expect(decision.decision).toBe("REJECT");
     if (decision.decision === "REJECT") {
-      expect(decision.reasonCodes).toContain("MAX_DAILY_LOSS");
+      expect(decision.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(decision.reasonCodes).not.toContain("MAX_DAILY_LOSS");
     }
     expect(decision.notes).toMatch(/missing/i);
   });
@@ -167,7 +168,8 @@ describe("Rule 3: MAX_WEEKLY_LOSS", () => {
     );
     expect(decision.decision).toBe("REJECT");
     if (decision.decision === "REJECT") {
-      expect(decision.reasonCodes).toContain("MAX_WEEKLY_LOSS");
+      expect(decision.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(decision.reasonCodes).not.toContain("MAX_WEEKLY_LOSS");
     }
     expect(decision.notes).toMatch(/missing/i);
   });
@@ -804,6 +806,7 @@ describe("DEFAULT_RISK_POLICY enforces the full rule set by default", () => {
     const rules = activeRules(DEFAULT_RISK_POLICY);
     expect(rules).toContain("MAX_DAILY_LOSS");
     expect(rules).toContain("MAX_WEEKLY_LOSS");
+    expect(rules).not.toContain("LOSS_STATE_MISSING");
   });
 
   test("default policy rejects when rolling-24h loss reaches the daily cap", () => {
@@ -851,12 +854,14 @@ describe("DEFAULT_RISK_POLICY enforces the full rule set by default", () => {
     const daily = engine.evaluate(baseInput({ dailyLossUsd: undefined }));
     expect(daily.decision).toBe("REJECT");
     if (daily.decision === "REJECT") {
-      expect(daily.reasonCodes).toContain("MAX_DAILY_LOSS");
+      expect(daily.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(daily.reasonCodes).not.toContain("MAX_DAILY_LOSS");
     }
     const weekly = engine.evaluate(baseInput({ weeklyLossUsd: undefined }));
     expect(weekly.decision).toBe("REJECT");
     if (weekly.decision === "REJECT") {
-      expect(weekly.reasonCodes).toContain("MAX_WEEKLY_LOSS");
+      expect(weekly.reasonCodes).toContain("LOSS_STATE_MISSING");
+      expect(weekly.reasonCodes).not.toContain("MAX_WEEKLY_LOSS");
     }
   });
 
