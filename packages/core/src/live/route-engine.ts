@@ -21,7 +21,9 @@
  * scanner can consume.
  */
 
+import { computeRouteCost } from "@agenttrading/graph";
 import type {
+  CostBreakdown,
   MarketEdge,
   MarketGraphSnapshot,
   MarketNode,
@@ -92,6 +94,20 @@ function avgConcentration(concentrations: Record<string, number>): number {
   const values = Object.values(concentrations);
   if (values.length === 0) return 0;
   return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+/** Sum the full RISK.md net-profit cost stack (ADR-0014). */
+function totalCost(costs: CostBreakdown): number {
+  return (
+    costs.tradingFeesUsd +
+    costs.slippageUsd +
+    costs.gasUsd +
+    costs.bridgeCostUsd +
+    costs.fundingCostUsd +
+    costs.latencyRiskUsd +
+    costs.failureRiskUsd +
+    costs.safetyBufferUsd
+  );
 }
 
 /**
@@ -281,11 +297,18 @@ export class RouteEngine {
     const routeType = classifyRouteType(pathNodes, pathEdges);
 
     // Compute route metrics from edge weights.
-    const { expectedNetProfitUsd, confidence, maxCapitalUsd, riskConcentration } =
+    const { grossSpreadUsd, confidence, maxCapitalUsd, riskConcentration } =
       aggregateEdgeWeights(pathEdges);
 
     // Enrich riskConcentration with dimension-prefixed keys from node metadata.
     enrichConcentrationFromNodes(pathNodes, riskConcentration);
+
+    // Canonical expected net profit (ADR-0014, issue #134): the gross
+    // spread minus the full RISK.md cost stack. The cost stack is
+    // aggregated by @agenttrading/graph — the single source of truth —
+    // and no longer by a local min-edge model.
+    const routeCost = computeRouteCost(snapshot, path.nodes);
+    const expectedNetProfitUsd = grossSpreadUsd - totalCost(routeCost.costs);
 
     // Score the route.
     const score = computeScore(
@@ -342,6 +365,15 @@ export class RouteEngine {
           .filter((e) => e.blocked)
           .map((e) => `ROUTE_BLOCKED:${e.dimension}`),
       ];
+    }
+
+    // Gate on the canonical net-profit figure (MIN_EDGE, RISK.md): a route
+    // that does not clear the full cost stack is never executable. This is
+    // the same gate the graph aggregator applies via scoreRoute, so both
+    // layers depend only on the canonical expectedNetProfitUsd.
+    if (route.status === "LIVE" && route.expectedNetProfitUsd <= 0) {
+      route.status = "EXPIRED";
+      route.invalidationReasons.push("MIN_EDGE");
     }
 
     // Apply score threshold.
@@ -646,52 +678,29 @@ function resolveNodes(
 
 /** Aggregate edge weights into route-level metrics. */
 function aggregateEdgeWeights(edges: readonly MarketEdge[]): {
-  expectedNetProfitUsd: number;
+  grossSpreadUsd: number;
   confidence: number;
   maxCapitalUsd: number;
   riskConcentration: Record<string, number>;
 } {
   if (edges.length === 0) {
     return {
-      expectedNetProfitUsd: 0,
+      grossSpreadUsd: 0,
       confidence: 1,
       maxCapitalUsd: 0,
       riskConcentration: {},
     };
   }
 
-  // Expected profit: minimum edge price spread (bottleneck model).
-  // We use the minimum edge profit as the route's limiting factor.
-  let minProfit = Infinity;
-  let totalFees = 0;
-  let totalSlippage = 0;
-  let totalGas = 0;
-  let totalFunding = 0;
-
+  // Gross spread: sum of per-edge price spreads. The net-profit cost
+  // stack (fees, slippage, gas, bridge, funding, latency, failure risk,
+  // safety buffer) is applied on top by the canonical aggregator in
+  // @agenttrading/graph (ADR-0014, issue #134). There is no local
+  // min-edge profit model anymore.
+  let grossSpreadUsd = 0;
   for (const edge of edges) {
-    const w = edge.weights;
-
-    // Each edge contributes a spread: price - fee - slippage - gas - funding.
-    const price = w.price ?? 0;
-    const fee = w.fee ?? 0;
-    const slippage = w.expectedSlippage ?? 0;
-    const gas = w.gasCost ?? 0;
-    const funding = w.fundingCost ?? 0;
-
-    totalFees += fee;
-    totalSlippage += slippage;
-    totalGas += gas;
-    totalFunding += funding;
-
-    const edgeProfit = price - fee - slippage - gas - funding;
-    if (edgeProfit < minProfit) {
-      minProfit = edgeProfit;
-    }
+    grossSpreadUsd += edge.weights.price ?? 0;
   }
-
-  // Use the minimum edge profit as the route's expected net profit.
-  // In practice, the route's profit is limited by the tightest edge.
-  const expectedNetProfitUsd = minProfit === Infinity ? 0 : minProfit;
 
   // Confidence: product of all edge confidences.
   let confidence = 1;
@@ -722,7 +731,7 @@ function aggregateEdgeWeights(edges: readonly MarketEdge[]): {
   }
 
   return {
-    expectedNetProfitUsd,
+    grossSpreadUsd,
     confidence,
     maxCapitalUsd,
     riskConcentration,

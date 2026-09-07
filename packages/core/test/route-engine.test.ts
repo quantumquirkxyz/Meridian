@@ -7,6 +7,7 @@ import type {
   SystemicRiskOverlay,
 } from "@agenttrading/contracts";
 import { DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
+import { scoreRoute } from "@agenttrading/graph";
 import { RouteEngine } from "../src/live/route-engine.ts";
 import { SystemicRiskOverlayEngine } from "../src/live/systemic-risk-overlay.ts";
 
@@ -41,7 +42,9 @@ function edge(
       liquidityUsd: 100_000,
       confidence: 0.9,
       riskScore: 0.1,
-      failureProbability: 0.02,
+      // Generic fixture: small failure probability so the route clears the
+      // canonical cost stack (issue #134). Risk-specific tests override it.
+      failureProbability: 0.00002,
       ...weights,
     },
     tradable,
@@ -830,11 +833,13 @@ describe("Route scoring", () => {
     const nodes = [node("v1", "VENUE"), node("a1", "ASSET")];
     const lowRiskEdge = edge("e1", "v1", "a1", "ORDER_BOOK", {
       riskScore: 0.01,
-      failureProbability: 0.01,
+      failureProbability: 0.001,
+      liquidityUsd: 100,
     });
     const highRiskEdge = edge("e2", "v1", "a1", "ORDER_BOOK", {
       riskScore: 0.9,
-      failureProbability: 0.8,
+      failureProbability: 0.05,
+      liquidityUsd: 100,
     });
 
     const snapLow = snapshot(nodes, [lowRiskEdge]);
@@ -844,9 +849,138 @@ describe("Route scoring", () => {
     const lowResult = engine.discover(snapLow, NOW_MS);
     const highResult = engine.discover(snapHigh, NOW_MS);
 
+    // Canonical net profit lowers as failure risk grows (failureRiskUsd =
+    // maxCapitalUsd x combined probability, issue #134).
+    expect(lowResult.routes[0].expectedNetProfitUsd).toBeGreaterThan(
+      highResult.routes[0].expectedNetProfitUsd,
+    );
+    // Risk concentration also lowers the composite score via the safety term.
     expect(lowResult.routes[0].score).toBeGreaterThan(
       highResult.routes[0].score,
     );
+  });
+});
+
+// ── Canonical net profit (issue #134) ───────────────────────────────
+
+/**
+ * Two-hop ORDER_BOOK route: asset:BTC → venue:bybit → asset:ETH.
+ * Weights are fixed so the canonical cost stack is a known figure:
+ *   fees 0.4+0.3 = 0.7, slippage 0.1+0.15 = 0.25, gas 0.2+0.15 = 0.35,
+ *   latency (50+40)*0.001 = 0.09, failure 60_000 * (1 - .999*.998) = 179.88,
+ *   safety buffer 1.0  →  totalCost = 182.27.
+ */
+const BYBIT_ROUTE = [
+  node("asset:BTC", "ASSET"),
+  node("venue:bybit", "VENUE"),
+  node("asset:ETH", "ASSET"),
+];
+
+function bybitRouteEdges(price1: number, price2: number): MarketEdge[] {
+  return [
+    edge("e1", "asset:BTC", "venue:bybit", "ORDER_BOOK", {
+      price: price1,
+      fee: 0.4,
+      expectedSlippage: 0.1,
+      gasCost: 0.2,
+      latencyMs: 50,
+      liquidityUsd: 80_000,
+      confidence: 0.92,
+      riskScore: 0.05,
+      failureProbability: 0.001,
+    }),
+    edge("e2", "venue:bybit", "asset:ETH", "ORDER_BOOK", {
+      price: price2,
+      fee: 0.3,
+      expectedSlippage: 0.15,
+      gasCost: 0.15,
+      latencyMs: 40,
+      liquidityUsd: 60_000,
+      confidence: 0.88,
+      riskScore: 0.06,
+      failureProbability: 0.002,
+    }),
+  ];
+}
+
+describe("Canonical net profit (issue #134)", () => {
+  test("parity: route-engine expectedNetProfitUsd equals graph scoreRoute", () => {
+    // Non-profitable route: gross 12+8=20 < totalCost 182.27 → net -162.27.
+    const losingSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(12, 8));
+    const engine = new RouteEngine(config(), () => NOW_MS);
+    const losingResult = engine.discover(losingSnap, NOW_MS);
+
+    const losingRoute = losingResult.routes.find(
+      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+    );
+    expect(losingRoute).toBeDefined();
+
+    const losingCandidate = scoreRoute(
+      losingSnap,
+      ["asset:BTC", "venue:bybit", "asset:ETH"],
+      20,
+    );
+    expect(losingCandidate).toBeDefined();
+    expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(
+      losingCandidate!.expectedNetProfitUsd,
+      10,
+    );
+    expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(20 - 182.27, 2);
+
+    // Profitable route: gross 150+120=270 → net 87.73.
+    const winningSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(150, 120));
+    const winningResult = engine.discover(winningSnap, NOW_MS);
+
+    const winningRoute = winningResult.routes.find(
+      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+    );
+    expect(winningRoute).toBeDefined();
+
+    const winningCandidate = scoreRoute(
+      winningSnap,
+      ["asset:BTC", "venue:bybit", "asset:ETH"],
+      270,
+    );
+    expect(winningCandidate).toBeDefined();
+    expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(
+      winningCandidate!.expectedNetProfitUsd,
+      10,
+    );
+    expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(270 - 182.27, 2);
+  });
+
+  test("MIN_EDGE gating uses the canonical figure", () => {
+    // Non-profitable route is not executable under the canonical cost stack.
+    const losingSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(12, 8));
+    const engine = new RouteEngine(config(), () => NOW_MS);
+    const losingResult = engine.discover(losingSnap, NOW_MS);
+
+    const losingRoute = losingResult.routes.find(
+      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+    );
+    expect(losingRoute).toBeDefined();
+    expect(losingRoute!.status).toBe("EXPIRED");
+    expect(losingRoute!.invalidationReasons).toContain("MIN_EDGE");
+
+    // The graph aggregator agrees: the same figure yields INVALID + MIN_EDGE.
+    const losingCandidate = scoreRoute(
+      losingSnap,
+      ["asset:BTC", "venue:bybit", "asset:ETH"],
+      20,
+    );
+    expect(losingCandidate!.status).toBe("INVALID");
+    expect(losingCandidate!.invalidationReasons).toContain("MIN_EDGE");
+
+    // Profitable route stays LIVE and unmatched by any MIN_EDGE gate.
+    const winningSnap = snapshot(BYBIT_ROUTE, bybitRouteEdges(150, 120));
+    const winningResult = engine.discover(winningSnap, NOW_MS);
+
+    const winningRoute = winningResult.routes.find(
+      (r) => r.nodes.join(">") === "asset:BTC>venue:bybit>asset:ETH",
+    );
+    expect(winningRoute).toBeDefined();
+    expect(winningRoute!.status).toBe("LIVE");
+    expect(winningRoute!.invalidationReasons).not.toContain("MIN_EDGE");
   });
 });
 
