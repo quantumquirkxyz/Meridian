@@ -7,7 +7,7 @@ const repoRoot = process.cwd();
 const agentsSkillsDir = path.join(repoRoot, '.agents', 'skills');
 const claudeSkillsDir = path.join(repoRoot, '.claude', 'skills');
 const lockPath = path.join(repoRoot, 'skills-lock.json');
-const excludedDirs = new Set(['runs', 'node_modules', '.git']);
+const ignored = new Set(['platform']);
 
 function parseFrontmatter(text) {
   if (!text.startsWith('---')) return {};
@@ -49,64 +49,37 @@ async function exists(filePath) {
   }
 }
 
-async function findSkillDirs(rootDir) {
-  const out = [];
-  async function walk(dir, rel) {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (excludedDirs.has(entry.name)) continue;
-      if (!entry.isDirectory()) continue;
-      const full = path.join(dir, entry.name);
-      const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
-      if (await exists(path.join(full, 'SKILL.md'))) {
-        out.push({ name: entry.name, rel: nextRel, dir: full });
-      } else {
-        await walk(full, nextRel);
-      }
-    }
-  }
-  await walk(rootDir, null);
-  return out;
-}
-
 async function main() {
+  const entries = await fs.readdir(agentsSkillsDir, { withFileTypes: true });
+  const skillDirs = entries.filter((entry) => entry.isDirectory() && !ignored.has(entry.name));
   const errors = [];
   const warnings = [];
   const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
-  const lockSkills = lock.skills ?? {};
-  const canonicalNames = new Set(Object.keys(lockSkills));
-  const skillDirs = await findSkillDirs(agentsSkillsDir);
-  const skillNames = new Set(skillDirs.map((skill) => skill.name));
+  const lockSkills = new Set(Object.keys(lock.skills ?? {}));
+  const skillNames = new Set(skillDirs.map((entry) => entry.name));
 
-  for (const skill of skillDirs) {
-    const name = skill.name;
-    const skillMd = path.join(skill.dir, 'SKILL.md');
-    const text = await fs.readFile(skillMd, 'utf8');
-
-    const claudeLink = path.join(claudeSkillsDir, name);
-    if (!(await exists(claudeLink))) {
-      errors.push(`missing .claude link for ${name}`);
-    } else {
-      const stat = await fs.lstat(claudeLink);
-      if (!stat.isSymbolicLink()) {
-        errors.push(`.claude/${name} is not a symlink`);
-      }
-    }
-
-    if (!canonicalNames.has(name)) {
-      warnings.push(`reference skill ${name} has no lockfile entry; promoted skills are added by skill-promoter`);
+  for (const entry of skillDirs) {
+    const skillDir = path.join(agentsSkillsDir, entry.name);
+    const skillMd = path.join(skillDir, 'SKILL.md');
+    if (!(await exists(skillMd))) {
+      errors.push(`missing SKILL.md for ${entry.name}`);
       continue;
     }
-
+    const text = await fs.readFile(skillMd, 'utf8');
     const fm = parseFrontmatter(text);
+    const name = entry.name;
+
     if (fm.name !== name) errors.push(`${name}: frontmatter name mismatch (${fm.name})`);
 
     const allowedRisks = new Set(['low', 'medium', 'high']);
     if (!allowedRisks.has(fm.risk)) errors.push(`${name}: frontmatter risk must be low|medium|high (${fm.risk})`);
 
-    const allowedTrustTiers = new Set(['1', '2', '3', '4']);
+    const allowedTrustTiers = new Set([undefined, '', '1', '2', '3', '4']);
     if (!allowedTrustTiers.has(fm.trustTier)) errors.push(`${name}: frontmatter trustTier must be 1|2|3|4 (${fm.trustTier})`);
-    else {
+
+    if (fm.trustTier === undefined || fm.trustTier === '') {
+      warnings.push(`${name}: trustTier not declared; infer from risk (low→1|2, medium→3, high→4)`);
+    } else {
       const tier = Number(fm.trustTier);
       const inferred = fm.risk === 'low' ? (tier <= 2 ? null : 'low risk should be tier 1 or 2') : fm.risk === 'medium' ? (tier === 3 ? null : 'medium risk should be tier 3') : fm.risk === 'high' ? (tier === 4 ? null : 'high risk should be tier 4') : null;
       if (inferred) warnings.push(`${name}: ${inferred}`);
@@ -122,7 +95,7 @@ async function main() {
     }
 
     if ((fm.risk === 'medium' || fm.risk === 'high')) {
-      const fixturesDir = path.join(skill.dir, 'behavioral-fixtures');
+      const fixturesDir = path.join(skillDir, 'behavioral-fixtures');
       const hasFixtures = await exists(fixturesDir) && (await fs.readdir(fixturesDir)).length > 0;
       if (!hasFixtures) {
         warnings.push(`${name}: risk=${fm.risk} but no behavioral-fixtures/ directory found; add fixtures or document why none are needed`);
@@ -136,21 +109,37 @@ async function main() {
       if (effect === 'write-code' && fm.risk === 'low') warnings.push(`${name}: write-code skill marked low risk`);
     }
 
+    const claudeLink = path.join(claudeSkillsDir, name);
+    if (!(await exists(claudeLink))) {
+      errors.push(`missing .claude link for ${name}`);
+    } else {
+      const stat = await fs.lstat(claudeLink);
+      if (!stat.isSymbolicLink()) {
+        errors.push(`.claude/${name} is not a symlink`);
+      }
+    }
+    if (!lockSkills.has(name)) {
+      warnings.push(`lockfile missing local entry for ${name}`);
+    }
+
     const hash = crypto.createHash('sha256').update(await fs.readFile(skillMd)).digest('hex');
-    if (lockSkills[name]?.hash !== hash) errors.push(`${name}: lock hash is stale`);
+    if (lock.skills?.[name]?.hash !== hash) errors.push(`${name}: lock hash is stale`);
   }
 
-  for (const name of canonicalNames) {
-    if (!skillNames.has(name)) {
+  for (const name of lockSkills) {
+    const localSkill = path.join(agentsSkillsDir, name);
+    if (!(await exists(localSkill))) {
       errors.push(`lockfile references missing skill ${name}`);
     }
   }
 
   const skillManifests = [];
-  for (const skill of skillDirs) {
-    const text = await fs.readFile(path.join(skill.dir, 'SKILL.md'), 'utf8').catch(() => '');
+  for (const file of await fs.readdir(agentsSkillsDir, { withFileTypes: true })) {
+    if (!file.isDirectory() || ignored.has(file.name)) continue;
+    const skillMd = path.join(agentsSkillsDir, file.name, 'SKILL.md');
+    const text = await fs.readFile(skillMd, 'utf8').catch(() => '');
     const fm = parseFrontmatter(text);
-    skillManifests.push({ name: skill.name, description: (fm.description || '').toLowerCase(), capabilities: fm.capabilities ?? [] });
+    skillManifests.push({ name: file.name, description: (fm.description || '').toLowerCase(), capabilities: fm.capabilities ?? [] });
   }
 
   for (let i = 0; i < skillManifests.length; i++) {

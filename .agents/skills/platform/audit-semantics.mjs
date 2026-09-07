@@ -5,11 +5,8 @@ import { recordExecution } from './record-execution.mjs';
 
 const repoRoot = process.cwd();
 const skillsRoot = path.join(repoRoot, '.agents', 'skills');
+const docsRoot = path.join(repoRoot, 'docs');
 const lockPath = path.join(repoRoot, 'skills-lock.json');
-const excludedDirs = new Set([
-  'runs', 'node_modules', '.git', '.claude', '.bun', '.next', '.gradle',
-  'dist', 'build', 'coverage', '.scratch', '.skill-sandbox', 'case-studies',
-]);
 const allowedRetiredTermFiles = new Set([
   'docs/agents/provenance.md',
 ]);
@@ -50,25 +47,12 @@ async function walk(dir, predicate = () => true) {
   const out = [];
   if (!(await exists(dir))) return out;
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
-    if (excludedDirs.has(entry.name)) continue;
     const filePath = path.join(dir, entry.name);
+    if (filePath.includes(`${path.sep}platform${path.sep}runs${path.sep}`)) continue;
     if (entry.isDirectory()) out.push(...await walk(filePath, predicate));
     else if (entry.isFile() && predicate(filePath)) out.push(filePath);
   }
   return out;
-}
-
-async function scanRoots() {
-  const roots = [skillsRoot];
-  for (const rel of ['docs/agents', 'docs/adr']) {
-    const dir = path.join(repoRoot, rel);
-    if (await exists(dir)) roots.push(dir);
-  }
-  const standalone = [];
-  for (const rel of ['.agents/AGENTS.md', 'AGENTS.md', 'CONTEXT.md', 'README.md']) {
-    if (await exists(path.join(repoRoot, rel))) standalone.push(path.join(repoRoot, rel));
-  }
-  return { roots, standalone };
 }
 
 function parseFrontmatter(text) {
@@ -113,20 +97,12 @@ async function checkLinks(markdownFiles, errors) {
 async function main() {
   const warnings = [];
   const errors = [];
-  const { roots, standalone } = await scanRoots();
-  const markdownFiles = [];
-  for (const root of roots) markdownFiles.push(...await walk(root, (file) => file.endsWith('.md')));
-  markdownFiles.push(...standalone.filter((file) => file.endsWith('.md')));
-
-  const shellFiles = await walk(skillsRoot, (name) => name.endsWith('.sh'));
-  const skillFiles = await walk(skillsRoot, (name) => name.endsWith('SKILL.md'));
+  const markdownFiles = await walk(repoRoot, (file) => file.endsWith('.md'));
+  const skillFiles = await walk(skillsRoot, (file) => file.endsWith('SKILL.md'));
   const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
-  const lockSkills = lock.skills ?? {};
-  const canonicalNames = new Set(Object.keys(lockSkills));
-  const skillsByPath = new Map(skillFiles.map((file) => [path.basename(path.dirname(file)), file]));
+  const skillNames = new Set(skillFiles.map((file) => path.basename(path.dirname(file))));
 
-  const scanList = async () => [...markdownFiles, ...shellFiles];
-  for (const file of await scanList()) {
+  for (const file of [...markdownFiles, ...await walk(skillsRoot, (name) => name.endsWith('.sh'))]) {
     const text = await fs.readFile(file, 'utf8');
     const relative = path.relative(repoRoot, file);
     for (const pattern of retiredPatterns) {
@@ -143,20 +119,19 @@ async function main() {
     const text = await fs.readFile(file, 'utf8');
     const fm = parseFrontmatter(text);
     const name = path.basename(path.dirname(file));
-    if (!canonicalNames.has(name)) continue;
     if (fm.name !== name) errors.push(`${name}: frontmatter name mismatch (${fm.name})`);
     for (const dependency of fm.dependencies ?? []) {
-      if (!skillsByPath.has(dependency)) errors.push(`${name}: dependency missing ${dependency}`);
+      if (!skillNames.has(dependency)) errors.push(`${name}: dependency missing ${dependency}`);
     }
     for (const effect of fm.sideEffects ?? []) {
       if (effect === 'write-code' && fm.risk === 'low') warnings.push(`${name}: write-code skill marked low risk`);
     }
     const hash = crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex');
-    if (lockSkills[name]?.hash !== hash) errors.push(`${name}: lock hash is stale`);
+    if (lock.skills?.[name]?.hash !== hash) errors.push(`${name}: lock hash is stale`);
   }
 
-  for (const name of canonicalNames) {
-    if (!skillsByPath.has(name)) errors.push(`lockfile references missing skill ${name}`);
+  for (const name of Object.keys(lock.skills ?? {})) {
+    if (!skillNames.has(name)) errors.push(`lockfile references missing skill ${name}`);
   }
 
   await checkLinks(markdownFiles, errors);
