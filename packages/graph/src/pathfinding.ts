@@ -356,7 +356,11 @@ export function computeRouteCost(
 
     const w = edge.weights;
 
-    tradingFeesUsd += w.fee ?? 0;
+    // BRIDGE edges carry their cost in the dedicated bridgeCostUsd weight;
+    // they have no trading fee to accumulate.
+    if (edge.type !== "BRIDGE") {
+      tradingFeesUsd += w.fee ?? 0;
+    }
     slippageUsd += w.expectedSlippage ?? 0;
     gasUsd += (w.gasCost ?? 0) * gasMultiplier;
     fundingCostUsd += w.fundingCost ?? 0;
@@ -373,11 +377,9 @@ export function computeRouteCost(
       failuresSeen *= 1 - pFail;
     }
 
-    // BRIDGE edges carry an explicit bridge cost in their fee weight.
+    // BRIDGE edges carry a dedicated bridge cost weight.
     if (edge.type === "BRIDGE") {
-      bridgeCostUsd += w.fee ?? 0;
-      // Don't double-count the fee.
-      tradingFeesUsd -= w.fee ?? 0;
+      bridgeCostUsd += w.bridgeCostUsd ?? 0;
     }
   }
 

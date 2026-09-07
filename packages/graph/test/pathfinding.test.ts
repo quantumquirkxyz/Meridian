@@ -271,17 +271,36 @@ describe("computeRouteCost", () => {
     expect(cost.combinedFailureProbability).toBeCloseTo(0.28, 2);
   });
 
-  test("bridge edges add to bridgeCostUsd instead of tradingFeesUsd", () => {
+  test("bridge edges use the dedicated bridgeCostUsd weight", () => {
     const snap = makeSnapshot(
       [asset("A"), asset("B")],
       [
-        bridgeEdge("asset:A", "asset:B", { fee: 10, gasCost: 5 }),
+        bridgeEdge("asset:A", "asset:B", {
+          bridgeCostUsd: 10,
+          gasCost: 5,
+        }),
       ],
     );
     const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
     expect(cost.costs.bridgeCostUsd).toBe(10);
     expect(cost.costs.tradingFeesUsd).toBe(0);
     expect(cost.costs.gasUsd).toBe(5);
+  });
+
+  test("bridge edge fee does not pollute trading fees or bridge cost", () => {
+    const snap = makeSnapshot(
+      [asset("A"), asset("B"), asset("C")],
+      [
+        swapEdge("asset:A", "asset:B", { fee: 2 }),
+        bridgeEdge("asset:B", "asset:C", {
+          fee: 6,
+          bridgeCostUsd: 4,
+        }),
+      ],
+    );
+    const cost = computeRouteCost(snap, ["asset:A", "asset:B", "asset:C"]);
+    expect(cost.costs.tradingFeesUsd).toBe(2);
+    expect(cost.costs.bridgeCostUsd).toBe(4);
   });
 
   test("applies safety buffer from options", () => {
