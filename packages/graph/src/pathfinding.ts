@@ -33,6 +33,8 @@ export interface RouteCost {
   route: Route;
   /** Full cost breakdown per the RISK.md net profit formula. */
   costs: CostBreakdown;
+  /** Total cost: the single RISK.md sum of `costs` (ADR-0014). */
+  totalCostUsd: number;
   /** Minimum liquidity along the route (bottleneck). */
   bottleneckLiquidityUsd: number;
   /** Combined failure probability (1 - ∏(1 - p_i)). */
@@ -403,6 +405,15 @@ export function computeRouteCost(
   return {
     route,
     costs,
+    totalCostUsd:
+      costs.tradingFeesUsd +
+      costs.slippageUsd +
+      costs.gasUsd +
+      costs.bridgeCostUsd +
+      costs.fundingCostUsd +
+      costs.latencyRiskUsd +
+      costs.failureRiskUsd +
+      costs.safetyBufferUsd,
     bottleneckLiquidityUsd: bottleneckLiquidity,
     combinedFailureProbability: combinedFailureProb,
     totalRiskScore,
@@ -424,6 +435,7 @@ function makeInfiniteCost(route: Route): RouteCost {
       failureRiskUsd: 0,
       safetyBufferUsd: 0,
     },
+    totalCostUsd: Infinity,
     bottleneckLiquidityUsd: 0,
     combinedFailureProbability: 1,
     totalRiskScore: 1,
@@ -459,15 +471,8 @@ export function scoreRoute(
   }
 
   const routeCost = computeRouteCost(snapshot, route, costOptions);
-  const totalCost =
-    routeCost.costs.tradingFeesUsd +
-    routeCost.costs.slippageUsd +
-    routeCost.costs.gasUsd +
-    routeCost.costs.bridgeCostUsd +
-    routeCost.costs.fundingCostUsd +
-    routeCost.costs.latencyRiskUsd +
-    routeCost.costs.failureRiskUsd +
-    routeCost.costs.safetyBufferUsd;
+  // Single RISK.md sum exposed by the canonical aggregator (ADR-0014).
+  const totalCost = routeCost.totalCostUsd;
 
   const expectedNetProfitUsd = grossSpreadUsd - totalCost;
 
