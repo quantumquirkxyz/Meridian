@@ -1,3 +1,22 @@
+---
+name: iot-embedded
+category: iot
+maturity: stable
+version: 1
+description: Design embedded/IoT systems — firmware, sensors, edge computing, device connectivity, OTA updates — with reliability, security, and constrained resource awareness.
+capabilities:
+  - execute the core process defined in the skill body
+  - produce a Markdown artifact or structured result
+outputs:
+  - Markdown artifact with process steps and completion criteria
+sideEffects: []
+dependencies: []
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
+maxIterations: 6
+---
+
 # iot-embedded
 
 Design embedded/IoT systems — firmware, sensors, edge computing, device connectivity, OTA updates — with reliability, security, and constrained resource awareness.

@@ -3,7 +3,7 @@ name: react
 category: frontend
 maturity: stable
 version: 1
-description: Design React component structure and state seams so the UI stays composable and testable.
+description: Design React component structure and state seams — with composability, testability, and clear data flow.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

@@ -1,0 +1,10 @@
+{
+  "id": "fixture-regression",
+  "expectedRoute": ["skill-dev/evaluate-skill"],
+  "checks": [
+    {
+      "skill": "skill-dev/evaluate-skill",
+      "requiredReferences": ["scenarios/basic-routing.json"]
+    }
+  ]
+}

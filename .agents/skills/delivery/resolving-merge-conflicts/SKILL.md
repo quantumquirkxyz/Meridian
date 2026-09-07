@@ -3,7 +3,7 @@ name: resolving-merge-conflicts
 category: delivery
 maturity: stable
 version: 1
-description: "Use when you need to resolve a conflicted or blocked branch state: in-progress git merge/rebase conflicts, PR branch co
+description: "Use when you need to resolve a conflicted or blocked branch state: in-progress git merge/rebase conflicts, PR branch corrections, or other branch-state blockers that need deliberate resolution."
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

@@ -3,7 +3,7 @@ name: skill-performance-metrics
 category: skill-dev
 maturity: experimental
 version: 1
-description: Summarize Skill execution duration, success rate, and available run evidence; use when measuring Skill performance from 
+description: Summarize Skill execution duration, success rate, and available run evidence — use when measuring Skill performance from logs and records.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

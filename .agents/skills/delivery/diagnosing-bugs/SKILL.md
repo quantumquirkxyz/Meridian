@@ -3,7 +3,7 @@ name: diagnosing-bugs
 category: delivery
 maturity: stable
 version: 1
-description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports som
+description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something intermittent, ambiguous, or hard to reproduce.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

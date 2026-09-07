@@ -3,7 +3,7 @@ name: pro-market-analysis
 category: skill-dev/sandbox
 maturity: experimental
 version: 1
-description: Conduct professional market research — TAM/SAM/SOM, competitor analysis, pricing, and trend forecasting — with source citation and data quality checks.
+description: Conduct professional market research — TAM/SAM/SOM, competitor analysis, pricing, and trend forecasting — with source citation, data quality checks, and decision framing.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact satisfying completion criteria

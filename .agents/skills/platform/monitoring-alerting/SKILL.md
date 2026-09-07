@@ -3,7 +3,7 @@ name: monitoring-alerting
 category: platform
 maturity: stable
 version: 1
-description: Define the alerts, dashboards, and runtime signals that keep a project understandable in production.
+description: Define the alerts, dashboards, and runtime signals that keep a project understandable in production — with explicit operator intent.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

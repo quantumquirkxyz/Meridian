@@ -3,7 +3,7 @@ name: api-contracts
 category: integrations
 maturity: stable
 version: 1
-description: Define the request and response contracts, versioning rules, and compatibility boundaries for APIs.
+description: Define the request and response contracts, versioning rules, and compatibility boundaries for APIs — with explicit consumer obligations.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

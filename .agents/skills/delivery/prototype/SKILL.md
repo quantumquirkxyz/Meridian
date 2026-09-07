@@ -3,7 +3,7 @@ name: prototype
 category: delivery
 maturity: stable
 version: 1
-description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model o
+description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or interaction shape actually works.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

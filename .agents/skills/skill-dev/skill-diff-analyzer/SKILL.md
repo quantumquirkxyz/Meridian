@@ -3,7 +3,7 @@ name: skill-diff-analyzer
 category: skill-dev
 maturity: experimental
 version: 1
-description: Compare Skill versions and explain contract, dependency, and behavior impact; use when assessing changes between two Ski
+description: Compare Skill versions and explain contract, dependency, and behavior impact — use when assessing changes between two Skills.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

@@ -3,7 +3,7 @@ name: api-design
 category: foundation
 maturity: stable
 version: 1
-description: Design a small, durable API seam that keeps the backend deep and the caller contract explicit.
+description: Design a small, durable API seam — with a deep backend and explicit caller contract boundaries.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

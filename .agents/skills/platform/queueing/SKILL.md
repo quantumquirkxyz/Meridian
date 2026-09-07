@@ -3,7 +3,7 @@ name: queueing
 category: platform
 maturity: stable
 version: 1
-description: Shape background processing and message flow so work is durable, observable, and recoverable.
+description: Shape background processing and message flow — so work is durable, observable, and recoverable.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

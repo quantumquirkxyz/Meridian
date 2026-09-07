@@ -3,7 +3,7 @@ name: release-management
 category: platform
 maturity: stable
 version: 1
-description: Plan the release train, CI handoff, and rollback posture for a project so shipping stays controlled.
+description: Plan the release train, CI handoff, and rollback posture for a project — so shipping stays controlled.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

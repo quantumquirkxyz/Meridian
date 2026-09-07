@@ -3,7 +3,7 @@ name: knowledge-curator
 category: routing
 maturity: experimental
 version: 1
-description: Keep context, ADRs, registry entries, and research coherent over time.
+description: Keep context, ADRs, registry entries, and research coherent over time — with refresh and provenance discipline.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

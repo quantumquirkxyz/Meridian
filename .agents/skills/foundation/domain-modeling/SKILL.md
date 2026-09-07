@@ -3,7 +3,7 @@ name: domain-modeling
 category: foundation
 maturity: stable
 version: 1
-description: Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous langu
+description: Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language boundary.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

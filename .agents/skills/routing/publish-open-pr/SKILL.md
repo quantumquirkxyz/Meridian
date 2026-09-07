@@ -3,7 +3,7 @@ name: publish-open-pr
 category: routing
 maturity: stable
 version: 1
-description: Use when the user wants to publish a finished subissue as an open GitHub pull request from an already-prepared issue bra
+description: Use when the user wants to publish a finished subissue as an open GitHub pull request from an already-prepared issue branch — with scoped, auditable publication.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
@@ -33,7 +33,7 @@ maxIterations: 6
 Publish one completed repository-local subissue, including a corrective subissue, from a local checkout to GitHub as an open pull request after `implement` has finished.
 Keep the diff tight and leave a reviewer with a short body that explains what changed and why in this repo's terms.
 Follow the issue workflow in `AGENTS.md`; this skill only publishes the already-prepared branch.
-The linked issue's metadata is the source of truth for labels and milestone. Follow [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when carrying metadata into the PR.
+The linked issue's metadata is the source of truth for labels and milestone. Follow [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md) when carrying metadata into the PR.
 
 ## Workflow
 

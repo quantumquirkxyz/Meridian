@@ -3,7 +3,7 @@ name: implement
 category: delivery
 maturity: stable
 version: 1
-description: "Implement a piece of work based on a spec or set of tickets, or build a scoped fix that can be handed off for publicati
+description: Implement a piece of work based on a spec or set of tickets, or build a scoped fix that can be handed off for publication.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

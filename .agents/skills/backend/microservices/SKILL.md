@@ -1,3 +1,22 @@
+---
+name: microservices
+category: backend
+maturity: stable
+version: 1
+description: Design microservice architectures — service decomposition, inter-service communication, data ownership, resilience patterns — with explicit boundaries and failure isolation.
+capabilities:
+  - execute the core process defined in the skill body
+  - produce a Markdown artifact or structured result
+outputs:
+  - Markdown artifact with process steps and completion criteria
+sideEffects: []
+dependencies: []
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
+maxIterations: 6
+---
+
 # microservices
 
 Design microservice architectures — service decomposition, inter-service communication, data ownership, resilience patterns — with explicit boundaries and failure isolation.

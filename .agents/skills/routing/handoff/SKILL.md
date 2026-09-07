@@ -3,7 +3,7 @@ name: handoff
 category: routing
 maturity: stable
 version: 1
-description: Compact the current conversation into a handoff document for another agent to pick up.
+description: Compact the current conversation into a handoff document for another agent to pick up — with explicit continuity and ownership notes.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

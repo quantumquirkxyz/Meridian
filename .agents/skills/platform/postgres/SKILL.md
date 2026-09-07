@@ -3,7 +3,7 @@ name: postgres
 category: platform
 maturity: stable
 version: 1
-description: Shape PostgreSQL schema and query decisions so the data model stays durable and reviewable.
+description: Shape PostgreSQL schema and query decisions — so the data model stays durable and reviewable.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

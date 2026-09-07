@@ -3,7 +3,7 @@ name: search
 category: integrations
 maturity: stable
 version: 1
-description: Design search behavior, indexing, and relevance seams so retrieval stays understandable and adjustable.
+description: Design search behavior, indexing, and relevance seams — so retrieval stays understandable and adjustable.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

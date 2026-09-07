@@ -3,7 +3,7 @@ name: grilling
 category: routing
 maturity: stable
 version: 1
-description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or u
+description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or use docs to sharpen the premise before acting.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

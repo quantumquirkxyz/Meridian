@@ -1,3 +1,22 @@
+---
+name: localization
+category: cms
+maturity: stable
+version: 1
+description: Design internationalization (i18n) and localization (l10n) — string management, locale handling, RTL support, cultural adaptation — so the product works across languages and regions.
+capabilities:
+  - execute the core process defined in the skill body
+  - produce a Markdown artifact or structured result
+outputs:
+  - Markdown artifact with process steps and completion criteria
+sideEffects: []
+dependencies: []
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
+maxIterations: 6
+---
+
 # localization
 
 Design internationalization (i18n) and localization (l10n) — string management, locale handling, RTL support, cultural adaptation — so the product works across languages and regions.

@@ -7,9 +7,7 @@ const repoRoot = process.cwd();
 const skillsRoot = path.join(repoRoot, '.agents', 'skills');
 const docsRoot = path.join(repoRoot, 'docs');
 const lockPath = path.join(repoRoot, 'skills-lock.json');
-const allowedRetiredTermFiles = new Set([
-  'docs/agents/provenance.md',
-]);
+const allowedRetiredTermFiles = new Set(['docs/agents/provenance.md']);
 
 const retiredPatterns = [
   /\bask-matt\b/,
@@ -55,6 +53,20 @@ async function walk(dir, predicate = () => true) {
   return out;
 }
 
+async function collectSkillFiles(dir, out = []) {
+  if (!(await exists(dir))) return out;
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const filePath = path.join(dir, entry.name);
+    if (filePath.includes(`${path.sep}platform${path.sep}runs${path.sep}`)) continue;
+    if (entry.isDirectory()) {
+      const skillMd = path.join(filePath, 'SKILL.md');
+      if (await exists(skillMd)) out.push(skillMd);
+      else await collectSkillFiles(filePath, out);
+    }
+  }
+  return out;
+}
+
 function parseFrontmatter(text) {
   if (!text.startsWith('---')) return {};
   const end = text.indexOf('\n---', 3);
@@ -75,6 +87,14 @@ function parseFrontmatter(text) {
     }
   }
   return out;
+}
+
+function skillName(file, text) {
+  const fmName = text.match(/^name:\s*(.*)$/m)?.[1]?.trim().replace(/^["']|["']$/g, '');
+  if (fmName) return fmName;
+  const heading = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (heading) return heading;
+  return path.basename(path.dirname(file));
 }
 
 async function checkLinks(markdownFiles, errors) {
@@ -98,7 +118,7 @@ async function main() {
   const warnings = [];
   const errors = [];
   const markdownFiles = await walk(repoRoot, (file) => file.endsWith('.md'));
-  const skillFiles = await walk(skillsRoot, (file) => file.endsWith('SKILL.md'));
+  const skillFiles = await collectSkillFiles(skillsRoot);
   const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
   const skillNames = new Set(skillFiles.map((file) => path.basename(path.dirname(file))));
 
@@ -118,8 +138,8 @@ async function main() {
   for (const file of skillFiles) {
     const text = await fs.readFile(file, 'utf8');
     const fm = parseFrontmatter(text);
-    const name = path.basename(path.dirname(file));
-    if (fm.name !== name) errors.push(`${name}: frontmatter name mismatch (${fm.name})`);
+    const name = skillName(file, text);
+    if (fm.name && fm.name !== name) errors.push(`${name}: frontmatter name mismatch (${fm.name})`);
     for (const dependency of fm.dependencies ?? []) {
       if (!skillNames.has(dependency)) errors.push(`${name}: dependency missing ${dependency}`);
     }

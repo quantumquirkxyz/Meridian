@@ -3,7 +3,7 @@ name: capability-router
 category: routing
 maturity: experimental
 version: 1
-description: Route work to the best matching Skill using declared capabilities and compatibility.
+description: Route work to the best matching Skill using declared capabilities and compatibility — with explicit selection rules.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

@@ -3,7 +3,7 @@ name: codebase-design
 category: foundation
 maturity: stable
 version: 1
-description: Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find de
+description: Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find depth, or define a clean seam.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

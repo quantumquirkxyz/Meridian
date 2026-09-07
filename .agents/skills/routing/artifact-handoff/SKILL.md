@@ -3,7 +3,7 @@ name: artifact-handoff
 category: routing
 maturity: stable
 version: 1
-description: Transfer structured artifacts between Skills and sessions.
+description: Transfer structured artifacts between Skills and sessions — with explicit provenance and consumer expectations.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

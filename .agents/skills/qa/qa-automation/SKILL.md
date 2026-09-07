@@ -1,3 +1,22 @@
+---
+name: qa-automation
+category: qa
+maturity: stable
+version: 1
+description: Design and implement automated test suites — unit, integration, e2e — with proper coverage, maintainability, and CI integration.
+capabilities:
+  - execute the core process defined in the skill body
+  - produce a Markdown artifact or structured result
+outputs:
+  - Markdown artifact with process steps and completion criteria
+sideEffects: []
+dependencies: []
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
+maxIterations: 6
+---
+
 # qa-automation
 
 Design and implement automated test suites — unit, integration, e2e — with proper coverage, maintainability, and CI integration.

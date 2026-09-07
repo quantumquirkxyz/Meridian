@@ -1,0 +1,11 @@
+{
+  "id": "basic-routing",
+  "expectedRoute": ["project/to-spec", "delivery/review-pr"],
+  "checks": [
+    {
+      "skill": "evaluate-skill",
+      "mustMention": ["Scenario fixtures live", "Behavioral fixtures live"],
+      "forbid": ["TODO"]
+    }
+  ]
+}

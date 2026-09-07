@@ -3,7 +3,7 @@ name: vercel
 category: platform
 maturity: experimental
 version: 1
-description: Shape Vercel deployment and runtime concerns into a clear operational seam.
+description: Shape Vercel deployment and runtime concerns into a clear operational seam — with explicit platform constraints.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

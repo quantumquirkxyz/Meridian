@@ -39,7 +39,7 @@ The completion note still needs the familiar closing sections that make the hand
 - Status: implemented
 - Scope Notes
 If the planned fixes are blocked by a conflicted branch state, hand off to `resolving-merge-conflicts` first, then resume the review-fix plan on the clean branch state.
-When the fix plan references tracker metadata, use [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) so labels, milestone, and project context remain consistent with the linked issue.
+When the fix plan references tracker metadata, use [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md) so labels, milestone, and project context remain consistent with the linked issue.
 If a planned item no longer matches the diff, stop and refresh the plan instead of improvising around it.
 
 ## Workflow

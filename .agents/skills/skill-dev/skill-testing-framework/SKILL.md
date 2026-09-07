@@ -3,7 +3,7 @@ name: skill-testing-framework
 category: skill-dev
 maturity: stable
 version: 1
-description: Validate Skill structure, contracts, dependencies, anti-patterns, and isolated execution; use when checking a Skill befo
+description: Validate Skill structure, contracts, dependencies, anti-patterns, and isolated execution — use when checking a Skill before promotion.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

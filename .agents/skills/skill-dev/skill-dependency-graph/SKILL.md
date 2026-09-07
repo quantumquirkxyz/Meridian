@@ -3,7 +3,7 @@ name: skill-dependency-graph
 category: skill-dev
 maturity: experimental
 version: 1
-description: Build a dependency graph that exposes central Skills, cycles, and unnecessary coupling; use when analyzing Skill modular
+description: Build a dependency graph that exposes central Skills, cycles, and unnecessary coupling — use when analyzing Skill modularity.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

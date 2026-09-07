@@ -14,7 +14,7 @@ sideEffects: []
 dependencies: []
 stopCondition: Artifact present with deployment recommendation.
 risk: medium
-trustTier: 2
+trustTier: 3
 maxIterations: 6
 ---
 

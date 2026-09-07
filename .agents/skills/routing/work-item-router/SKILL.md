@@ -39,7 +39,7 @@ Use this skill before `to-spec`, `to-tickets`, or `make-project` when the task i
 - Input: a request involving specs, tickets, spec/ticket audits, projects, PR metadata, or review-fix comments.
 - Output: a routing note that identifies the downstream skill and the relevant governance documents.
 - Scope: routing only. Do not draft the artifact here.
-- Rule: always read [`docs/agents/index.md`](../../../docs/agents/index.md) first.
+- Rule: always read [`docs/agents/index.md`](../../../../docs/agents/index.md) first.
 - Rule: prefer the canonical work-item format over ad hoc tracker metadata.
 
 ## Workflow

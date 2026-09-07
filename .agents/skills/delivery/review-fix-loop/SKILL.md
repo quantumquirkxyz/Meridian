@@ -3,7 +3,7 @@ name: review-fix-loop
 category: delivery
 maturity: stable
 version: 1
-description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to
+description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply them, and repeat until the PR is clean or blocked."
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
@@ -35,7 +35,7 @@ Do not merge, close, or delete branches here; this skill coordinates the loop on
 ## Overview
 
 Coordinate review, planning, and implementation without diluting any one skill's responsibility. The review remains the measurement instrument; this skill decides whether to plan fixes, implement them, repeat, or hand off to ship-subissue.
-Use the canonical work-item metadata format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) as the source of truth for labels, milestone, and project metadata when preserving the loop state in comments or handoffs.
+Use the canonical work-item metadata format in [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md) as the source of truth for labels, milestone, and project metadata when preserving the loop state in comments or handoffs.
 Keep the loop tight: if the same review-fix plan would be posted again without a new finding, stop rather than restating the same repair in different words.
 
 ## Contract

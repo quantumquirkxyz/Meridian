@@ -3,7 +3,7 @@ name: grill
 category: routing
 maturity: stable
 version: 1
-description: Alias for the quirk grilling flow. Use when the user says "grill" and wants a relentless interview to sharpen a plan, de
+description: Alias for the quirk grilling flow. Use when the user says "grill" and wants a relentless interview to sharpen a plan, decision, or design.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

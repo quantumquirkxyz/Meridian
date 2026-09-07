@@ -3,7 +3,7 @@ name: ship-subissue
 category: routing
 maturity: stable
 version: 1
-description: Use when a finished subissue already has a clean PR and you need to merge it, mark it as completed, and close the linked
+description: Use when a finished subissue already has a clean PR and you need to merge it, mark it as completed, and close the linked issue — with release discipline.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
@@ -31,7 +31,7 @@ maxIterations: 6
 # Ship Subissue
 
 Merge one approved repository-local subissue PR, including a corrective subissue PR, mark the subissue as completed, and close out the linked issue when needed.
-Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) when deciding what metadata to preserve: linked-issue labels and milestone are the source of truth, and the completion note should not introduce conflicting tracker metadata.
+Use the canonical work-item format in [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md) when deciding what metadata to preserve: linked-issue labels and milestone are the source of truth, and the completion note should not introduce conflicting tracker metadata.
 
 ## Workflow
 

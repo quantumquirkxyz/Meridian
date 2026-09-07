@@ -3,7 +3,7 @@ name: deployment
 category: platform
 maturity: stable
 version: 1
-description: Define how a project is built, released, and rolled back as a safe operational seam.
+description: Define how a project is built, released, and rolled back — as a safe operational seam.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

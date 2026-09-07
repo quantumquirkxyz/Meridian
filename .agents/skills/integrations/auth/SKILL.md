@@ -3,7 +3,7 @@ name: auth
 category: integrations
 maturity: stable
 version: 1
-description: Design authentication and authorization as a small, explicit seam with clear caller and operator responsibilities.
+description: Design authentication and authorization as a small, explicit seam — with clear caller and operator responsibilities.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

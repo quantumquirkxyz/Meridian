@@ -1,3 +1,22 @@
+---
+name: performance-testing
+category: qa
+maturity: stable
+version: 1
+description: Design and execute performance tests — load, stress, soak, spike — to validate latency, throughput, and resource consumption under realistic conditions.
+capabilities:
+  - execute the core process defined in the skill body
+  - produce a Markdown artifact or structured result
+outputs:
+  - Markdown artifact with process steps and completion criteria
+sideEffects: []
+dependencies: []
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
+maxIterations: 6
+---
+
 # performance-testing
 
 Design and execute performance tests — load, stress, soak, spike — to validate latency, throughput, and resource consumption under realistic conditions.

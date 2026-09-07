@@ -3,7 +3,7 @@ name: docs-management
 category: project
 maturity: stable
 version: 1
-description: Keep repository documentation, ADRs, and durable context aligned with the current project shape.
+description: Keep repository documentation, ADRs, and durable context aligned with the current project shape — with explicit consumer rules.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

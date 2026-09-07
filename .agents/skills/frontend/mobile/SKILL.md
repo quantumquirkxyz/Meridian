@@ -3,7 +3,7 @@ name: mobile
 category: frontend
 maturity: stable
 version: 1
-description: Shape mobile projects around device constraints, offline behavior, and platform seams that stay explicit.
+description: Shape mobile projects around device constraints, offline behavior, and platform seams — with explicit performance and resilience boundaries.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

@@ -3,7 +3,7 @@ name: skill-template-generator
 category: skill-dev
 maturity: sandbox
 version: 1
-description: Generate an interactive, contract-complete Skill template in the sandbox; use when starting a new Skill with the lab's s
+description: Generate an interactive, contract-complete Skill template in the sandbox — use when starting a new Skill with the lab's scaffolding.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

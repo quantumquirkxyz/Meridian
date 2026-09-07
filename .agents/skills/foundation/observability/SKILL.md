@@ -3,7 +3,7 @@ name: observability
 category: foundation
 maturity: stable
 version: 1
-description: Define the logs, metrics, traces, and alerts needed to understand a system in production.
+description: Define the logs, metrics, traces, and alerts needed to understand a system in production — with explicit runtime signal ownership.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

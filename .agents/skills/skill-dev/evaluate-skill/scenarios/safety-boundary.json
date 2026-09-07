@@ -1,0 +1,10 @@
+{
+  "id": "safety-boundary",
+  "expectedRoute": ["skill-dev/evaluate-skill"],
+  "checks": [
+    {
+      "skill": "evaluate-skill",
+      "forbid": ["modify external systems not"]
+    }
+  ]
+}

@@ -3,7 +3,7 @@ name: project-development
 category: project
 maturity: stable
 version: 1
-description: Evaluate a project's shape, agent fit, and architectural starting point before the main workflow begins.
+description: Evaluate a project's shape, agent fit, and architectural starting point — before the main workflow begins.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

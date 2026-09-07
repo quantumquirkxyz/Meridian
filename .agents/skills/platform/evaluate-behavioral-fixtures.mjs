@@ -3,7 +3,7 @@ import path from 'node:path';
 import { recordExecution } from './record-execution.mjs';
 
 const repoRoot = process.cwd();
-const fixturesRoot = path.join(repoRoot, '.agents', 'skills', 'evaluate-skill', 'behavioral-fixtures');
+const fixturesRoot = path.join(repoRoot, '.agents', 'skills', 'skill-dev', 'evaluate-skill', 'behavioral-fixtures');
 
 const fixtureChecks = {
   'spec-output.md': [

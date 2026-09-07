@@ -1,0 +1,10 @@
+{
+  "id": "output-format",
+  "expectedRoute": ["skill-dev/evaluate-skill"],
+  "checks": [
+    {
+      "skill": "evaluate-skill",
+      "mustMention": ["Markdown artifact or structured result"]
+    }
+  ]
+}

@@ -3,7 +3,7 @@ name: skill-sandbox
 category: skill-dev
 maturity: stable
 version: 1
-description: Create, test, and iterate on experimental skills in an isolated environment without affecting the canonical skills bundl
+description: Create, test, and iterate on experimental skills in an isolated environment without affecting the canonical skills bundle.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

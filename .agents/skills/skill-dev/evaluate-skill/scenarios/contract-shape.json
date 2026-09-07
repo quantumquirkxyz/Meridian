@@ -1,0 +1,10 @@
+{
+  "id": "contract-shape",
+  "expectedRoute": ["skill-dev/evaluate-skill"],
+  "checks": [
+    {
+      "skill": "evaluate-skill",
+      "mustMention": ["Stop condition", "Completion criteria"]
+    }
+  ]
+}

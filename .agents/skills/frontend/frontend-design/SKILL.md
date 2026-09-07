@@ -3,7 +3,7 @@ name: frontend-design
 category: frontend
 maturity: stable
 version: 1
-description: Shape frontend work into a clear visual system, interaction model, and implementation seam.
+description: Shape frontend work into a clear visual system, interaction model, and implementation seam — with explicit state and motion boundaries.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

@@ -3,7 +3,7 @@ name: context-pack
 category: routing
 maturity: experimental
 version: 1
-description: Build a minimal fresh context pack with ordered reads and provenance.
+description: Build a minimal fresh context pack with ordered reads and provenance — for scoped, high-signal handoff.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

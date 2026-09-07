@@ -4,7 +4,7 @@ import { recordExecution } from './record-execution.mjs';
 
 const repoRoot = process.cwd();
 const skillsRoot = path.join(repoRoot, '.agents', 'skills');
-const scenariosDir = path.join(skillsRoot, 'evaluate-skill', 'scenarios');
+const scenariosDir = path.join(skillsRoot, 'skill-dev', 'evaluate-skill', 'scenarios');
 
 function frontmatterValue(text, key) {
   const match = text.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
@@ -30,7 +30,13 @@ function frontmatterList(text, key) {
 }
 
 async function readSkill(skillName) {
-  const skillPath = path.join(skillsRoot, skillName, 'SKILL.md');
+  let skillPath = path.join(skillsRoot, skillName, 'SKILL.md');
+  try {
+    await fs.access(skillPath);
+  } catch {
+    const matches = await findSkillFiles(skillsRoot, skillName);
+    skillPath = matches[0];
+  }
   const text = await fs.readFile(skillPath, 'utf8');
   return {
     path: skillPath,
@@ -38,6 +44,18 @@ async function readSkill(skillName) {
     sideEffects: frontmatterList(text, 'sideEffects'),
     name: frontmatterValue(text, 'name'),
   };
+}
+
+async function findSkillFiles(dir, skillName, out = []) {
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const skillPath = path.join(filePath, 'SKILL.md');
+      if (entry.name === skillName && await exists(skillPath)) out.push(skillPath);
+      else await findSkillFiles(filePath, skillName, out);
+    }
+  }
+  return out;
 }
 
 async function scenarioFiles() {
@@ -78,7 +96,8 @@ async function main() {
         errors.push(`${scenario.id}: check references missing skill ${check.skill}`);
         continue;
       }
-      if (skill.name !== check.skill) {
+      const expectedName = path.basename(check.skill);
+      if (skill.name !== expectedName) {
         errors.push(`${scenario.id}: ${check.skill} frontmatter name is ${skill.name}`);
       }
       for (const phrase of check.mustMention ?? []) {
@@ -97,7 +116,7 @@ async function main() {
         }
       }
       for (const ref of check.requiredReferences ?? []) {
-        const refPath = path.join(skillsRoot, check.skill, ref);
+        const refPath = path.join(path.dirname(skill.path), ref);
         if (!(await exists(refPath))) {
           errors.push(`${scenario.id}: ${check.skill} missing reference ${ref}`);
         }

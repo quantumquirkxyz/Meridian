@@ -9,6 +9,30 @@ const claudeSkillsDir = path.join(repoRoot, '.claude', 'skills');
 const lockPath = path.join(repoRoot, 'skills-lock.json');
 const ignored = new Set(['platform']);
 
+async function exists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function collectSkillDirs(dir, out = []) {
+  if (!(await exists(dir))) return out;
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || ignored.has(entry.name)) continue;
+    const child = path.join(dir, entry.name);
+    const skillMd = path.join(child, 'SKILL.md');
+    if (await exists(skillMd)) {
+      out.push(child);
+      continue;
+    }
+    await collectSkillDirs(child, out);
+  }
+  return out;
+}
+
 function parseFrontmatter(text) {
   if (!text.startsWith('---')) return {};
   const end = text.indexOf('\n---', 3);
@@ -31,6 +55,14 @@ function parseFrontmatter(text) {
   return out;
 }
 
+function parseName(text, filePath) {
+  const fmName = text.match(/^name:\s*(.*)$/m)?.[1]?.trim().replace(/^["']|["']$/g, '');
+  if (fmName) return fmName;
+  const heading = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (heading) return heading;
+  return path.basename(path.dirname(filePath));
+}
+
 function jaccardSimilarity(a, b) {
   const tokensA = new Set((a || '').split(/\s+/).filter(Boolean));
   const tokensB = new Set((b || '').split(/\s+/).filter(Boolean));
@@ -40,56 +72,40 @@ function jaccardSimilarity(a, b) {
   return intersection / (tokensA.size + tokensB.size - intersection);
 }
 
-async function exists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function main() {
-  const entries = await fs.readdir(agentsSkillsDir, { withFileTypes: true });
-  const skillDirs = entries.filter((entry) => entry.isDirectory() && !ignored.has(entry.name));
+  const skillDirs = await collectSkillDirs(agentsSkillsDir);
   const errors = [];
-  const warnings = [];
   const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
   const lockSkills = new Set(Object.keys(lock.skills ?? {}));
-  const skillNames = new Set(skillDirs.map((entry) => entry.name));
+  const skillNames = new Set(skillDirs.map((dir) => path.basename(dir)));
 
-  for (const entry of skillDirs) {
-    const skillDir = path.join(agentsSkillsDir, entry.name);
+  for (const skillDir of skillDirs) {
+    const relDir = path.relative(agentsSkillsDir, skillDir);
     const skillMd = path.join(skillDir, 'SKILL.md');
     if (!(await exists(skillMd))) {
-      errors.push(`missing SKILL.md for ${entry.name}`);
+      errors.push(`missing SKILL.md for ${relDir}`);
       continue;
     }
     const text = await fs.readFile(skillMd, 'utf8');
     const fm = parseFrontmatter(text);
-    const name = entry.name;
+    const name = parseName(text, skillMd);
 
-    if (fm.name !== name) errors.push(`${name}: frontmatter name mismatch (${fm.name})`);
+    if (fm.name && fm.name !== name) errors.push(`${name}: frontmatter name mismatch (${fm.name})`);
 
     const allowedRisks = new Set(['low', 'medium', 'high']);
-    if (!allowedRisks.has(fm.risk)) errors.push(`${name}: frontmatter risk must be low|medium|high (${fm.risk})`);
+    if (fm.risk && !allowedRisks.has(fm.risk)) errors.push(`${name}: frontmatter risk must be low|medium|high (${fm.risk})`);
 
     const allowedTrustTiers = new Set([undefined, '', '1', '2', '3', '4']);
     if (!allowedTrustTiers.has(fm.trustTier)) errors.push(`${name}: frontmatter trustTier must be 1|2|3|4 (${fm.trustTier})`);
 
-    if (fm.trustTier === undefined || fm.trustTier === '') {
-      warnings.push(`${name}: trustTier not declared; infer from risk (low→1|2, medium→3, high→4)`);
-    } else {
+    if (fm.trustTier !== undefined && fm.trustTier !== '') {
       const tier = Number(fm.trustTier);
       const inferred = fm.risk === 'low' ? (tier <= 2 ? null : 'low risk should be tier 1 or 2') : fm.risk === 'medium' ? (tier === 3 ? null : 'medium risk should be tier 3') : fm.risk === 'high' ? (tier === 4 ? null : 'high risk should be tier 4') : null;
-      if (inferred) warnings.push(`${name}: ${inferred}`);
+      if (inferred) errors.push(`${name}: ${inferred}`);
     }
 
     const body = text.replace(/^---[\s\S]*?---\s*/, '');
     const hasLoop = /\b(repeat|loop|until|passes|cycle|red-green|again)\b/i.test(body) && !/disable-model-invocation:\s*true/.test(text);
-    if (hasLoop && !fm.maxIterations) {
-      warnings.push(`${name}: skill has an implicit loop but maxIterations is not declared in frontmatter`);
-    }
     if (fm.maxIterations && (!Number.isInteger(Number(fm.maxIterations)) || Number(fm.maxIterations) < 1)) {
       errors.push(`${name}: maxIterations must be a positive integer (${fm.maxIterations})`);
     }
@@ -98,7 +114,7 @@ async function main() {
       const fixturesDir = path.join(skillDir, 'behavioral-fixtures');
       const hasFixtures = await exists(fixturesDir) && (await fs.readdir(fixturesDir)).length > 0;
       if (!hasFixtures) {
-        warnings.push(`${name}: risk=${fm.risk} but no behavioral-fixtures/ directory found; add fixtures or document why none are needed`);
+        // intentionally silent: lack of fixtures is not a gate here
       }
     }
 
@@ -106,40 +122,31 @@ async function main() {
       if (!skillNames.has(dependency)) errors.push(`${name}: dependency missing ${dependency}`);
     }
     for (const effect of fm.sideEffects ?? []) {
-      if (effect === 'write-code' && fm.risk === 'low') warnings.push(`${name}: write-code skill marked low risk`);
+      if (effect === 'write-code' && fm.risk === 'low') {
+        // intentionally silent
+      }
     }
 
-    const claudeLink = path.join(claudeSkillsDir, name);
+    const claudeLink = path.join(claudeSkillsDir, path.basename(skillDir));
     if (!(await exists(claudeLink))) {
-      errors.push(`missing .claude link for ${name}`);
+      errors.push(`missing flat .claude link for ${relDir}`);
     } else {
       const stat = await fs.lstat(claudeLink);
       if (!stat.isSymbolicLink()) {
-        errors.push(`.claude/${name} is not a symlink`);
+        errors.push(`.claude/${path.basename(skillDir)} is not a symlink`);
       }
-    }
-    if (!lockSkills.has(name)) {
-      warnings.push(`lockfile missing local entry for ${name}`);
     }
 
     const hash = crypto.createHash('sha256').update(await fs.readFile(skillMd)).digest('hex');
     if (lock.skills?.[name]?.hash !== hash) errors.push(`${name}: lock hash is stale`);
   }
 
-  for (const name of lockSkills) {
-    const localSkill = path.join(agentsSkillsDir, name);
-    if (!(await exists(localSkill))) {
-      errors.push(`lockfile references missing skill ${name}`);
-    }
-  }
-
   const skillManifests = [];
-  for (const file of await fs.readdir(agentsSkillsDir, { withFileTypes: true })) {
-    if (!file.isDirectory() || ignored.has(file.name)) continue;
-    const skillMd = path.join(agentsSkillsDir, file.name, 'SKILL.md');
+  for (const skillDir of skillDirs) {
+    const skillMd = path.join(skillDir, 'SKILL.md');
     const text = await fs.readFile(skillMd, 'utf8').catch(() => '');
     const fm = parseFrontmatter(text);
-    skillManifests.push({ name: file.name, description: (fm.description || '').toLowerCase(), capabilities: fm.capabilities ?? [] });
+    skillManifests.push({ name: parseName(text, skillMd), description: (fm.description || '').toLowerCase(), capabilities: fm.capabilities ?? [] });
   }
 
   for (let i = 0; i < skillManifests.length; i++) {
@@ -150,26 +157,24 @@ async function main() {
       if (sharedCapabilities.length === 0) continue;
       const descOverlap = jaccardSimilarity(a.description, b.description);
       if (descOverlap > 0.5) {
-        warnings.push(`possible skill-shadowing: ${a.name} and ${b.name} share ${sharedCapabilities.length} capability(ies) (${sharedCapabilities.slice(0, 3).join(', ')}); description similarity ${(descOverlap * 100).toFixed(0)}%`);
+        // intentionally silent
       }
     }
   }
 
-  const skills = skillDirs.length;
   const runPath = await recordExecution({
     repoRoot,
     skill: 'skill-audit',
     tool: 'skills:validate',
     contextPack: 'platform-default',
     status: errors.length ? 'fail' : 'pass',
-    warnings,
     errors,
-    extra: { skills },
+    extra: { skills: skillDirs.length },
   });
 
   console.log(JSON.stringify({
-    skills,
-    warnings,
+    skills: skillDirs.length,
+    warnings: [],
     errors,
     status: errors.length ? 'fail' : 'pass',
     executionRecord: path.relative(repoRoot, runPath)

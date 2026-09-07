@@ -3,7 +3,7 @@ name: wayfinder
 category: routing
 maturity: experimental
 version: 1
-description: Plan a huge chunk of work — more than one agent session can hold — as a map of decision tickets on your issue tracker, a
+description: Plan a huge chunk of work — more than one agent session can hold — as a map of decision tickets on your issue tracker, with staged decomposition and durable scope boundaries.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

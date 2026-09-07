@@ -3,7 +3,7 @@ name: make-project
 category: project
 maturity: stable
 version: 1
-description: Use when the user wants a new board in GitHub Projects, or another skill needs one — create the project, wire its fields
+description: Use when the user wants a new board in GitHub Projects, or another skill needs one — create the project, wire its fields, and preserve tracker semantics.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
