@@ -4,6 +4,12 @@ import { DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
 import { computeRouteCost, scoreRoute } from "@agenttrading/graph";
 import { RouteEngine } from "../src/live/route-engine.ts";
 import { OpportunityDetector } from "../src/live/opportunity-detector.ts";
+import {
+  ORDER_BOOK_GROSS_SPREAD_USD,
+  ORDER_BOOK_NET_PROFIT_USD,
+  ORDER_BOOK_ROUTE,
+  orderBookEdges,
+} from "./fixtures/order-book.ts";
 
 const NOW_MS = 1_700_000_000_000;
 
@@ -28,57 +34,21 @@ function weights(partial: Partial<MarketEdge["weights"]>): MarketEdge["weights"]
   };
 }
 
-/**
- * Two-hop ORDER_BOOK route: asset:BTC → venue:bybit → asset:ETH.
- * Weights mirror the canonical cost fixture in route-engine.test.ts so the
- * expected canonical stack is known (issue #134):
- *   fees 0.4+0.3 = 0.7, slippage 0.1+0.15 = 0.25, gas 0.2+0.15 = 0.35,
- *   latency (50+40)*0.001 = 0.09, failure 60_000 * (1 - .999*.998) = 179.88,
- *   safety buffer 1.0 → totalCost = 182.27.
- */
-const ORDER_BOOK_ROUTE = ["asset:BTC", "venue:bybit", "asset:ETH"];
-
 function buildOrderBookGraph(detector: OpportunityDetector): void {
-  for (const n of ORDER_BOOK_ROUTE) {
-    const type = n.startsWith("venue:") ? "VENUE" : "ASSET";
-    detector.graphInstance.addNode(node(n, type as MarketNode["type"]));
+  for (const id of ORDER_BOOK_ROUTE) {
+    const type = id.startsWith("venue:") ? "VENUE" : "ASSET";
+    detector.graphInstance.addNode(node(id, type as MarketNode["type"]));
   }
-  detector.graphInstance.upsertEdge(
-    "asset:BTC",
-    "venue:bybit",
-    "ORDER_BOOK",
-    weights({
-      price: 150,
-      fee: 0.4,
-      expectedSlippage: 0.1,
-      gasCost: 0.2,
-      latencyMs: 50,
-      liquidityUsd: 80_000,
-      confidence: 0.92,
-      riskScore: 0.05,
-      failureProbability: 0.001,
-    }),
-    "test",
-    true,
-  );
-  detector.graphInstance.upsertEdge(
-    "venue:bybit",
-    "asset:ETH",
-    "ORDER_BOOK",
-    weights({
-      price: 120,
-      fee: 0.3,
-      expectedSlippage: 0.15,
-      gasCost: 0.15,
-      latencyMs: 40,
-      liquidityUsd: 60_000,
-      confidence: 0.88,
-      riskScore: 0.06,
-      failureProbability: 0.002,
-    }),
-    "test",
-    true,
-  );
+  for (const def of orderBookEdges()) {
+    detector.graphInstance.upsertEdge(
+      def.from,
+      def.to,
+      def.type,
+      def.weights,
+      "test",
+      true,
+    );
+  }
 }
 
 /**
@@ -153,10 +123,17 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
     expect(route!.status).toBe("LIVE");
 
     // scoreRoute is the graph-package aggregator; the detector must agree.
-    const graphCandidate = scoreRoute(snapshot, ORDER_BOOK_ROUTE, 270);
+    const graphCandidate = scoreRoute(
+      snapshot,
+      [...ORDER_BOOK_ROUTE],
+      ORDER_BOOK_GROSS_SPREAD_USD,
+    );
     expect(graphCandidate).toBeDefined();
 
-    expect(candidate!.candidate.expectedNetProfitUsd).toBeCloseTo(87.73, 2);
+    expect(candidate!.candidate.expectedNetProfitUsd).toBeCloseTo(
+      ORDER_BOOK_NET_PROFIT_USD,
+      2,
+    );
     expect(candidate!.candidate.expectedNetProfitUsd).toBeCloseTo(
       route!.expectedNetProfitUsd,
       10,
@@ -178,11 +155,14 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
 
     const canonical = computeRouteCost(
       detector.getGraphSnapshot(),
-      ORDER_BOOK_ROUTE,
+      [...ORDER_BOOK_ROUTE],
     );
 
     // True gross spread (price1 + price2), not net + a bespoke cost stack.
-    expect(candidate!.candidate.grossSpreadUsd).toBeCloseTo(270, 2);
+    expect(candidate!.candidate.grossSpreadUsd).toBeCloseTo(
+      ORDER_BOOK_GROSS_SPREAD_USD,
+      2,
+    );
 
     // The breakdown is byte-for-byte the canonical aggregator's.
     expect(candidate!.candidate.costs).toEqual(canonical.costs);
@@ -207,8 +187,8 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
 
     const canonical = computeRouteCost(detector.getGraphSnapshot(), BRIDGE_ROUTE);
 
-    // The canonical (and historical flat-$0.5) breakdown agree here is NOT
-    // the point: bridge cost must be 12.5 (the weight), exactly once.
+    // A flat $0.5-per-bridge-edge model would report 1 × 0.5 = 0.5; the point
+    // is the dedicated BRIDGE weight (12.5) governs.
     expect(candidate!.candidate.costs.bridgeCostUsd).toBeCloseTo(12.5, 10);
     expect(candidate!.candidate.costs).toEqual(canonical.costs);
 
@@ -252,7 +232,7 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
       (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(route).toBeDefined();
-    expect(route!.expectedNetProfitUsd).toBeCloseTo(87.73, 2);
+    expect(route!.expectedNetProfitUsd).toBeCloseTo(ORDER_BOOK_NET_PROFIT_USD, 2);
     expect(route!.status).toBe("LIVE");
   });
 });
