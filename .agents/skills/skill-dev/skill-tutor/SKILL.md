@@ -4,9 +4,6 @@ category: skill-dev
 maturity: stable
 version: 1
 description: Interactive tutorial that guides users through creating their first quirk skill using structured worksheets and hands-on
-risk: low
-trustTier: 1
-maxIterations: 6
 ---
 
 # Skill Tutor: Interactive Guide to Creating Your First quirk Skill

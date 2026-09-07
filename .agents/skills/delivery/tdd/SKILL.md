@@ -7,21 +7,13 @@ description: Test-driven development. Use when the user wants to build features 
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
-inputs:
-  - behavior seam
-  - acceptance criterion
-  - public interface
 outputs:
-  - failing test
-  - passing implementation
-  - regression coverage
-sideEffects:
-  - write-tests
-  - write-code
+  - Markdown artifact with process steps and completion criteria
+sideEffects: []
 dependencies: []
-stopCondition: One behavior slice is green at a public seam.
-risk: medium
-trustTier: 3
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
 maxIterations: 6
 ---
 

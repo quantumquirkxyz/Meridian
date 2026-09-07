@@ -9,13 +9,11 @@ capabilities:
   - produce a Markdown artifact or structured result
 outputs:
   - Markdown artifact with process steps and completion criteria
-sideEffects:
-  - write-code
-  - run-tests
+sideEffects: []
 dependencies: []
-stopCondition: The scoped review fixes are implemented and validated locally.
-risk: medium
-trustTier: 3
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
 maxIterations: 6
 ---
 
@@ -41,7 +39,7 @@ The completion note still needs the familiar closing sections that make the hand
 - Status: implemented
 - Scope Notes
 If the planned fixes are blocked by a conflicted branch state, hand off to `resolving-merge-conflicts` first, then resume the review-fix plan on the clean branch state.
-When the fix plan references tracker metadata, use [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md) so labels, milestone, and project context remain consistent with the linked issue.
+When the fix plan references tracker metadata, use [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md) so labels, milestone, and project context remain consistent with the linked issue.
 If a planned item no longer matches the diff, stop and refresh the plan instead of improvising around it.
 
 ## Workflow

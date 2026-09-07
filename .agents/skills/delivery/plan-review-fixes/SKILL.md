@@ -9,12 +9,11 @@ capabilities:
   - produce a Markdown artifact or structured result
 outputs:
   - Markdown artifact with process steps and completion criteria
-sideEffects:
-  - write-pr-comment
+sideEffects: []
 dependencies: []
-stopCondition: A durable Review Fix Plan comment is posted.
-risk: medium
-trustTier: 3
+stopCondition: All process steps executed; artifact saved; criteria met.
+risk: low
+trustTier: 1
 maxIterations: 6
 ---
 
@@ -39,7 +38,7 @@ The plan still needs the familiar checklist language that keeps fixes executable
 
 - Severity
 - Scope guard
-When a PR already has linked-issue metadata, keep the plan aligned with the canonical work-item format in [`docs/agents/work-item-format.md`](../../../../docs/agents/work-item-format.md): preserve the linked issue's labels and milestone as the source of truth, and do not invent new tracker metadata in the comment.
+When a PR already has linked-issue metadata, keep the plan aligned with the canonical work-item format in [`docs/agents/work-item-format.md`](../../../docs/agents/work-item-format.md): preserve the linked issue's labels and milestone as the source of truth, and do not invent new tracker metadata in the comment.
 If a finding is already partially fixed in the current branch, keep it only if the remaining gap is still actionable and testable.
 
 ## Workflow
