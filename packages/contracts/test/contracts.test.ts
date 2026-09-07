@@ -163,6 +163,26 @@ describe("MarketGraphSnapshot", () => {
     expect(isMarketGraphSnapshot({ version: 1, snapshotId: "s", createdAtMs: 0, nodes: [], edges: [] })).toBe(true);
     expect(isEdgeWeights({ failureProbability: 2 })).toBe(false);
   });
+
+  test("bridgeCostUsd is an optional dedicated weight on edges", () => {
+    expect(isEdgeWeights({ bridgeCostUsd: 0.5 })).toBe(true);
+    expect(isEdgeWeights({ bridgeCostUsd: 0 })).toBe(true);
+    expect(isEdgeWeights({ bridgeCostUsd: "high" })).toBe(false);
+    // Existing weight shapes still parse without the new field (expand, non-breaking).
+    expect(
+      isEdgeWeights({
+        price: 30_000,
+        fee: 10,
+        gasCost: 0,
+        expectedSlippage: 5,
+        latencyMs: 12,
+        liquidityUsd: 1_000_000,
+        failureProbability: 0.01,
+        confidence: 0.99,
+        riskScore: 0.1,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("OpportunityCandidate", () => {

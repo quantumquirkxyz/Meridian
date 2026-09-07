@@ -59,6 +59,8 @@ export interface EdgeWeights {
   liquidityUsd?: number;
   /** Funding cost in USD (from FUNDING_UPDATE events). */
   fundingCost?: number;
+  /** Bridge cost in USD; BRIDGE edges carry it instead of reusing `fee`. */
+  bridgeCostUsd?: number;
   /** In [0, 1]. */
   failureProbability?: number;
   /** In [0, 1]. */
@@ -109,6 +111,7 @@ export const isEdgeWeights: Validator<EdgeWeights> = isObjectOf({
   latencyMs: isOptional(isNumber),
   liquidityUsd: isOptional(isNumber),
   fundingCost: isOptional(isNumber),
+  bridgeCostUsd: isOptional(isNumber),
   failureProbability: isOptional(isInRange(0, 1)),
   confidence: isOptional(isInRange(0, 1)),
   riskScore: isOptional(isInRange(0, 1)),
