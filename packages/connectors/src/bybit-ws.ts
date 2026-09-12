@@ -127,6 +127,7 @@ function validateWSMessage(raw: string): BybitWSResponse | null {
   if (!isBybitWSResponse(parsed)) {
     return null; // Invalid schema
   }
+
   return parsed as BybitWSResponse;
 }
 
