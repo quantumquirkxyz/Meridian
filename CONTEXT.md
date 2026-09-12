@@ -190,5 +190,33 @@ Real-capital trading across the system's venues: Bybit (CEX) and PancakeSwap (DE
 _Avoid_: any operation without real credentials or without capital exposure; conflating with demo or simulated trading.
 
 **Kill switch:**
-Manual (TUI) + automatic (drawdown, orphans, reconciliation mismatch). Identical across all modes. Activates `HALT` mode and blocks all new `OrderIntent` objects.
+Manual (TUI) + automatic (drawdown, orphans, reconciliation mismatch). Identical in all modes. Activates `HALT` mode and blocks all new `OrderIntent` objects.
 _Avoid_: treating kill switch as optional; different behavior between modes.
+
+---
+
+## Security Hardening Terms (PROJ-SEC-HARDENING)
+
+**Secret Manager (1Password CLI):**
+Runtime secret injection via `op inject` — secrets stored in 1Password vault, injected at process start via stdin/stdout pipe, never written to disk. Replaces `.env` file. See ADR-S01.
+_Avoid_: `.env` files in working directory; secrets in git history; plaintext secrets in CI logs.
+
+**AWS KMS Signer:**
+`viem` signer implementation where ECDSA secp256k1 private key lives in AWS KMS (FIPS 140-2 L3). Signing requests go to KMS API; key never in application memory. Used for DEXExecutor. See ADR-S02.
+_Avoid_: private keys as strings in memory; local file keystores; unmanaged key rotation.
+
+**Multi-RPC Consensus (2/3):**
+Resilience pattern for DEX market data: 3 independent RPC providers (QuickNode, Alchemy, Ankr) called in parallel; `eth_call` results compared; 2/3 agreement required to accept reserves. Single RPC failure or divergence → pool marked unavailable. See ADR-S03.
+_Avoid_: single RPC dependency; blind trust in one provider; no divergence detection.
+
+**TLS Certificate Pinning (Fingerprint):**
+Custom CA bundle + SHA256 leaf certificate fingerprint verification in `tls.checkServerIdentity`. Hardcoded fingerprints in versioned config; 90-day rotation schedule with 30-day alert. Applied to Bybit/Binance REST and WebSocket connections. See ADR-S04.
+_Avoid_: system CA trust store only; HPKP (deprecated); mTLS (unsupported by exchanges).
+
+**Audit Log Sanitization (Denylist + Hash):**
+`AuditLogger.record()` transforms payload before JSONL write: denylist fields (`apiKey`, `privateKey`, `secret`, `walletBalance`, etc.) → `[REDACTED]`; correlation IDs (`orderId`, `txHash`) → SHA256 prefix. Debug logs (opt-in) write unsanitized to separate file. See ADR-S05.
+_Avoid_: raw secrets in audit logs; allowlist-only (fragile); no correlation capability.
+
+**gitleaks:**
+Secrets scanning tool (pre-commit + CI) detecting 100+ secret types via regex + entropy. Config in `.gitleaks.toml` with allowlist for test fixtures. Blocks commit/PR on detection. See ADR-S06.
+_Avoid_: no secrets scanning; trufflehog-only (slower, more noise); scanning only in CI (not pre-commit).
