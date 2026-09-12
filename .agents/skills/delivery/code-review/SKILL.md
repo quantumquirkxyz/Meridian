@@ -3,7 +3,7 @@ name: code-review
 category: delivery
 maturity: stable
 version: 1
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes — Standards (does the code fo
+description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes - Standards and Spec - and publish findings only.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

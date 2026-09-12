@@ -3,7 +3,7 @@ name: to-tickets
 category: project
 maturity: stable
 version: 1
-description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, 
+description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, and publish the smallest claimable slices.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

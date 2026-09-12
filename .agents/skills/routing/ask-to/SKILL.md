@@ -3,7 +3,7 @@ name: ask-to
 category: routing
 maturity: stable
 version: 1
-description: Ask which skill or flow fits your situation. A router over the skills in this repo that recommends the next step without
+description: Ask which skill or flow fits your situation. A router over the skills in this repo that recommends the next step after governance preflight.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
@@ -30,9 +30,9 @@ maxIterations: 6
 
 # Ask To
 
-You don't remember every skill, so ask.
+Use this skill to choose the next step when the route is unclear or the request is not already claimed.
 
-Start by building a minimal fresh context pack and then route against declared capabilities instead of memory.
+Start by building a minimal fresh context pack and then route against declared capabilities instead of memory. If the request may affect work-item metadata or tracker state, run `work-item-router` first.
 
 ## Contract
 

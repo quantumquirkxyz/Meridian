@@ -3,7 +3,7 @@ name: review-fix-loop
 category: delivery
 maturity: stable
 version: 1
-description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply them, and repeat until the PR is clean or blocked."
+description: "Orchestrate the PR repair loop: run review-pr, use plan-review-fixes when findings exist, use implement-review-fixes to apply them, and repeat until the PR is clean or blocked. This skill coordinates the loop only."
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result

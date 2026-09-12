@@ -3,7 +3,7 @@ name: to-spec
 category: project
 maturity: stable
 version: 1
-description: Turn the current conversation into a spec and publish it to the project issue tracker — no interview, just synthesis of 
+description: Turn the current conversation into a spec and publish it to the project issue tracker - no interview, just synthesis of what is already known.
 capabilities:
   - execute the core process defined in the skill body
   - produce a Markdown artifact or structured result
