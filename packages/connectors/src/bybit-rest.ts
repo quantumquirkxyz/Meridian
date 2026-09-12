@@ -351,14 +351,33 @@ export class BybitRESTClient {
     const body = (await response.json()) as BybitApiResponse<T>;
 
     if (body.retCode !== 0) {
+      // SECURITY: Sanitize error messages to prevent internal state leakage (SEC-014)
+      // Log full details internally but return generic message to callers
+      const sanitizedMessage = this.sanitizeErrorMessage(body.retMsg);
       throw new BybitAPIError(
-        `Bybit API error ${body.retCode}: ${body.retMsg}`,
+        `Bybit API error ${body.retCode}: ${sanitizedMessage}`,
         body.retCode,
-        body.retMsg,
+        body.retMsg, // Keep original for internal logging
       );
     }
 
     return body.result;
+  }
+
+  /**
+   * Sanitize error messages to prevent internal state leakage (SEC-014).
+   * Removes sensitive information while preserving debugging context.
+   */
+  private sanitizeErrorMessage(message: string): string {
+    // Remove API keys, secrets, tokens from error messages
+    let sanitized = message
+      .replace(/sk-or-v1-[a-f0-9]{64}/gi, '[REDACTED]')
+      .replace(/[A-Z0-9]{20,}/g, '[REDACTED]') // Generic long strings
+      .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]')
+      .replace(/api[_-]?key['"\s]*[:=]['"\s]*[^\s'"]+/gi, 'api_key=[REDACTED]')
+      .replace(/secret['"\s]*[:=]['"\s]*[^\s'"]+/gi, 'secret=[REDACTED]');
+
+    return sanitized;
   }
 
   private calculateBackoff(attempt: number): number {
