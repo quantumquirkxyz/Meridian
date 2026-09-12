@@ -377,7 +377,7 @@ describe("ManifestWriter", () => {
 describe("generateSessionId", () => {
   test("produces sess-YYYYMMDD-HHmmss-<hex> format", () => {
     const id = generateSessionId(1700000000000);
-    expect(id).toMatch(/^sess-\d{8}-\d{6}-[0-9a-f]{6}$/);
+    expect(id).toMatch(/^sess-\d{8}-\d{6}-[0-9a-f]{8}$/);
   });
 
   test("uses provided timestamp", () => {
