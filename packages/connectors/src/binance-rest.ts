@@ -20,7 +20,15 @@ export interface BinanceRESTClientConfig {
   apiKey: string;
   /** API secret. */
   apiSecret: string;
-  /** Base URL. Defaults to mainnet. */
+  /**
+   * Whether to use testnet (true) or mainnet (false).
+   *
+   * SECURITY: This is a fail-safe to prevent accidental mainnet usage.
+   * Defaults to true (testnet) to prevent accidental production trading.
+   * Explicit opt-in is required for mainnet (SEC-011).
+   */
+  testnet?: boolean;
+  /** Base URL. Defaults to testnet if testnet=true, mainnet if testnet=false. */
   baseUrl?: string;
   /** Default recv_window in ms. Defaults to 5000. */
   recvWindow?: number;
@@ -68,13 +76,40 @@ export class BinanceRESTClient {
   private readonly apiKey: string;
   private readonly apiSecret: string;
   private readonly baseUrl: string;
+  private readonly testnet: boolean;
   private readonly recvWindow: number;
   private readonly fetchFn: typeof fetch;
 
   constructor(config: BinanceRESTClientConfig) {
     this.apiKey = config.apiKey;
     this.apiSecret = config.apiSecret;
-    this.baseUrl = config.baseUrl ?? BINANCE_MAINNET_URL;
+
+    // SECURITY: Enforce testnet/mainnet separation (SEC-011)
+    // Default to testnet to prevent accidental mainnet usage
+    this.testnet = config.testnet ?? true;
+
+    // Determine base URL based on testnet setting
+    const expectedBaseUrl = this.testnet ? BINANCE_TESTNET_URL : BINANCE_MAINNET_URL;
+
+    // If baseUrl is provided, validate it matches the testnet setting
+    if (config.baseUrl) {
+      if (this.testnet && config.baseUrl !== BINANCE_TESTNET_URL) {
+        throw new Error(
+          `SECURITY: testnet=true but baseUrl is ${config.baseUrl}. ` +
+          `For testnet, use ${BINANCE_TESTNET_URL} or omit baseUrl. (SEC-011)`
+        );
+      }
+      if (!this.testnet && config.baseUrl !== BINANCE_MAINNET_URL) {
+        throw new Error(
+          `SECURITY: testnet=false but baseUrl is ${config.baseUrl}. ` +
+          `For mainnet, use ${BINANCE_MAINNET_URL} or omit baseUrl. (SEC-011)`
+        );
+      }
+      this.baseUrl = config.baseUrl;
+    } else {
+      this.baseUrl = expectedBaseUrl;
+    }
+
     this.recvWindow = config.recvWindow ?? DEFAULT_RECV_WINDOW;
     this.fetchFn = config.fetchFn ?? globalThis.fetch;
   }
