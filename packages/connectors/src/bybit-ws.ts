@@ -33,7 +33,7 @@ import {
   isOptional,
   isEnumOf,
   type Validator,
-} from "@agenttrading/contracts/schema";
+} from "@agenttrading/contracts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -424,7 +424,7 @@ export class BybitWebSocketClient {
       // Bybit V5 auth response: {op:"auth", auth:true} or {op:"auth", auth:{...}} (success) or {op:"auth", success:false, ret_msg:"..."} (fail)
       const authValue = parsed.auth;
       const successValue = parsed.success;
-      const authTrue = authValue === true || (typeof authValue === "object" && authValue !== null && authValue !== undefined) || (typeof successValue === "boolean" && successValue === true);
+      const authTrue = (authValue as unknown) === true || (typeof authValue === "object" && authValue !== null && authValue !== undefined) || (typeof successValue === "boolean" && successValue === true);
       if (authTrue) {
         this.authenticated = true;
         this._state = "connected";
