@@ -66,10 +66,25 @@ export interface RPCConfig {
   chainId: number;
   /** Chain name. */
   chainName: string;
-  /** Private key for signing on-chain transactions. */
+  /**
+   * Private key for signing on-chain transactions.
+   *
+   * SECURITY WARNING: For production use, consider using:
+   * - Hardware wallet (Ledger, Trezor) via viem's Ledger transport
+   * - AWS KMS, GCP KMS, or HashiCorp Vault for signing
+   * - A dedicated signer process with proper key isolation
+   *
+   * Private keys in memory are vulnerable to memory dumps and debugging.
+   * This is acceptable for demo/testing but not for production with real capital.
+   */
   privateKey?: `0x${string}`;
   /** Default swap router address (e.g. PancakeSwap router). */
   routerAddress?: `0x${string}`;
+  /**
+   * Use hardware wallet for signing (production recommended).
+   * When true, privateKey should be omitted and a hardware wallet transport will be used.
+   */
+  useHardwareWallet?: boolean;
 }
 
 export interface NonceInfo {
@@ -140,7 +155,23 @@ export class DEXExecutor {
       transport: http(this.url),
     });
 
+    // SECURITY: Hardware wallet support for production (SEC-002)
+    // For now, we only support private key in memory.
+    // TODO: Implement hardware wallet transport (Ledger, Trezor) via viem
+    // TODO: Implement KMS signing (AWS KMS, GCP KMS) for production
+    if (config.useHardwareWallet) {
+      throw new DEXRPCError(
+        "Hardware wallet support not yet implemented. For production, " +
+        "please implement hardware wallet transport or KMS signing. " +
+        "See SEC-002 in SECURITY_AUDIT_REPORT.md for details.",
+        501,
+      );
+    }
+
     if (this.privateKey) {
+      // SECURITY WARNING: Private key stored in memory (SEC-002)
+      // This is acceptable for demo/testing but not for production.
+      // Consider using hardware wallet or KMS for production deployment.
       this.walletClient = createWalletClient({
         chain: this.chain,
         transport: http(this.url),
