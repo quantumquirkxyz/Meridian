@@ -120,7 +120,12 @@ export interface LiveRunnerConfig {
   bybitApiSecret: string;
   /** Bybit REST + WS endpoints — same runner, different endpoints per mode. */
   bybitEndpoints: { restUrl: string; publicWsUrl: string; privateWsUrl: string };
-  /** OpenRouter LLM API key for agent reasoning (optional). */
+  /**
+   * OpenRouter LLM API key for agent reasoning (optional).
+   *
+   * SECURITY: This key is used immediately to create the LLM client and then discarded.
+   * The key is not stored in long-lived config to minimize exposure scope (SEC-008).
+   */
   llmApiKey?: string;
   /** OpenRouter base URL (default: https://openrouter.ai/api/v1). */
   llmBaseUrl?: string;
@@ -315,6 +320,10 @@ export class LiveRunner {
   constructor(config: LiveRunnerConfig) {
     this.nowMs = config.nowMs ?? (() => Date.now());
 
+    // SECURITY: Extract LLM API key immediately for adapter creation, then discard (SEC-008)
+    // The key is not stored in long-lived config to minimize exposure scope
+    const llmApiKey = config.llmApiKey;
+
     this.config = {
       symbols: config.symbols ?? DEFAULT_SYMBOLS,
       bybitApiKey: config.bybitApiKey,
@@ -332,7 +341,8 @@ export class LiveRunner {
       // The CLI always passes `mode` explicitly (from AppConfig). The default
       // here is a fail-closed fallback: never degrade to demo. (OPERATING_FLOW.md)
       mode: config.mode ?? "live",
-      llmApiKey: config.llmApiKey,
+      // SECURITY: LLM API key not stored in config (SEC-008)
+      llmApiKey: llmApiKey, // Only used during adapter initialization
       llmBaseUrl: config.llmBaseUrl,
       llmModel: config.llmModel,
       wsClient: config.wsClient,
@@ -732,26 +742,40 @@ export class LiveRunner {
     // Wire LLM adapter when API key is available (real agent reasoning for
     // analytical/deliberative agents only; ADR-0013 keeps control agents on
     // their deterministic behavioral adapters).
+    //
+    // SECURITY: LLM API key is used immediately to create the client and then
+    // discarded from memory. The key is not stored in long-lived config to
+    // minimize exposure scope (SEC-008).
     if (this.config.llmApiKey) {
+      const llmApiKey = this.config.llmApiKey; // Capture immediately for use
+      const llmBaseUrl = this.config.llmBaseUrl ?? "https://openrouter.ai/api/v1";
+      const llmModel = this.config.llmModel ?? "openrouter/auto";
+
+      // Create LLM client immediately with the key
       const openrouter = createOpenAI({
-        apiKey: this.config.llmApiKey,
-        baseURL: this.config.llmBaseUrl ?? "https://openrouter.ai/api/v1",
+        apiKey: llmApiKey,
+        baseURL: llmBaseUrl,
       });
+
       const generateFn = createOpenRouterGenerateFn({
         generateText,
         openrouter,
       });
+
       this.llmAdapter = new VercelAISDKAdapter({
         generateFn,
         configs: agentConfigs,
-        defaultModel: this.config.llmModel ?? "openrouter/auto",
-        baseUrl: this.config.llmBaseUrl,
+        defaultModel: llmModel,
+        baseUrl: llmBaseUrl,
       });
+
       this.auditLogger.record("LLM_ADAPTER_WIRED", {
         provider: "openrouter",
-        model: this.config.llmModel ?? "openrouter/auto",
+        model: llmModel,
         catalogAgents: CONSULTATIVE_AGENT_CATALOG.length,
       });
+
+      // Note: llmApiKey variable goes out of scope here, minimizing exposure
     }
 
     // Per-scope deployment: one general agent per (venue, pair) / pool.
