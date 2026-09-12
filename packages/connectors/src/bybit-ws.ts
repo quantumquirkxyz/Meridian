@@ -25,6 +25,15 @@ import type {
 } from "./bybit-types.ts";
 import type { MarketDataSnapshot } from "@agenttrading/contracts";
 import type { OrderUpdate, OrderUpdateSide, OrderUpdateStatus, OrderUpdateType } from "@agenttrading/contracts";
+import {
+  isString,
+  isNumber,
+  isBoolean,
+  isObjectOf,
+  isOptional,
+  isEnumOf,
+  type Validator,
+} from "@agenttrading/contracts/schema";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -78,6 +87,50 @@ const WS_OPEN = 1;
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
+// ── WebSocket Message Validators (SEC-003) ─────────────────────────────
+// Schema validation for incoming WebSocket messages to prevent
+// processing malformed or malicious data that could cause crashes
+// or security issues.
+
+/** Validator for Bybit WS operation field */
+const isWSOp: Validator<"subscribe" | "unsubscribe" | "ping" | "auth" | "pong"> =
+  isEnumOf(["subscribe", "unsubscribe", "ping", "auth", "pong"]);
+
+/** Validator for basic Bybit WS response structure */
+const isBybitWSResponse: Validator<BybitWSResponse> = isObjectOf({
+  op: isOptional(isWSOp),
+  topic: isOptional(isString),
+  type: isOptional(isString),
+  ts: isOptional(isNumber),
+  data: (value): value is unknown => true, // data can be any shape
+  success: isOptional(isBoolean),
+  ret_msg: isOptional(isString),
+  conn_id: isOptional(isString),
+  auth: isOptional(
+    isObjectOf({
+      expire: isNumber,
+      api_key: isString,
+      twist: isString,
+    })
+  ),
+});
+
+/** Validate a WebSocket message and return a typed result or null if invalid */
+function validateWSMessage(raw: string): BybitWSResponse | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null; // Invalid JSON
+  }
+
+  if (!isBybitWSResponse(parsed)) {
+    return null; // Invalid schema
+  }
+
+  return parsed;
+}
+
 // ── Client ───────────────────────────────────────────────────────────
 
 export class BybitWebSocketClient {
@@ -98,6 +151,14 @@ export class BybitWebSocketClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private shouldReconnect = true;
+
+  // SECURITY: Rate limiting for authentication attempts (SEC-009)
+  private authFailureCount = 0;
+  private authFailureTimestamps: number[] = [];
+  private readonly MAX_AUTH_FAILURES = 5; // Max failures before lockout
+  private readonly AUTH_FAILURE_WINDOW_MS = 60_000; // 1 minute window
+  private readonly AUTH_LOCKOUT_DURATION_MS = 300_000; // 5 minute lockout
+  private authLockedUntil = 0;
   private authenticated = false;
   private authPromiseResolve: (() => void) | null = null;
   private authPromiseReject: ((err: Error) => void) | null = null;
@@ -266,9 +327,61 @@ export class BybitWebSocketClient {
     this.publicWs.send(JSON.stringify(msg));
   }
 
+  /**
+   * Check if authentication is currently locked out due to too many failures.
+   */
+  private isAuthLockedOut(): boolean {
+    const now = this.nowMs();
+    if (now < this.authLockedUntil) {
+      return true;
+    }
+
+    // Clean up old failure timestamps outside the window
+    this.authFailureTimestamps = this.authFailureTimestamps.filter(
+      timestamp => now - timestamp < this.AUTH_FAILURE_WINDOW_MS
+    );
+
+    return false;
+  }
+
+  /**
+   * Record an authentication failure and update rate limiting state.
+   */
+  private recordAuthFailure(): void {
+    const now = this.nowMs();
+    this.authFailureCount++;
+    this.authFailureTimestamps.push(now);
+
+    // Check if we've exceeded the failure threshold
+    if (this.authFailureTimestamps.length >= this.MAX_AUTH_FAILURES) {
+      this.authLockedUntil = now + this.AUTH_LOCKOUT_DURATION_MS;
+      this.events.onError?.(new Error(
+        `Authentication locked out for ${this.AUTH_LOCKOUT_DURATION_MS / 1000}s due to too many failures`
+      ));
+    }
+  }
+
+  /**
+   * Reset authentication failure tracking on successful auth.
+   */
+  private resetAuthFailures(): void {
+    this.authFailureCount = 0;
+    this.authFailureTimestamps = [];
+    this.authLockedUntil = 0;
+  }
+
   private authenticatePrivateStream(): void {
     if (!this.privateWs || this.privateWs.readyState !== WS_OPEN) return;
     if (!this.apiKey || !this.apiSecret) return;
+
+    // SECURITY: Check authentication rate limiting (SEC-009)
+    if (this.isAuthLockedOut()) {
+      const lockoutRemaining = Math.max(0, this.authLockedUntil - this.nowMs());
+      this.events.onError?.(new Error(
+        `Authentication rate limited. Try again in ${Math.ceil(lockoutRemaining / 1000)}s`
+      ));
+      return;
+    }
 
     const expires = this.nowMs() + 10_000; // 10s window (Bybit V5 WS auth spec)
     // Bybit V5 WS auth: HMAC of "GET/realtime" + expires. Args = [key, expires, sig].
@@ -295,11 +408,12 @@ export class BybitWebSocketClient {
   }
 
   private handleMessage(raw: string, stream: "public" | "private"): void {
-    let parsed: BybitWSResponse;
-    try {
-      parsed = JSON.parse(raw) as BybitWSResponse;
-    } catch {
-      return; // Ignore non-JSON messages
+    // SECURITY: Validate WebSocket message schema before processing (SEC-003)
+    const parsed = validateWSMessage(raw);
+    if (!parsed) {
+      // Reject malformed messages to prevent crashes and security issues
+      this.events.onError?.(new Error("Invalid WebSocket message schema"));
+      return;
     }
 
     // Handle pong responses (keepalive ack)
@@ -308,8 +422,8 @@ export class BybitWebSocketClient {
     // Handle auth response
     if (parsed.op === "auth") {
       // Bybit V5 auth response: {op:"auth", auth:true} or {op:"auth", auth:{...}} (success) or {op:"auth", success:false, ret_msg:"..."} (fail)
-      const authValue = (parsed as { auth?: unknown }).auth;
-      const successValue = (parsed as unknown as Record<string, unknown>).success;
+      const authValue = parsed.auth;
+      const successValue = parsed.success;
       const authTrue = authValue === true || (typeof authValue === "object" && authValue !== null) || successValue === true;
       if (authTrue) {
         this.authenticated = true;
@@ -318,12 +432,16 @@ export class BybitWebSocketClient {
         this.authPromiseResolve?.();
         this.authPromiseResolve = null;
         this.events.onConnected?.();
+        // SECURITY: Reset auth failure tracking on success (SEC-009)
+        this.resetAuthFailures();
       } else {
-        const retMsg = (parsed as { ret_msg?: string }).ret_msg ?? (parsed as unknown as Record<string, unknown>).message ?? "unknown";
+        const retMsg = parsed.ret_msg ?? "unknown";
         const err = new Error(`Auth failed: ${retMsg}`);
         this.authPromiseReject?.(err);
         this.authPromiseReject = null;
         this.events.onError?.(err);
+        // SECURITY: Record auth failure for rate limiting (SEC-009)
+        this.recordAuthFailure();
       }
       return;
     }
@@ -493,10 +611,16 @@ export class BybitWebSocketClient {
     if (!this.shouldReconnect) return;
     this.clearReconnectTimer();
 
-    const backoffMs = Math.min(
+    const baseBackoffMs = Math.min(
       INITIAL_BACKOFF_MS * Math.pow(2, this.reconnectAttempt),
       MAX_BACKOFF_MS,
     );
+
+    // SECURITY: Add jitter to prevent thundering herd (SEC-016)
+    // Random factor between 0.5 and 1.5 to spread out reconnection attempts
+    const jitterFactor = 0.5 + Math.random();
+    const backoffMs = Math.floor(baseBackoffMs * jitterFactor);
+
     this.reconnectAttempt++;
 
     this.events.onReconnecting?.(this.reconnectAttempt);
