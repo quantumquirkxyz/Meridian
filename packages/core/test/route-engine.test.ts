@@ -961,6 +961,40 @@ describe("Canonical net profit (issue #134)", () => {
     expect(winningRoute!.status).toBe("LIVE");
     expect(winningRoute!.invalidationReasons).not.toContain("MIN_EDGE");
   });
+
+  test("grossSpreadUsd comes from the canonical graph aggregator", () => {
+    const snap = snapshot(bybitRouteNodes, bybitRouteEdges(150, 120));
+    const engine = new RouteEngine(config(), () => NOW_MS);
+    const result = engine.discover(snap, NOW_MS);
+    const route = result.routes.find(
+      (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
+    );
+    expect(route).toBeDefined();
+
+    const graphCandidate = scoreRoute(
+      snap,
+      [...ORDER_BOOK_ROUTE],
+      ORDER_BOOK_GROSS_SPREAD_USD,
+    );
+    expect(graphCandidate).toBeDefined();
+
+    // Both the route engine and the graph aggregator must agree on
+    // grossSpreadUsd: it is the sum of edge prices, computed once in
+    // computeRouteCost and exposed via RouteCost.grossSpreadUsd.
+    expect(route!.expectedNetProfitUsd).toBeCloseTo(
+      graphCandidate!.expectedNetProfitUsd,
+      10,
+    );
+    // grossSpreadUsd = totalCostUsd + expectedNetProfitUsd for both.
+    expect(route!.expectedNetProfitUsd).toBeCloseTo(
+      graphCandidate!.grossSpreadUsd - graphCandidate!.costs.tradingFeesUsd -
+        graphCandidate!.costs.slippageUsd - graphCandidate!.costs.gasUsd -
+        graphCandidate!.costs.bridgeCostUsd - graphCandidate!.costs.fundingCostUsd -
+        graphCandidate!.costs.latencyRiskUsd - graphCandidate!.costs.failureRiskUsd -
+        graphCandidate!.costs.safetyBufferUsd,
+      10,
+    );
+  });
 });
 
 // ── Default configuration ───────────────────────────────────────────
