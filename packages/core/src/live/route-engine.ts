@@ -281,19 +281,23 @@ export class RouteEngine {
     const pathNodes = resolveNodes(path.nodes, snapshot);
     const routeType = classifyRouteType(pathNodes, pathEdges);
 
-    // Compute route metrics from edge weights.
-    const { grossSpreadUsd, confidence, maxCapitalUsd, riskConcentration } =
+    // Canonical route cost from the single source of truth (ADR-0014):
+    // computeRouteCost supplies grossSpreadUsd, totalCostUsd, and the full
+    // cost breakdown. aggregateEdgeWeights is retained only for confidence,
+    // maxCapitalUsd, and riskConcentration.
+    const routeCost = computeRouteCost(snapshot, path.nodes);
+
+    // Compute route metrics from edge weights (confidence, capital, risk).
+    const { confidence, maxCapitalUsd, riskConcentration } =
       aggregateEdgeWeights(pathEdges);
 
     // Enrich riskConcentration with dimension-prefixed keys from node metadata.
     enrichConcentrationFromNodes(pathNodes, riskConcentration);
 
     // Canonical expected net profit (ADR-0014, issue #134): the gross
-    // spread minus the full RISK.md cost stack. The cost stack and its
-    // single sum are aggregated by @agenttrading/graph — the single
-    // source of truth — and no longer by a local min-edge model.
-    const routeCost = computeRouteCost(snapshot, path.nodes);
-    const expectedNetProfitUsd = grossSpreadUsd - routeCost.totalCostUsd;
+    // spread minus the full RISK.md cost stack, both from the single
+    // source of truth in @agenttrading/graph.
+    const expectedNetProfitUsd = routeCost.grossSpreadUsd - routeCost.totalCostUsd;
 
     // Score the route.
     const score = computeScore(
@@ -663,28 +667,16 @@ function resolveNodes(
 
 /** Aggregate edge weights into route-level metrics. */
 function aggregateEdgeWeights(edges: readonly MarketEdge[]): {
-  grossSpreadUsd: number;
   confidence: number;
   maxCapitalUsd: number;
   riskConcentration: Record<string, number>;
 } {
   if (edges.length === 0) {
     return {
-      grossSpreadUsd: 0,
       confidence: 1,
       maxCapitalUsd: 0,
       riskConcentration: {},
     };
-  }
-
-  // Gross spread: sum of per-edge price spreads. The net-profit cost
-  // stack (fees, slippage, gas, bridge, funding, latency, failure risk,
-  // safety buffer) is applied on top by the canonical aggregator in
-  // @agenttrading/graph (ADR-0014, issue #134). There is no local
-  // min-edge profit model anymore.
-  let grossSpreadUsd = 0;
-  for (const edge of edges) {
-    grossSpreadUsd += edge.weights.price ?? 0;
   }
 
   // Confidence: product of all edge confidences.
@@ -716,7 +708,6 @@ function aggregateEdgeWeights(edges: readonly MarketEdge[]): {
   }
 
   return {
-    grossSpreadUsd,
     confidence,
     maxCapitalUsd,
     riskConcentration,
