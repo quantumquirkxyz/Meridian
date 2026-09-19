@@ -178,8 +178,11 @@ export function findArbitrageCycles(
     nodeIds.add(e.to);
   }
 
-  // Cap node count to keep the search tractable.
-  const limitedNodes = [...nodeIds].slice(0, maxNodes);
+  // Cap node count to keep the search tractable. Sort deterministically
+  // so the same nodes are always included/excluded regardless of
+  // insertion order; this prevents silent cycle misses when the graph
+  // grows beyond maxNodes.
+  const limitedNodes = [...nodeIds].sort().slice(0, maxNodes);
   const nodeIndex = new Map(limitedNodes.map((id, i) => [id, i]));
   const n = limitedNodes.length;
 
