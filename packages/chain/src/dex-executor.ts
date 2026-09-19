@@ -85,6 +85,14 @@ export interface RPCConfig {
    * When true, privateKey should be omitted and a hardware wallet transport will be used.
    */
   useHardwareWallet?: boolean;
+  /**
+   * Approximate native token price in USD, used only for best-effort gas
+   * cost estimation when no live price oracle is configured.
+   *
+   * If omitted, the executor falls back to a chain-id default:
+   * BSC (56) → 500, ETH (1) → 3000, all others → 3000.
+   */
+  nativePriceUsd?: number;
 }
 
 export interface NonceInfo {
@@ -140,6 +148,7 @@ export class DEXExecutor {
   private readonly url: string;
   private readonly privateKey?: `0x${string}`;
   private readonly routerAddress?: `0x${string}`;
+  private readonly nativePriceUsd: number;
 
   private readonly publicClient: PublicClient;
   private readonly walletClient?: WalletClient;
@@ -149,6 +158,7 @@ export class DEXExecutor {
     this.url = config.url;
     this.privateKey = config.privateKey;
     this.routerAddress = config.routerAddress;
+    this.nativePriceUsd = config.nativePriceUsd ?? (config.chainId === 56 ? 500 : 3_000);
 
     this.publicClient = createPublicClient({
       chain: this.chain,
@@ -213,13 +223,13 @@ export class DEXExecutor {
     const gasPrice = await this.publicClient.getGasPrice();
     const estimatedGas = BigInt(150_000);
     /**
-     * Best-effort USD gas cost; uses a fixed approximation since a live
-     * price oracle is out of scope for this layer.
+     * Best-effort USD gas cost; uses the configured native token price
+     * approximation. For production, inject a live price oracle via
+     * `RPCConfig.nativePriceUsd`.
      */
-    const nativePriceUsd = this.chain.id === 56 ? 500 : 3_000;
     const decimals = this.chain.nativeCurrency?.decimals ?? 18;
     const gasCostUsd =
-      Number((gasPrice * estimatedGas) / BigInt(10 ** decimals)) * nativePriceUsd;
+      Number((gasPrice * estimatedGas) / BigInt(10 ** decimals)) * this.nativePriceUsd;
 
     return {
       gasPrice,
