@@ -237,7 +237,7 @@ export class OpportunityDetector {
       id: `opp:${route.routeId}:${this.now()}`,
       snapshotId: snapshot.snapshotId,
       route: route.nodes,
-      grossSpreadUsd: netProfit + routeCost.totalCostUsd,
+      grossSpreadUsd: routeCost.grossSpreadUsd,
       costs: routeCost.costs,
       expectedNetProfitUsd: netProfit,
       createdAtMs: this.now(),
