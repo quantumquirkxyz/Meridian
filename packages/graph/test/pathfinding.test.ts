@@ -244,6 +244,27 @@ describe("computeRouteCost", () => {
     expect(cost.hops).toBe(2);
   });
 
+  test("exposes grossSpreadUsd as sum of edge prices", () => {
+    const snap = makeSnapshot(
+      [asset("BTC"), asset("ETH"), asset("USDT")],
+      [
+        swapEdge("asset:BTC", "asset:ETH", { price: 25 }),
+        swapEdge("asset:ETH", "asset:USDT", { price: 30 }),
+      ],
+    );
+    const cost = computeRouteCost(snap, ["asset:BTC", "asset:ETH", "asset:USDT"]);
+    expect(cost.grossSpreadUsd).toBe(55); // 25 + 30
+    // With no other cost weights, totalCostUsd is just the safety buffer (1.0).
+    expect(cost.totalCostUsd).toBeCloseTo(1.0, 2);
+    expect(cost.grossSpreadUsd - cost.totalCostUsd).toBeCloseTo(54, 2);
+  });
+
+  test("grossSpreadUsd is 0 for non-executable routes", () => {
+    const snap = makeSnapshot([], []);
+    const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
+    expect(cost.grossSpreadUsd).toBe(0);
+  });
+
   test("handles missing edges (infinite cost)", () => {
     const snap = makeSnapshot([], []);
     const cost = computeRouteCost(snap, ["asset:A", "asset:B"]);
