@@ -35,6 +35,8 @@ export interface RouteCost {
   costs: CostBreakdown;
   /** Total cost: the single RISK.md sum of `costs` (ADR-0014). */
   totalCostUsd: number;
+  /** Gross spread before costs: sum of edge `price` weights along the route. */
+  grossSpreadUsd: number;
   /** Minimum liquidity along the route (bottleneck). */
   bottleneckLiquidityUsd: number;
   /** Combined failure probability (1 - ∏(1 - p_i)). */
@@ -346,6 +348,7 @@ export function computeRouteCost(
   let totalConfidence = 0;
   let bottleneckLiquidity = Infinity;
   let failuresSeen = 1; // product accumulator for (1 - p)
+  let grossSpreadUsd = 0;
 
   for (let i = 0; i < route.length - 1; i++) {
     const edgeId = `${route[i]}→${route[i + 1]}`;
@@ -357,6 +360,8 @@ export function computeRouteCost(
     }
 
     const w = edge.weights;
+
+    grossSpreadUsd += w.price ?? 0;
 
     // BRIDGE edges carry their cost in the dedicated bridgeCostUsd weight;
     // they have no trading fee to accumulate.
@@ -414,6 +419,7 @@ export function computeRouteCost(
       costs.latencyRiskUsd +
       costs.failureRiskUsd +
       costs.safetyBufferUsd,
+    grossSpreadUsd,
     bottleneckLiquidityUsd: bottleneckLiquidity,
     combinedFailureProbability: combinedFailureProb,
     totalRiskScore,
@@ -436,6 +442,7 @@ function makeInfiniteCost(route: Route): RouteCost {
       safetyBufferUsd: 0,
     },
     totalCostUsd: Infinity,
+    grossSpreadUsd: 0,
     bottleneckLiquidityUsd: 0,
     combinedFailureProbability: 1,
     totalRiskScore: 1,
