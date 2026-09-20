@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AGENTS_VERSION } from "../src/index.ts";
+import { AGENTS_CORE_VERSION } from "@agenttrading/agents-core";
 import {
   isAgentInput,
   isAgentOutput,
@@ -13,7 +13,7 @@ import { expectPackageSmoke } from "../../../test/smoke-helper.ts";
 
 describe("@agenttrading/agents smoke", () => {
   test("package resolves and depends only on contracts", () => {
-    expectPackageSmoke(AGENTS_VERSION, () => {
+    expectPackageSmoke(AGENTS_CORE_VERSION, () => {
       // Verify agent contracts are accessible from contracts
       const input: AgentInput = {
         agentId: "smoke-test",

@@ -2,17 +2,22 @@ import { describe, expect, test } from "bun:test";
 import type { AgentInput, AgentOutput, TradingScope } from "@agenttrading/contracts";
 import {
   GeneralAgent,
+  type GeneralAgentOptions,
+} from "@agenttrading/agents-general";
+import {
   ScopeObserverAdapter,
-  createDefaultAgentConfig,
   createScopeDeployment,
-  defaultGeneralAgentId,
   deployPerScopeGeneralAgents,
-  scopeIdOf,
+  defaultGeneralAgentId,
+} from "@agenttrading/agents-catalog";
+import {
+  createDefaultAgentConfig,
   type AgentConfig,
-} from "@agenttrading/agents";
-import { BaseAgentAdapter } from "../src/adapter.ts";
-import { AgentRegistry } from "../src/registry.ts";
-import { AgentRuntime } from "../src/runtime.ts";
+} from "@agenttrading/agents-core";
+import { BaseAgentAdapter } from "@agenttrading/agents-core";
+import { AgentRegistry } from "@agenttrading/agents-core";
+import { AgentRuntime } from "@agenttrading/agents-core";
+import { scopeIdOf } from "@agenttrading/contracts";
 
 // ── Fixtures ───────────────────────────────────────────────────────────
 

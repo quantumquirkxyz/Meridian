@@ -15,6 +15,10 @@ import {
   AgentLogger,
   BudgetEnforcer,
   AgentRuntime,
+  createDefaultAgentConfig,
+  RUNTIME_TYPES,
+} from "@agenttrading/agents-core";
+import {
   CONSULTATIVE_AGENT_CATALOG,
   CONSULTATIVE_AGENT_CONFIGS,
   CONSULTATIVE_AGENT_IDS,
@@ -22,15 +26,13 @@ import {
   MemoryConsultativeAdapter,
   AuditConsultativeAdapter,
   PolicyConsultativeAdapter,
-  createDefaultAgentConfig,
-  RUNTIME_TYPES,
-} from "../src/index.ts";
+} from "@agenttrading/agents-catalog";
 import {
   BaseAgentAdapter,
   type AgentAdapter,
   type SchemaValidationResult,
-} from "../src/adapter.ts";
-import type { AgentConfig } from "../src/config.ts";
+} from "@agenttrading/agents-core";
+import type { AgentConfig } from "@agenttrading/agents-core";
 
 // ── Mock Adapter ───────────────────────────────────────────────────────
 
