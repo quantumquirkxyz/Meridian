@@ -21,6 +21,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@agenttrading/agents-catalog": "workspace:*",
+    "@agenttrading/agents-core": "workspace:*",
+    "@agenttrading/agents-general": "workspace:*",
+    "@agenttrading/agents-runtimes": "workspace:*",
     "@agenttrading/contracts": "workspace:*"
   },
   "devDependencies": {

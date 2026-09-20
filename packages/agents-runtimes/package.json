@@ -1,0 +1,26 @@
+{
+  "name": "@agenttrading/agents-runtimes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LLM runtime adapters (Vercel AI SDK, Mastra, OpenRouter) for AgentTrading.",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./vercel": "./src/runtimes/vercel.ts",
+    "./mastra": "./src/runtimes/mastra.ts",
+    "./openrouter": "./src/runtimes/openrouter.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agenttrading/contracts": "workspace:*",
+    "@agenttrading/agents-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  }
+}
