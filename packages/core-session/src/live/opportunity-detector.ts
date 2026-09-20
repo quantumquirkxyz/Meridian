@@ -59,10 +59,14 @@ export class OpportunityDetector {
   private readonly config: OpportunityDetectorConfig;
   private readonly now: () => number;
 
-  constructor(config: Partial<OpportunityDetectorConfig> = {}, now?: () => number) {
+  constructor(
+    config: Partial<OpportunityDetectorConfig> = {},
+    now?: () => number,
+    graph?: MarketGraph,
+  ) {
     this.config = { ...DEFAULT_OPPORTUNITY_DETECTOR_CONFIG, ...config };
     this.now = now ?? (() => Date.now());
-    this.graph = new MarketGraph();
+    this.graph = graph ?? new MarketGraph();
     this.routeEngine = new RouteEngine({
       ...DEFAULT_ROUTE_ENGINE_CONFIG,
       maxRouteLength: this.config.maxRouteLength,
