@@ -1,12 +1,12 @@
 import { expect } from "bun:test";
 import { type StateName, type SystemMode } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
+import { AuditLog } from "../src/stategraph/state-graph.ts";
 import { StateGraph } from "../src/stategraph/state-graph.ts";
 import {
   buildDefaultGraph,
   defaultPermissionRegistry,
   MODULE_ACTORS,
-} from "../src/stategraph/topology.ts";
+} from "../src/stategraph/state-graph.ts";
 
 /** Canonical observation steps up to BUILD_ORDER_INTENT. */
 export const CANDIDATE_CYCLE: ReadonlyArray<

@@ -4,12 +4,12 @@ import {
   assertNoAgentHoldsExecutionPermissions,
   agentsHoldingExecutionPermissions,
   PermissionRegistry,
-} from "../src/stategraph/permission-registry.ts";
+} from "../src/stategraph/state-graph.ts";
 import {
   AGENT_IDS,
   defaultPermissionRegistry,
   MODULE_ACTORS,
-} from "../src/stategraph/topology.ts";
+} from "../src/stategraph/state-graph.ts";
 import { newGraph, walkToRiskValidate } from "./helpers.ts"
 
 describe("permission model (ADR-0003, user story 28)", () => {

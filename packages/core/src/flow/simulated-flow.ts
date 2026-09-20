@@ -10,11 +10,7 @@ import {
   type StateName,
   type SystemMode,
 } from "@agenttrading/contracts";
-import { StateGraph, type TransitionOutcome } from "../stategraph/state-graph.ts";
-import {
-  isExecutableRiskOutcome,
-  MODULE_ACTORS,
-} from "../stategraph/topology.ts";
+import { StateGraph, type TransitionOutcome, isExecutableRiskOutcome, MODULE_ACTORS } from "../stategraph/state-graph.ts";
 import { RiskEngine } from "../risk/risk-gate.ts";
 import {
   ReconciliationEngine,

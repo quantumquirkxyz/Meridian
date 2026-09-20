@@ -6,20 +6,20 @@ import {
   type Permission,
   type StateName,
 } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
-import { PermissionRegistry } from "../src/stategraph/permission-registry.ts";
+import { AuditLog } from "../src/stategraph/state-graph.ts";
+import { PermissionRegistry } from "../src/stategraph/state-graph.ts";
 import { StateGraph } from "../src/stategraph/state-graph.ts";
 import {
   buildDefaultGraph,
   defaultPermissionRegistry,
   MODULE_ACTORS,
-} from "../src/stategraph/topology.ts";
+} from "../src/stategraph/state-graph.ts";
 import {
   defaultFallbacks,
   defaultStateTimeouts,
   Orchestrator,
   type OrchestratorOptions,
-} from "../src/stategraph/orchestrator.ts";
+} from "../src/stategraph/state-graph.ts";
 
 const FIXED_TS = 1_700_000_000_000;
 

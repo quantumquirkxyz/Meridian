@@ -11,7 +11,7 @@ import {
   type LoopOutput,
   type LoopState,
 } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
+import { AuditLog } from "../src/stategraph/state-graph.ts";
 import {
   CANONICAL_LOOP_ORDER,
   defaultLoopDefinitions,

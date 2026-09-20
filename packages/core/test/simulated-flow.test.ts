@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { isAuditEvent } from "@agenttrading/contracts";
-import { AuditLog } from "../src/stategraph/audit-log.ts";
+import { AuditLog } from "../src/stategraph/state-graph.ts";
 import { StateGraph } from "../src/stategraph/state-graph.ts";
 import {
   buildDefaultGraph,
   defaultPermissionRegistry,
-} from "../src/stategraph/topology.ts";
+} from "../src/stategraph/state-graph.ts";
 import { DEFAULT_RISK_POLICY, RiskEngine } from "../src/risk/risk-gate.ts";
 import { ReconciliationEngine } from "../src/reconciliation/reconciliation-engine.ts";
 import {

@@ -22,14 +22,14 @@ import {
   assertNoAgentHoldsExecutionPermissions,
   agentsHoldingExecutionPermissions,
   PermissionRegistry,
-} from "../src/stategraph/permission-registry.ts";
+} from "../src/stategraph/state-graph.ts";
 import {
   AGENT_IDS,
   buildDefaultGraph,
   defaultPermissionRegistry,
   DEFENSIVE_STATES,
   MODULE_ACTORS,
-} from "../src/stategraph/topology.ts";
+} from "../src/stategraph/state-graph.ts";
 import {
   CANDIDATE_CYCLE,
   FIXED_TS,

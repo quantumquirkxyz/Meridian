@@ -5,7 +5,7 @@ import type {
   LoopOutput,
   LoopState,
 } from "@agenttrading/contracts";
-import type { AuditLog } from "../stategraph/audit-log.ts";
+import type { AuditLog } from "../stategraph/state-graph.ts";
 import { runLoop, type LoopWork } from "./loop-runner.ts";
 import {
   ReconciliationEngine,

@@ -10,7 +10,7 @@ import {
   DEFENSIVE_STATES,
   DEFENSIVE_STATE_MODE,
   MODULE_ACTORS,
-} from "../src/stategraph/topology.ts";
+} from "../src/stategraph/state-graph.ts";
 import { FIXED_TS, newGraph, walkToBuildIntent, walkToRiskValidate } from "./helpers.ts"
 
 describe("StateGraph guards and transitions (issue #13 AC1)", () => {

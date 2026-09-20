@@ -40,7 +40,7 @@ import {
 } from "@agenttrading/contracts";
 import { type FillParams, type AuditAvailability, DEFAULT_AUDIT_AVAILABILITY } from "@agenttrading/contracts";
 import { evaluateAuditStaleness } from "./audit-availability.ts";
-import { type AuditLog } from "../stategraph/audit-log.ts";
+import { type AuditLog } from "../stategraph/state-graph.ts";
 import {
   KillSwitch,
   type KillSwitchInput,

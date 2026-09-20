@@ -4,7 +4,7 @@ import type {
   LoopOutput,
   LoopState,
 } from "@agenttrading/contracts";
-import type { AuditLog, AuditRecordInput } from "../stategraph/audit-log.ts";
+import type { AuditLog, AuditRecordInput } from "../stategraph/state-graph.ts";
 
 /**
  * The work a loop performs on each iteration. Returns the loop's typed output

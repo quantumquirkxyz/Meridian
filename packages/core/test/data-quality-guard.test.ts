@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dataQualityBlocksSignal } from "../src/stategraph/guards.ts";
+import { dataQualityBlocksSignal } from "../src/stategraph/state-graph.ts";
 import {
   markEdgesByQuality,
   type DataQualityReport,
