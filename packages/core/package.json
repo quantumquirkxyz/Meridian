@@ -21,6 +21,12 @@
   },
   "dependencies": {
     "@agenttrading/contracts": "workspace:*",
+    "@agenttrading/core-execution": "workspace:*",
+    "@agenttrading/core-inventory": "workspace:*",
+    "@agenttrading/core-reconciliation": "workspace:*",
+    "@agenttrading/core-risk": "workspace:*",
+    "@agenttrading/core-session": "workspace:*",
+    "@agenttrading/core-stategraph": "workspace:*",
     "@agenttrading/graph": "workspace:*"
   },
   "devDependencies": {

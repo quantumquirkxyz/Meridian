@@ -1,0 +1,24 @@
+{
+  "name": "@agenttrading/core-reconciliation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ReconciliationEngine and loop for AgentTrading.",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agenttrading/contracts": "workspace:*",
+    "@agenttrading/core-risk": "workspace:*",
+    "@agenttrading/core-stategraph": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  }
+}
