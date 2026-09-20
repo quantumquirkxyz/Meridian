@@ -1,0 +1,1 @@
+export const INFRA_OPPORTUNITY_VERSION = "0.1.0";

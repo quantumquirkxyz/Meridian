@@ -46,16 +46,21 @@ import type {
 import { DEFAULT_CANARY_CONFIG } from "@agenttrading/contracts";
 import {
   TradingSession,
+  OpportunityDetector,
+} from "@agenttrading/core-session";
+import {
   AuditLogger,
   buildSessionReport,
   printSessionReport,
-  ReconciliationEngine,
-  computeSlippageBps,
-  OpportunityDetector,
+  type TradeRecord,
+  type CanaryPreCheckResult,
+} from "@agenttrading/core-execution";
+import { ReconciliationEngine } from "@agenttrading/core-reconciliation";
+import { computeSlippageBps, type MarketState } from "@agenttrading/core-inventory";
+import {
   RiskEngine,
   DEFAULT_RISK_POLICY,
-} from "@agenttrading/core";
-import type { TradeRecord, MarketState, CanaryPreCheckResult } from "@agenttrading/core";
+} from "@agenttrading/core-risk";
 import {
   BybitRESTClient,
   BybitWebSocketClient,
@@ -67,7 +72,7 @@ import {
 } from "@agenttrading/connectors";
 import { DEXExecutor } from "@agenttrading/chain";
 import { StatusDisplay } from "./status-display.ts";
-import { DataQualityMonitor } from "@agenttrading/infra";
+import { DataQualityMonitor } from "@agenttrading/infra-observability";
 import type { DataQualityMetrics } from "@agenttrading/contracts";
 import {
   CONSULTATIVE_AGENT_CATALOG,
@@ -75,11 +80,15 @@ import {
   MemoryConsultativeAdapter,
   PolicyConsultativeAdapter,
   ScopeObserverAdapter,
+} from "@agenttrading/agents-catalog";
+import {
   GeneralAgent,
+} from "@agenttrading/agents-general";
+import {
   deployPerScopeGeneralAgents,
-} from "@agenttrading/agents";
-import { VercelAISDKAdapter } from "@agenttrading/agents/runtimes/vercel";
-import { createOpenRouterGenerateFn } from "@agenttrading/agents/runtimes/openrouter";
+} from "@agenttrading/agents-catalog";
+import { VercelAISDKAdapter } from "@agenttrading/agents-runtimes";
+import { createOpenRouterGenerateFn } from "@agenttrading/agents-runtimes";
 import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { BybitDexOrderRouter } from "./order-router.ts";
@@ -1795,7 +1804,7 @@ export class LiveRunner {
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
-  private deriveRegimeInput(): import("@agenttrading/core").RegimeClassifierInput {
+  private deriveRegimeInput(): import("@agenttrading/core-session").RegimeClassifierInput {
     const spreadBps =
       this.market.bid > 0 && this.market.ask > 0
         ? ((this.market.ask - this.market.bid) / this.market.mid) * 10_000

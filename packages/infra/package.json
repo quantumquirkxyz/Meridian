@@ -21,6 +21,9 @@
   "dependencies": {
     "@agenttrading/contracts": "workspace:*",
     "@agenttrading/events": "workspace:*",
+    "@agenttrading/infra-control": "workspace:*",
+    "@agenttrading/infra-observability": "workspace:*",
+    "@agenttrading/infra-opportunity": "workspace:*",
     "ink": "^7.1.1",
     "react": "^19.2.8"
   },
