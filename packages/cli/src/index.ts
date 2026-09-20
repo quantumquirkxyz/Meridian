@@ -27,7 +27,7 @@ import { loadConfig, formatConfigErrors } from "./config.ts";
 import type { AppConfig, LoadConfigResult } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
 import type { Venue } from "./args.ts";
-import { generateSessionId } from "@agenttrading/core";
+import { generateSessionId } from "@agenttrading/core-execution";
 import { LiveRunner, type LiveRunnerConfig } from "./live-runner.ts";
 import { ManifestWriter } from "./manifest.ts";
 

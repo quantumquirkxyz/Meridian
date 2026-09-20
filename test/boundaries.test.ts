@@ -6,15 +6,12 @@ import { join } from "node:path";
  * Enforces the ARCHITECTURE.md package boundaries at the manifest and source
  * level:
  *   - contracts is dependency-free (no LLM or framework runtime);
- *   - core depends only on contracts (never LLMs or connectors);
- *   - connectors, graph, harness, events depend only on contracts
- *     (ARCHITECTURE.md:88; `events` follows the same rule);
+ *   - core sub-packages depend only on contracts, graph, and other core sub-packages;
+ *   - connectors, graph, events depend only on contracts;
  *   - chain depends only on contracts and viem (on-chain execution seam);
- *   - agents depends only on contracts and never imports core
- *     (ARCHITECTURE.md:88; agents never imports core).
- *
- * `infra` owns observability and the operator control TUI, so ADR-0008 and
- * ADR-0010 explicitly allow contracts, events, ink, and react only.
+ *   - agents sub-packages depend only on contracts and other agents sub-packages;
+ *     agents never imports core (ARCHITECTURE.md boundary).
+ *   - infra sub-packages depend only on contracts, events, and other infra sub-packages.
  */
 const PACKAGE_DIRS = [
   "contracts",
@@ -26,6 +23,19 @@ const PACKAGE_DIRS = [
   "harness",
   "infra",
   "agents",
+  "core-stategraph",
+  "core-risk",
+  "core-reconciliation",
+  "core-execution",
+  "core-session",
+  "core-inventory",
+  "agents-core",
+  "agents-catalog",
+  "agents-general",
+  "agents-runtimes",
+  "infra-observability",
+  "infra-opportunity",
+  "infra-control",
 ] as const;
 
 const FORBIDDEN_MODULE_PATHS = [
@@ -44,9 +54,6 @@ const FORBIDDEN_MODULE_PATHS = [
 /**
  * True when a module specifier (dependency name or source import path)
  * references a forbidden LLM/framework runtime or the connectors package.
- * Matches the token at the start of a path segment (optionally @-scoped), so
- * `@ai-sdk/provider`, `openai`, and `../connectors` are flagged while
- * `@agenttrading/contracts` is not.
  */
 function isForbiddenModule(specifier: string): boolean {
   return FORBIDDEN_MODULE_PATHS.some((name) =>
@@ -98,20 +105,35 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
   test("contracts has no runtime dependencies", () => {
     const { dependencies, devDependencies } = packageJson("contracts");
     expect(dependencies ?? {}).toEqual({});
-    // dev-only tooling is allowed, but nothing LLM/framework-like.
     for (const dep of Object.keys(devDependencies ?? {})) {
       expect(isForbiddenModule(dep)).toBe(false);
     }
   });
 
-  test("core depends only on contracts and graph (never on LLMs/connectors)", () => {
-    const { dependencies = {} } = packageJson("core");
-    expect(Object.keys(dependencies).sort()).toEqual([
+  test("core sub-packages depend only on contracts and graph (never on LLMs/connectors)", () => {
+    const allowedCoreSubDeps = new Set([
       "@agenttrading/contracts",
       "@agenttrading/graph",
+      "@agenttrading/core-stategraph",
+      "@agenttrading/core-risk",
+      "@agenttrading/core-reconciliation",
+      "@agenttrading/core-execution",
+      "@agenttrading/core-session",
+      "@agenttrading/core-inventory",
     ]);
-    for (const dep of Object.keys(dependencies)) {
-      expect(isForbiddenModule(dep)).toBe(false);
+    for (const dir of [
+      "core-stategraph",
+      "core-risk",
+      "core-reconciliation",
+      "core-execution",
+      "core-session",
+      "core-inventory",
+    ]) {
+      const { dependencies = {} } = packageJson(dir);
+      for (const dep of Object.keys(dependencies)) {
+        expect(isForbiddenModule(dep)).toBe(false);
+        expect(allowedCoreSubDeps.has(dep)).toBe(true);
+      }
     }
   });
 
@@ -142,73 +164,119 @@ describe("package boundaries (ARCHITECTURE.md)", () => {
     ]);
   });
 
-  test("infra never depends on LLM/framework runtimes", () => {
-    const { dependencies = {} } = packageJson("infra");
-    expect(Object.keys(dependencies).sort()).toEqual([
+  test("infra sub-packages depend only on contracts, events, and other infra sub-packages", () => {
+    const allowedInfraSubDeps = new Set([
       "@agenttrading/contracts",
       "@agenttrading/events",
-      "ink",
-      "react",
+      "@agenttrading/infra-observability",
+      "@agenttrading/infra-opportunity",
+      "@agenttrading/infra-control",
     ]);
-    for (const dep of Object.keys(dependencies)) {
-      expect(isForbiddenModule(dep)).toBe(false);
+    for (const dir of [
+      "infra-observability",
+      "infra-opportunity",
+      "infra-control",
+    ]) {
+      const { dependencies = {} } = packageJson(dir);
+      for (const dep of Object.keys(dependencies)) {
+        expect(isForbiddenModule(dep)).toBe(false);
+        expect(allowedInfraSubDeps.has(dep)).toBe(true);
+      }
     }
   });
 
-  test("agents depends only on contracts and never on core", () => {
-    const { dependencies = {} } = packageJson("agents");
-    expect(Object.keys(dependencies).sort()).toEqual(["@agenttrading/contracts"]);
-    for (const dep of Object.keys(dependencies)) {
-      expect(isForbiddenModule(dep)).toBe(false);
+  test("agents sub-packages depend only on contracts and other agents sub-packages", () => {
+    const allowedAgentsSubDeps = new Set([
+      "@agenttrading/contracts",
+      "@agenttrading/agents-core",
+      "@agenttrading/agents-catalog",
+      "@agenttrading/agents-general",
+      "@agenttrading/agents-runtimes",
+    ]);
+    for (const dir of [
+      "agents-core",
+      "agents-catalog",
+      "agents-general",
+      "agents-runtimes",
+    ]) {
+      const { dependencies = {} } = packageJson(dir);
+      for (const dep of Object.keys(dependencies)) {
+        expect(isForbiddenModule(dep)).toBe(false);
+        expect(allowedAgentsSubDeps.has(dep)).toBe(true);
+      }
     }
   });
 
-  test("agents source never imports core or LLM modules", () => {
+  test("core sub-packages never import LLM or connector modules", () => {
     const importSpecifiers =
       /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
-    for (const file of sourceFiles("agents")) {
-      const content = readFileSync(file, "utf8");
-      for (const match of content.matchAll(importSpecifiers)) {
-        const spec = match[1];
-        // agents never imports core (ARCHITECTURE.md boundary)
-        expect(spec).not.toContain("@agenttrading/core");
-        expect(spec).not.toMatch(/\.\.\/core/);
-        // agents never imports LLM frameworks directly (deferred to runtime adapters)
-        // The runtimes/*.ts files MAY import LLM frameworks at runtime,
-        // but the core adapter/registry/runtime modules must not.
-        if (!file.includes("runtimes/")) {
-          expect(isForbiddenModule(spec)).toBe(false);
+    for (const dir of [
+      "core-stategraph",
+      "core-risk",
+      "core-reconciliation",
+      "core-execution",
+      "core-session",
+      "core-inventory",
+    ]) {
+      for (const file of sourceFiles(dir)) {
+        const content = readFileSync(file, "utf8");
+        for (const match of content.matchAll(importSpecifiers)) {
+          expect(isForbiddenModule(match[1])).toBe(false);
         }
       }
     }
   });
 
-  test("core source never imports LLM or connector modules", () => {
+  test("agents sub-packages never import core or connector modules", () => {
     const importSpecifiers =
       /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
-    for (const file of sourceFiles("core")) {
-      // ADR-0011: LiveRunner is the single allowed seam that imports
-      // connectors (Bybit REST/WebSocket) to bridge core with the
-      // exchange layer. All other core files remain exchange-agnostic.
-      if (file.includes("core/src/live/")) continue;
-      const content = readFileSync(file, "utf8");
-      for (const match of content.matchAll(importSpecifiers)) {
-        expect(isForbiddenModule(match[1])).toBe(false);
+    for (const dir of [
+      "agents-core",
+      "agents-catalog",
+      "agents-general",
+    ]) {
+      for (const file of sourceFiles(dir)) {
+        const content = readFileSync(file, "utf8");
+        for (const match of content.matchAll(importSpecifiers)) {
+          expect(match[1]).not.toContain("@agenttrading/core");
+          expect(match[1]).not.toMatch(/\.\.\/core/);
+          expect(isForbiddenModule(match[1])).toBe(false);
+        }
       }
     }
   });
 
-  test("infra source never imports core, connectors, or LLM modules", () => {
+  test("agents runtimes may import LLM frameworks", () => {
     const importSpecifiers =
       /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
-    for (const file of sourceFiles("infra")) {
+    for (const file of sourceFiles("agents-runtimes")) {
       const content = readFileSync(file, "utf8");
       for (const match of content.matchAll(importSpecifiers)) {
-        const spec = match[1];
-        expect(spec).not.toContain("@agenttrading/core");
-        expect(spec).not.toMatch(/\.\.\/core/);
-        expect(spec).not.toMatch(/\.\.\/connectors/);
-        expect(isForbiddenModule(spec)).toBe(false);
+        expect(match[1]).not.toContain("@agenttrading/core");
+        expect(match[1]).not.toMatch(/\.\.\/core/);
+        expect(match[1]).not.toContain("connectors");
+        expect(match[1]).not.toMatch(/\.\.\/connectors/);
+      }
+    }
+  });
+
+  test("infra sub-packages never import core, connectors, or LLM modules", () => {
+    const importSpecifiers =
+      /(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g;
+    for (const dir of [
+      "infra-observability",
+      "infra-opportunity",
+      "infra-control",
+    ]) {
+      for (const file of sourceFiles(dir)) {
+        const content = readFileSync(file, "utf8");
+        for (const match of content.matchAll(importSpecifiers)) {
+          const spec = match[1];
+          expect(spec).not.toContain("@agenttrading/core");
+          expect(spec).not.toMatch(/\.\.\/core/);
+          expect(spec).not.toMatch(/\.\.\/connectors/);
+          expect(isForbiddenModule(spec)).toBe(false);
+        }
       }
     }
   });

@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { AuditLogger, generateSessionId } from "@agenttrading/core";
+import { AuditLogger, generateSessionId } from "@agenttrading/core-execution";
 import { StatusDisplay, type CycleStatusInput, type KillSwitchTriggerInput } from "../src/status-display.ts";
 import { ManifestWriter, type ManifestData } from "../src/manifest.ts";
 
