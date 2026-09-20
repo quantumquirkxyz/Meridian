@@ -7,7 +7,13 @@
   "module": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./stategraph": "./src/stategraph/state-graph.ts",
+    "./risk": "./src/risk/risk-gate.ts",
+    "./execution": "./src/execution/simulated-execution-engine.ts",
+    "./reconciliation": "./src/reconciliation/reconciliation-engine.ts",
+    "./session": "./src/live/trading-session.ts",
+    "./inventory": "./src/inventory/inventory-engine.ts"
   },
   "scripts": {
     "test": "bun test",

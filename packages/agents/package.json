@@ -8,6 +8,10 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./core": "./src/adapter.ts",
+    "./catalog": "./src/behavioral-runtimes.ts",
+    "./general": "./src/general-agent.ts",
+    "./deployment": "./src/deployment.ts",
     "./runtimes/vercel": "./src/runtimes/vercel.ts",
     "./runtimes/mastra": "./src/runtimes/mastra.ts",
     "./runtimes/openrouter": "./src/runtimes/openrouter.ts"
