@@ -27,6 +27,7 @@ import type {
 } from "@agenttrading/contracts";
 import { CANDIDATE_STATUS, DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
 import { computeRouteCost, MarketGraph } from "@agenttrading/graph";
+import { estimateSlippageBps } from "@agenttrading/core-inventory";
 import { RouteEngine } from "./route-engine.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -101,7 +102,10 @@ export class OpportunityDetector {
     const ask = snapshot.ask ?? snapshot.mid;
     const bid = snapshot.bid ?? snapshot.mid;
     const spread = ask - bid;
+    const mid = snapshot.mid ?? ask;
     const feeUsd = ask * (this.config.feeBps / 10_000);
+
+    const expectedSlippage = this.computeExpectedSlippage(snapshot, spread, mid);
 
     this.graph.upsertEdge(
       venueId,
@@ -110,7 +114,7 @@ export class OpportunityDetector {
       {
         price: ask,
         fee: feeUsd,
-        expectedSlippage: spread / 2,
+        expectedSlippage,
         liquidityUsd: snapshot.depth,
         confidence: this.computeDataConfidence(snapshot),
         riskScore: 0.1,
@@ -129,7 +133,7 @@ export class OpportunityDetector {
       {
         price: bid,
         fee: reverseFeeUsd,
-        expectedSlippage: spread / 2,
+        expectedSlippage,
         liquidityUsd: snapshot.depth,
         confidence: this.computeDataConfidence(snapshot),
         riskScore: 0.1,
@@ -178,6 +182,42 @@ export class OpportunityDetector {
   }
 
   // ── Private helpers ───────────────────────────────────────────────
+
+  /**
+   * Compute expected slippage in USD for an edge.
+   *
+   * Uses venue-aware models:
+   * - CEX with order book: observed spread + depth impact.
+   * - DEX (PancakeSwap): constant-product approximation.
+   * - Fallback: naive spread/2 when depth is unavailable.
+   */
+  private computeExpectedSlippage(
+    snapshot: MarketDataSnapshot,
+    spread: number,
+    mid: number,
+  ): number {
+    const hasOrderBook = snapshot.bid !== null && snapshot.ask !== null;
+    const isDex = snapshot.venue === "pancakeswap-v4" || snapshot.chain === "bsc";
+
+    if (snapshot.depth <= 0) {
+      return spread / 2;
+    }
+
+    if (hasOrderBook) {
+      const spreadBps = ((snapshot.ask! - snapshot.bid!) / mid) * 10000;
+      const orderSizeUsd = mid * 0.001;
+      const slippageBps = estimateSlippageBps(orderSizeUsd, snapshot.depth, spreadBps, "CEX");
+      return mid * (slippageBps / 10000);
+    }
+
+    if (isDex) {
+      const orderSizeUsd = snapshot.depth * 0.01;
+      const slippageBps = estimateSlippageBps(orderSizeUsd, snapshot.depth, 0, "DEX");
+      return mid * (slippageBps / 10000);
+    }
+
+    return spread / 2;
+  }
 
   /**
    * Normalize a symbol+venue into a stable asset node id.

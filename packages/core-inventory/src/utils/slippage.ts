@@ -27,3 +27,35 @@ export function computeSlippageBps(
   const impactBps = Math.floor(impactRatio * 1000);
   return baseSlippageBps + impactBps;
 }
+
+/**
+ * Estimate slippage in basis points using venue-aware models.
+ *
+ * - CEX: uses the observed spread plus a linear depth-impact term.
+ * - DEX: uses the constant-product approximation (simplified).
+ *
+ * Falls back to the base spread when depth data is unavailable.
+ *
+ * @param orderSizeUsd - Notional value of the order in USD.
+ * @param depthUsd - Available liquidity depth on the venue in USD.
+ * @param spreadBps - Observed spread in basis points (0 for DEX).
+ * @param venueType - Venue category determining the model.
+ * @returns Estimated slippage in basis points.
+ */
+export function estimateSlippageBps(
+  orderSizeUsd: number,
+  depthUsd: number,
+  spreadBps: number,
+  venueType: "CEX" | "DEX",
+): number {
+  if (depthUsd <= 0 || orderSizeUsd <= 0) return spreadBps;
+
+  const impactRatio = orderSizeUsd / depthUsd;
+
+  if (venueType === "DEX") {
+    return impactRatio * 100;
+  }
+
+  const depthImpactBps = impactRatio * 10000;
+  return spreadBps + depthImpactBps;
+}
