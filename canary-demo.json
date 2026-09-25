@@ -1,0 +1,42 @@
+{
+  "configId": "canary-demo-1",
+  "name": "Demo Canary",
+  "capitalLimits": {
+    "maxCapitalUsd": 100,
+    "maxRiskPerTradeUsd": 5,
+    "maxDailyLossUsd": 20,
+    "maxWeeklyLossUsd": 50
+  },
+  "exposureLimits": {
+    "maxExposurePerTokenUsd": 50,
+    "maxExposurePerVenueUsd": 100,
+    "maxExposurePerChainUsd": 100
+  },
+  "orderLimits": {
+    "maxOrdersPerDay": 10,
+    "maxOpenOrders": 3,
+    "maxOrdersPerWeek": 30
+  },
+  "scope": {
+    "allowedStrategyIds": ["arbitrage-alpha"],
+    "allowedVenues": ["bybit"],
+    "allowedChains": ["ethereum"],
+    "allowedTokens": ["BTC", "ETH", "USDT"]
+  },
+  "apiKeys": {
+    "readApiKey": { "keyId": "", "secretRef": "" },
+    "tradingApiKey": { "keyId": "", "secretRef": "" },
+    "withdrawalsDisabled": true
+  },
+  "killSwitch": {
+    "autoHaltDailyLossUsd": 15,
+    "autoHaltWeeklyLossUsd": 40,
+    "autoHaltOrdersPerDay": 8,
+    "autoHaltOnOrphans": true,
+    "autoHaltOnReconciliationMismatch": true
+  },
+  "noAutomaticScaling": true,
+  "maxOrderNotionalUsd": 50,
+  "maxSlippageBps": 25,
+  "maxGasUsd": 5
+}

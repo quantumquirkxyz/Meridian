@@ -1,0 +1,42 @@
+{
+  "configId": "canary-live-1",
+  "name": "Live Canary (Strict)",
+  "capitalLimits": {
+    "maxCapitalUsd": 500,
+    "maxRiskPerTradeUsd": 25,
+    "maxDailyLossUsd": 80,
+    "maxWeeklyLossUsd": 200
+  },
+  "exposureLimits": {
+    "maxExposurePerTokenUsd": 200,
+    "maxExposurePerVenueUsd": 500,
+    "maxExposurePerChainUsd": 500
+  },
+  "orderLimits": {
+    "maxOrdersPerDay": 15,
+    "maxOpenOrders": 5,
+    "maxOrdersPerWeek": 50
+  },
+  "scope": {
+    "allowedStrategyIds": ["arbitrage-alpha"],
+    "allowedVenues": ["bybit"],
+    "allowedChains": ["ethereum"],
+    "allowedTokens": ["BTC", "ETH", "USDT"]
+  },
+  "apiKeys": {
+    "readApiKey": { "keyId": "", "secretRef": "" },
+    "tradingApiKey": { "keyId": "", "secretRef": "" },
+    "withdrawalsDisabled": true
+  },
+  "killSwitch": {
+    "autoHaltDailyLossUsd": 50,
+    "autoHaltWeeklyLossUsd": 150,
+    "autoHaltOrdersPerDay": 12,
+    "autoHaltOnOrphans": true,
+    "autoHaltOnReconciliationMismatch": true
+  },
+  "noAutomaticScaling": true,
+  "maxOrderNotionalUsd": 100,
+  "maxSlippageBps": 20,
+  "maxGasUsd": 8
+}
