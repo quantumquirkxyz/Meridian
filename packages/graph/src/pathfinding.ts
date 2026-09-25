@@ -20,6 +20,7 @@ import {
   type MarketGraphSnapshot,
   type OpportunityCandidate,
   type CostBreakdown,
+  computeExpectedNetProfitUsd,
 } from "@agenttrading/contracts";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -484,7 +485,7 @@ export function scoreRoute(
   // Single RISK.md sum exposed by the canonical aggregator (ADR-0014).
   const totalCost = routeCost.totalCostUsd;
 
-  const expectedNetProfitUsd = grossSpreadUsd - totalCost;
+  const expectedNetProfitUsd = computeExpectedNetProfitUsd(grossSpreadUsd, routeCost.costs);
 
   const invalidationReasons:
     | import("@agenttrading/contracts").RiskReasonCode[]
@@ -624,17 +625,7 @@ export function discardNonExecutable(
     if (cost.bottleneckLiquidityUsd < minLiquidityUsd) continue;
     if (cost.combinedFailureProbability > maxFailureProbability) continue;
 
-    const totalCost =
-      cost.costs.tradingFeesUsd +
-      cost.costs.slippageUsd +
-      cost.costs.gasUsd +
-      cost.costs.bridgeCostUsd +
-      cost.costs.fundingCostUsd +
-      cost.costs.latencyRiskUsd +
-      cost.costs.failureRiskUsd +
-      cost.costs.safetyBufferUsd;
-
-    if (grossSpreadUsd - totalCost < minNetProfitUsd) continue;
+    if (computeExpectedNetProfitUsd(grossSpreadUsd, cost.costs) < minNetProfitUsd) continue;
 
     executable.push(route);
   }

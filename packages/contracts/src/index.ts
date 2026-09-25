@@ -33,3 +33,4 @@ export * from "./infrastructure.ts";
 export * from "./audit-reconstruction.ts";
 export * from "./trading-scope.ts";
 export * from "./order-router.ts";
+export * from "./cost-model.ts";

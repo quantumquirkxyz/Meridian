@@ -22,6 +22,7 @@
  */
 
 import { computeRouteCost } from "@agenttrading/graph";
+import { computeExpectedNetProfitUsd } from "@agenttrading/contracts";
 import type {
   MarketEdge,
   MarketGraphSnapshot,
@@ -297,7 +298,7 @@ export class RouteEngine {
     // Canonical expected net profit (ADR-0014, issue #134): the gross
     // spread minus the full RISK.md cost stack, both from the single
     // source of truth in @agenttrading/graph.
-    const expectedNetProfitUsd = routeCost.grossSpreadUsd - routeCost.totalCostUsd;
+    const expectedNetProfitUsd = computeExpectedNetProfitUsd(routeCost.grossSpreadUsd, routeCost.costs);
 
     // Score the route.
     const score = computeScore(
