@@ -93,6 +93,15 @@ export interface RPCConfig {
    * BSC (56) → 500, ETH (1) → 3000, all others → 3000.
    */
   nativePriceUsd?: number;
+  /**
+   * Optional live gas price oracle. When provided, it is called at execution
+   * time to obtain the current native token price in USD for gas cost
+   * calculations. Receives the native token symbol (e.g. "BNB", "ETH").
+   *
+   * If omitted, the executor uses `nativePriceUsd` or the conservative
+   * chain-id defaults above.
+   */
+  gasPriceOracleUsd?: (nativeToken: string) => Promise<number>;
 }
 
 export interface NonceInfo {
@@ -149,6 +158,7 @@ export class DEXExecutor {
   private readonly privateKey?: `0x${string}`;
   private readonly routerAddress?: `0x${string}`;
   private readonly nativePriceUsd: number;
+  private readonly gasPriceOracleUsd?: (nativeToken: string) => Promise<number>;
 
   private readonly publicClient: PublicClient;
   private readonly walletClient?: WalletClient;
@@ -159,6 +169,7 @@ export class DEXExecutor {
     this.privateKey = config.privateKey;
     this.routerAddress = config.routerAddress;
     this.nativePriceUsd = config.nativePriceUsd ?? (config.chainId === 56 ? 500 : 3_000);
+    this.gasPriceOracleUsd = config.gasPriceOracleUsd;
 
     this.publicClient = createPublicClient({
       chain: this.chain,
@@ -223,13 +234,16 @@ export class DEXExecutor {
     const gasPrice = await this.publicClient.getGasPrice();
     const estimatedGas = BigInt(150_000);
     /**
-     * Best-effort USD gas cost; uses the configured native token price
-     * approximation. For production, inject a live price oracle via
-     * `RPCConfig.nativePriceUsd`.
+     * Best-effort USD gas cost; uses the live oracle when configured,
+     * otherwise falls back to the configured native token price approximation.
      */
     const decimals = this.chain.nativeCurrency?.decimals ?? 18;
+    const nativeToken = this.chain.nativeCurrency?.symbol ?? "ETH";
+    const nativePriceUsd = this.gasPriceOracleUsd
+      ? await this.gasPriceOracleUsd(nativeToken)
+      : this.nativePriceUsd;
     const gasCostUsd =
-      Number((gasPrice * estimatedGas) / BigInt(10 ** decimals)) * this.nativePriceUsd;
+      Number((gasPrice * estimatedGas) / BigInt(10 ** decimals)) * nativePriceUsd;
 
     return {
       gasPrice,
