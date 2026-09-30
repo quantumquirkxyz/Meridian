@@ -68,12 +68,18 @@ export interface RouteDiscoveryOptions {
 
 /** Options controlling cost computation. */
 export interface CostOptions {
-  /** Fixed safety buffer in USD. Default: 1.0. */
+  /** Safety buffer in USD. When not explicitly provided, computed as 1% of
+   *  route notional (bottleneck liquidity), floored at $0.50 and capped at
+   *  $5.00. */
   safetyBufferUsd?: number;
   /** Gas price multiplier for estimation. Default: 1.0. */
   gasMultiplier?: number;
   /** Multiplier for latency risk (USD per ms). Default: 0.001. */
   latencyRiskPerMs?: number;
+  /** Reference notional in USD for expected-loss and safety-buffer
+   *  calculations. When omitted, the bottleneck liquidity is used as the
+   *  effective notional. */
+  notionalUsd?: number;
 }
 
 /** Options controlling route filtering. */
@@ -328,7 +334,7 @@ export function computeRouteCost(
   options: CostOptions = {},
 ): RouteCost {
   const {
-    safetyBufferUsd = 1.0,
+    safetyBufferUsd,
     gasMultiplier = 1.0,
     latencyRiskPerMs = 0.001,
   } = options;
@@ -394,11 +400,19 @@ export function computeRouteCost(
   combinedFailureProb = 1 - failuresSeen;
   if (!Number.isFinite(bottleneckLiquidity)) bottleneckLiquidity = 0;
 
-  // Expected loss on the maximum capital the route can deploy: the
-  // bottleneck (minimum) liquidity, scaled by the combined failure
-  // probability (ADR-0014). maxCapitalUsd = 0 when the route is
-  // non-executable, so its failure risk is zero.
-  const failureRiskUsd = bottleneckLiquidity * combinedFailureProb;
+  const effectiveNotional = options.notionalUsd ?? bottleneckLiquidity;
+
+  // Compute safety buffer from route notional if not explicitly provided.
+  // 1% of trade notional (effective notional), floored at $0.50 and
+  // capped at $5.00.
+  const computedSafetyBuffer = effectiveNotional * 0.01;
+  const finalSafetyBufferUsd = safetyBufferUsd ?? Math.max(0.50, Math.min(5.00, computedSafetyBuffer));
+
+  // Expected loss on the reference notional, scaled by the combined
+  // failure probability (ADR-0014). The effective notional defaults to
+  // bottleneck liquidity when no override is provided; when the route is
+  // non-executable, effectiveNotional = 0 so failure risk is zero.
+  const failureRiskUsd = effectiveNotional * combinedFailureProb;
 
   const costs: CostBreakdown = {
     tradingFeesUsd,
@@ -408,7 +422,7 @@ export function computeRouteCost(
     fundingCostUsd,
     latencyRiskUsd,
     failureRiskUsd,
-    safetyBufferUsd,
+    safetyBufferUsd: finalSafetyBufferUsd,
   };
 
   return {
@@ -422,7 +436,7 @@ export function computeRouteCost(
       costs.fundingCostUsd +
       costs.latencyRiskUsd +
       costs.failureRiskUsd +
-      costs.safetyBufferUsd,
+      finalSafetyBufferUsd,
     grossSpreadUsd,
     bottleneckLiquidityUsd: bottleneckLiquidity,
     combinedFailureProbability: combinedFailureProb,

@@ -239,8 +239,8 @@ describe("computeRouteCost", () => {
     expect(cost.costs.latencyRiskUsd).toBeCloseTo(0.15); // 150 * 0.001
     // totalCostUsd exposes the single RISK.md sum (ADR-0014, issue #134):
     // 8 fees + 3 slippage + 15 gas + 0 bridge + 0 funding +
-    // 0.15 latency + 0 failure risk + 1.0 safety buffer = 27.15.
-    expect(cost.totalCostUsd).toBeCloseTo(27.15, 2);
+    // 0.15 latency + 0 failure risk + 0.50 safety buffer (floor) = 26.65.
+    expect(cost.totalCostUsd).toBeCloseTo(26.65, 2);
     expect(cost.hops).toBe(2);
   });
 
@@ -254,9 +254,9 @@ describe("computeRouteCost", () => {
     );
     const cost = computeRouteCost(snap, ["asset:BTC", "asset:ETH", "asset:USDT"]);
     expect(cost.grossSpreadUsd).toBe(55); // 25 + 30
-    // With no other cost weights, totalCostUsd is just the safety buffer (1.0).
-    expect(cost.totalCostUsd).toBeCloseTo(1.0, 2);
-    expect(cost.grossSpreadUsd - cost.totalCostUsd).toBeCloseTo(54, 2);
+    // With no other cost weights, totalCostUsd is the floor safety buffer (0.50).
+    expect(cost.totalCostUsd).toBeCloseTo(0.50, 2);
+    expect(cost.grossSpreadUsd - cost.totalCostUsd).toBeCloseTo(54.50, 2);
   });
 
   test("grossSpreadUsd is 0 for non-executable routes", () => {
@@ -323,7 +323,7 @@ describe("computeRouteCost", () => {
     );
   });
 
-  test("failureRiskUsd is maxCapitalUsd x combined failure probability", () => {
+  test("failureRiskUsd is effective notional x combined failure probability", () => {
     const snap = makeSnapshot(
       [asset("A"), asset("B"), asset("C")],
       [
@@ -338,10 +338,31 @@ describe("computeRouteCost", () => {
       ],
     );
     const cost = computeRouteCost(snap, ["asset:A", "asset:B", "asset:C"]);
-    // maxCapitalUsd = min liquidity = 5_000; combined p = 0.28.
+    // effective notional defaults to bottleneckLiquidity = 5_000 when notionalUsd is not provided.
     expect(cost.bottleneckLiquidityUsd).toBe(5_000);
     expect(cost.combinedFailureProbability).toBeCloseTo(0.28, 2);
     expect(cost.costs.failureRiskUsd).toBeCloseTo(5_000 * 0.28, 2);
+  });
+
+  test('failureRiskUsd uses notionalUsd when provided', () => {
+    const snap = makeSnapshot(
+      [asset('A'), asset('B'), asset('C')],
+      [
+        swapEdge('asset:A', 'asset:B', {
+          liquidityUsd: 10_000,
+          failureProbability: 0.1,
+        }),
+        swapEdge('asset:B', 'asset:C', {
+          liquidityUsd: 5_000,
+          failureProbability: 0.2,
+        }),
+      ],
+    );
+    const cost = computeRouteCost(snap, ['asset:A', 'asset:B', 'asset:C'], {
+      notionalUsd: 100,
+    });
+    // notionalUsd = 100 overrides bottleneckLiquidity (5_000)
+    expect(cost.costs.failureRiskUsd).toBeCloseTo(100 * 0.28, 2);
   });
 
   test("failureRiskUsd is zero when no liquidity is exposed", () => {
@@ -450,7 +471,7 @@ describe("scoreRoute", () => {
     expect(candidate).toBeDefined();
     const costs = candidate!.costs;
     // fees + slippage + gas + bridge + funding + latency + failure + buffer
-    // failureRiskUsd = bottleneck (5_000) x combined p (0.28) = 1_400.
+    // failureRiskUsd = 5_000 x combined p (0.28) = 1_400 (no notionalUsd override).
     const totalCost =
       costs.tradingFeesUsd +
       costs.slippageUsd +

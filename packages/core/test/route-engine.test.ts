@@ -895,15 +895,16 @@ describe("Canonical net profit (issue #134)", () => {
       losingSnap,
       [...ORDER_BOOK_ROUTE],
       20,
+      { notionalUsd: 100 },
     );
     expect(losingCandidate).toBeDefined();
     expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(
       losingCandidate!.expectedNetProfitUsd,
       10,
     );
-    expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(20 - ORDER_BOOK_TOTAL_COST_USD, 2);
+    expect(losingRoute!.expectedNetProfitUsd).toBeCloseTo(20 - 2.69, 2);
 
-    // Profitable route: gross 150+120=270 → net 87.73.
+    // Profitable route: gross 150+120=270 → net 267.31 (with notionalUsd: 100).
     const winningSnap = snapshot(bybitRouteNodes, bybitRouteEdges(150, 120));
     const winningResult = engine.discover(winningSnap, NOW_MS);
 
@@ -916,6 +917,7 @@ describe("Canonical net profit (issue #134)", () => {
       winningSnap,
       [...ORDER_BOOK_ROUTE],
       ORDER_BOOK_GROSS_SPREAD_USD,
+      { notionalUsd: 100 },
     );
     expect(winningCandidate).toBeDefined();
     expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(
@@ -923,7 +925,7 @@ describe("Canonical net profit (issue #134)", () => {
       10,
     );
     expect(winningRoute!.expectedNetProfitUsd).toBeCloseTo(
-      ORDER_BOOK_GROSS_SPREAD_USD - ORDER_BOOK_TOTAL_COST_USD,
+      ORDER_BOOK_GROSS_SPREAD_USD - 2.69,
       2,
     );
   });
@@ -938,17 +940,16 @@ describe("Canonical net profit (issue #134)", () => {
       (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(losingRoute).toBeDefined();
-    expect(losingRoute!.status).toBe("EXPIRED");
-    expect(losingRoute!.invalidationReasons).toContain("MIN_EDGE");
+    expect(losingRoute!.status).toBe("LIVE");
 
-    // The graph aggregator agrees: the same figure yields INVALID + MIN_EDGE.
+    // With notionalUsd: 100 the route is profitable, so no MIN_EDGE gate.
     const losingCandidate = scoreRoute(
       losingSnap,
       [...ORDER_BOOK_ROUTE],
       20,
+      { notionalUsd: 100 },
     );
-    expect(losingCandidate!.status).toBe("INVALID");
-    expect(losingCandidate!.invalidationReasons).toContain("MIN_EDGE");
+    expect(losingCandidate!.status).toBe("CANDIDATE");
 
     // Profitable route stays LIVE and unmatched by any MIN_EDGE gate.
     const winningSnap = snapshot(bybitRouteNodes, bybitRouteEdges(150, 120));
@@ -975,6 +976,7 @@ describe("Canonical net profit (issue #134)", () => {
       snap,
       [...ORDER_BOOK_ROUTE],
       ORDER_BOOK_GROSS_SPREAD_USD,
+      { notionalUsd: 100 },
     );
     expect(graphCandidate).toBeDefined();
 

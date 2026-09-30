@@ -286,7 +286,11 @@ export class RouteEngine {
     // computeRouteCost supplies grossSpreadUsd, totalCostUsd, and the full
     // cost breakdown. aggregateEdgeWeights is retained only for confidence,
     // maxCapitalUsd, and riskConcentration.
-    const routeCost = computeRouteCost(snapshot, path.nodes);
+    // A $100 reference notional is used for expected-loss and
+    // safety-buffer calculations; the safety buffer is computed as 1% of
+    // that notional, floored at $0.50 and capped at $5.00 by
+    // computeRouteCost when not explicitly provided via cost options.
+    const routeCost = computeRouteCost(snapshot, path.nodes, { notionalUsd: 100 });
 
     // Compute route metrics from edge weights (confidence, capital, risk).
     const { confidence, maxCapitalUsd, riskConcentration } =
