@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0",
+  "templateVersion": "1.0.0",
+  "session": {
+    "sessionId": "<fill-in-or-generated>",
+    "startedAt": "<ISO-8601 timestamp>",
+    "endedAt": "<ISO-8601 timestamp>",
+    "mode": "live",
+    "configFile": "canary-live.json",
+    "operator": "<optional-operator-name>",
+    "capitalDeployedUsd": 0,
+    "capitalRemainingUsd": 0
+  },
+  "preFlightChecks": {
+    "demoValidationPassed": true,
+    "demoEvidenceReviewed": true,
+    "canaryLiveConfigValid": true,
+    "withdrawalsDisabledConfirmed": true,
+    "apiKeysValid": true,
+    "dryRunCompleted": true,
+    "dryRunNoOrdersPlaced": true
+  },
+  "results": {
+    "connectivityCheck": "pass",
+    "publicWsConnected": true,
+    "privateWsConnected": true,
+    "marketDataIngesting": true,
+    "opportunityDetectorRunning": true,
+    "riskEngineEvaluating": true,
+    "ordersPlaced": 0,
+    "ordersFilled": 0,
+    "ordersRejected": 0,
+    "ordersCancelled": 0,
+    "reconciliationPassing": true,
+    "auditLogWriting": true,
+    "sessionSummaryPrinted": true,
+    "killSwitchActivations": 0,
+    "bugKillSwitchActivations": 0
+  },
+  "tradeStatistics": {
+    "totalOpportunitiesDetected": 0,
+    "totalOrdersSubmitted": 0,
+    "totalOrdersFilled": 0,
+    "totalOrdersRejectedByRisk": 0,
+    "totalOrdersCancelled": 0,
+    "winRate": 0,
+    "totalPnlUsd": 0,
+    "totalFeesUsd": 0,
+    "totalSlippageUsd": 0,
+    "avgSlippageBps": 0,
+    "maxSlippageBps": 0,
+    "totalGasUsd": 0,
+    "totalLatencyRiskUsd": 0,
+    "totalFailureRiskUsd": 0,
+    "totalSafetyBufferUsd": 0,
+    "maxDailyLossUsd": 0,
+    "maxDrawdownUsd": 0,
+    "sharpeRatio": null,
+    "profitFactor": null
+  },
+  "riskMetrics": {
+    "maxExposurePerTokenUsd": {},
+    "maxExposurePerVenueUsd": {},
+    "maxExposurePerChainUsd": 0,
+    "maxOpenOrdersReached": 0,
+    "dailyLossLimitHits": 0,
+    "weeklyLossLimitHits": 0,
+    "reconciliationMismatches": 0,
+    "orphanOrdersDetected": 0
+  },
+  "costModelAccuracy": {
+    "slippageEstimateVsActual": {
+      "meanDeviationPct": 0,
+      "maxDeviationPct": 0,
+      "passesThreshold": true
+    },
+    "gasEstimateVsActual": {
+      "meanDeviationPct": 0,
+      "maxDeviationPct": 0,
+      "passesThreshold": true
+    },
+    "latencyEstimateVsActual": {
+      "meanDeviationPct": 0,
+      "maxDeviationPct": 0,
+      "passesThreshold": true
+    }
+  },
+  "evidence": {
+    "auditLogPath": "./reports/<session-id>/audit.jsonl",
+    "sessionReportPath": "./reports/<session-id>/summary.json",
+    "tradeJournalPath": "./reports/<session-id>/trades.json",
+    "manifestPath": "./reports/<session-id>/manifest.json",
+    "screenshotPaths": [],
+    "notes": "<any-observations>"
+  },
+  "issuesFound": [],
+  "recommendations": [],
+  "continueCanary": false,
+  "escalateCapital": false,
+  "rollbackToDemo": false,
+  "validatedAt": "<ISO-8601 timestamp>",
+  "validatedBy": "<operator-name>"
+}

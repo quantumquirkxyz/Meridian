@@ -10,3 +10,5 @@ coverage/
 
 # Generated skill audit execution records
 .agents/skills/platform/runs/
+
+reports/
