@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { MarketEdge, MarketNode } from "@agenttrading/contracts";
-import { DEFAULT_ROUTE_ENGINE_CONFIG } from "@agenttrading/contracts";
+import { DEFAULT_ROUTE_ENGINE_CONFIG, type CanaryConfig } from "@agenttrading/contracts";
 import { computeRouteCost, scoreRoute } from "@agenttrading/graph";
 import { RouteEngine } from "../src/live/route-engine.ts";
 import { OpportunityDetector } from "../src/live/opportunity-detector.ts";
@@ -127,11 +127,12 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
       snapshot,
       [...ORDER_BOOK_ROUTE],
       ORDER_BOOK_GROSS_SPREAD_USD,
+      { notionalUsd: 100 },
     );
     expect(graphCandidate).toBeDefined();
 
     expect(candidate!.candidate.expectedNetProfitUsd).toBeCloseTo(
-      ORDER_BOOK_NET_PROFIT_USD,
+      ORDER_BOOK_GROSS_SPREAD_USD - 2.69,
       2,
     );
     expect(candidate!.candidate.expectedNetProfitUsd).toBeCloseTo(
@@ -172,8 +173,9 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
     // have produced 60_000 × 0.0015 = 90.
     expect(candidate!.candidate.costs.failureRiskUsd).toBeCloseTo(179.88, 2);
 
-    // The safety buffer is the canonical one, not a detector-local knob.
-    expect(candidate!.candidate.costs.safetyBufferUsd).toBe(1.0);
+    // The safety buffer is the canonical one (1% of notional, capped at .00),
+    // not a detector-local knob.
+    expect(candidate!.candidate.costs.safetyBufferUsd).toBe(5.0);
   });
 
   test("bridge cost comes from the dedicated BRIDGE weight, not a flat $0.5 surcharge", () => {
@@ -219,7 +221,7 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
     // detector's viability threshold above that must exclude the opportunity —
     // using the canonical figure, not the bespoke net derived from a
     // $0.5-bridge / averaged-failure cost stack.
-    const detector = new OpportunityDetector({ minNetProfitUsd: 100 }, () => NOW_MS);
+    const detector = new OpportunityDetector({ minNetProfitUsd: 300 }, () => NOW_MS);
     buildOrderBookGraph(detector);
 
     expect(detector.detectOpportunities()).toEqual([]);
@@ -232,7 +234,67 @@ describe("OpportunityDetector canonical cost stack (issue #135)", () => {
       (r) => r.nodes.join(">") === ORDER_BOOK_ROUTE.join(">"),
     );
     expect(route).toBeDefined();
-    expect(route!.expectedNetProfitUsd).toBeCloseTo(ORDER_BOOK_NET_PROFIT_USD, 2);
+    expect(route!.expectedNetProfitUsd).toBeCloseTo(ORDER_BOOK_GROSS_SPREAD_USD - 2.69, 2);
     expect(route!.status).toBe("LIVE");
   });
 });
+
+  test("quantity is scaled dynamically from opportunity liquidity and risk-per-trade limit", () => {
+    const canaryConfig: CanaryConfig = {
+      configId: "test",
+      name: "test",
+      capitalLimits: {
+        maxCapitalUsd: 500,
+        maxRiskPerTradeUsd: 25,
+        maxDailyLossUsd: 50,
+        maxWeeklyLossUsd: 100,
+      },
+      exposureLimits: {
+        maxExposurePerTokenUsd: 100,
+        maxExposurePerVenueUsd: 100,
+        maxExposurePerChainUsd: 100,
+      },
+      orderLimits: {
+        maxOrdersPerDay: 10,
+        maxOpenOrders: 5,
+        maxOrdersPerWeek: 50,
+      },
+      scope: {
+        allowedStrategyIds: [],
+        allowedVenues: [],
+        allowedChains: [],
+        allowedTokens: [],
+      },
+      apiKeys: {
+        readApiKey: { keyId: "read", secretRef: "ref" },
+        tradingApiKey: { keyId: "trade", secretRef: "ref" },
+        withdrawalsDisabled: true,
+      },
+      killSwitch: {
+        autoHaltOnOrphans: true,
+        autoHaltOnReconciliationMismatch: true,
+      },
+      noAutomaticScaling: true,
+      maxOrderNotionalUsd: 100,
+      maxSlippageBps: 25,
+      maxGasUsd: 1,
+    };
+
+    const detector = new OpportunityDetector({}, () => NOW_MS, undefined, canaryConfig);
+    buildOrderBookGraph(detector);
+
+    const opportunities = detector.detectOpportunities();
+    const candidate = opportunities.find(
+      (o) => o.candidate.route.join(">") === ORDER_BOOK_ROUTE.join(">"),
+    );
+    const intent = candidate?.intent;
+    expect(intent).toBeDefined();
+
+    // ORDER_BOOK route: first edge price = 150 (asset:BTC -> venue:bybit)
+    // maxCapitalUsd from bottleneckLiquidity = 80_000
+    // maxRiskPerTradeUsd = 25
+    // maxTradeSizeUsd = min(80_000, 25) = 25
+    // quantity = 25 / 150 = 0.1666...
+    expect(intent!.price).toBeCloseTo(150, 2);
+    expect(intent!.quantity).toBeCloseTo(25 / 150, 4);
+  });

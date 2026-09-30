@@ -18,6 +18,7 @@
  */
 
 import type {
+  CanaryConfig,
   MarketDataSnapshot,
   OpportunityCandidate,
   OrderIntent,
@@ -37,6 +38,8 @@ export interface OpportunityDetectorConfig {
   minNetProfitUsd: number;
   /** Trading fee rate in basis points (default: 10 = 0.1%). */
   feeBps: number;
+  /** Max slippage in basis points (default: 25). */
+  maxSlippageBps?: number;
   /** Maximum route length (hops) to consider. */
   maxRouteLength: number;
 }
@@ -44,6 +47,7 @@ export interface OpportunityDetectorConfig {
 export const DEFAULT_OPPORTUNITY_DETECTOR_CONFIG: OpportunityDetectorConfig = {
   minNetProfitUsd: 0.5,
   feeBps: 10,
+  maxSlippageBps: 25,
   maxRouteLength: 4,
 };
 
@@ -59,15 +63,18 @@ export class OpportunityDetector {
   private readonly routeEngine: RouteEngine;
   private readonly config: OpportunityDetectorConfig;
   private readonly now: () => number;
+  private readonly canaryConfig?: CanaryConfig;
 
   constructor(
     config: Partial<OpportunityDetectorConfig> = {},
     now?: () => number,
     graph?: MarketGraph,
+    canaryConfig?: CanaryConfig,
   ) {
     this.config = { ...DEFAULT_OPPORTUNITY_DETECTOR_CONFIG, ...config };
     this.now = now ?? (() => Date.now());
     this.graph = graph ?? new MarketGraph();
+    this.canaryConfig = canaryConfig;
     this.routeEngine = new RouteEngine({
       ...DEFAULT_ROUTE_ENGINE_CONFIG,
       maxRouteLength: this.config.maxRouteLength,
@@ -300,6 +307,13 @@ export class OpportunityDetector {
   private candidateToOrderIntent(candidate: OpportunityCandidate): OrderIntent {
     const side: OrderSide = this.determineOrderSide(candidate);
     const { symbol, venue } = this.extractVenueAndSymbol(candidate);
+    const price = this.extractEntryPrice(candidate);
+
+    const maxTradeSizeUsd = Math.min(
+      candidate.maxCapitalUsd ?? 100,
+      this.canaryConfig?.capitalLimits?.maxRiskPerTradeUsd ?? 25,
+    );
+    const quantity = price > 0 ? maxTradeSizeUsd / price : 0.001;
 
     return {
       idempotencyKey: `intent:${candidate.id}:${this.now()}`,
@@ -307,13 +321,13 @@ export class OpportunityDetector {
       venue,
       symbol,
       side,
-      quantity: 0.001,
-      price: this.extractEntryPrice(candidate),
+      quantity,
+      price,
       quoteCurrency: "USDT",
       createdAtMs: this.now(),
       expiresAtMs: this.now() + 60_000,
       limits: {
-        maxSlippageBps: this.config.feeBps,
+        maxSlippageBps: this.config.maxSlippageBps,
       },
     };
   }

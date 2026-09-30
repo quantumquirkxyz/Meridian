@@ -13,7 +13,7 @@ import type { CostBreakdown } from "./opportunity.ts";
  *                      - fundingCostUsd
  *                      - latencyRiskUsd
  *                      - failureRiskUsd
- *                      - safetyBufferUsd
+ *                      - safetyBufferUsd (1% of notional, $0.50-$5.00)
  * ```
  *
  * Both `@agenttrading/graph` and `@agenttrading/core` must use this single

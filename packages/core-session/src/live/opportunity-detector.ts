@@ -18,6 +18,7 @@
  */
 
 import type {
+  CanaryConfig,
   MarketDataSnapshot,
   OpportunityCandidate,
   OrderIntent,
@@ -57,16 +58,19 @@ export class OpportunityDetector {
   private readonly graph: MarketGraph;
   private readonly routeEngine: RouteEngine;
   private readonly config: OpportunityDetectorConfig;
+  private readonly canaryConfig?: CanaryConfig;
   private readonly now: () => number;
 
   constructor(
     config: Partial<OpportunityDetectorConfig> = {},
     now?: () => number,
     graph?: MarketGraph,
+    canaryConfig?: CanaryConfig,
   ) {
     this.config = { ...DEFAULT_OPPORTUNITY_DETECTOR_CONFIG, ...config };
     this.now = now ?? (() => Date.now());
     this.graph = graph ?? new MarketGraph();
+    this.canaryConfig = canaryConfig;
     this.routeEngine = new RouteEngine({
       ...DEFAULT_ROUTE_ENGINE_CONFIG,
       maxRouteLength: this.config.maxRouteLength,
@@ -260,6 +264,12 @@ export class OpportunityDetector {
   private candidateToOrderIntent(candidate: OpportunityCandidate): OrderIntent {
     const side: OrderSide = this.determineOrderSide(candidate);
     const { symbol, venue } = this.extractVenueAndSymbol(candidate);
+    const entryPrice = this.extractEntryPrice(candidate);
+    const maxTradeUsd = Math.min(
+      candidate.maxCapitalUsd ?? 100,
+      this.canaryConfig?.capitalLimits?.maxRiskPerTradeUsd ?? 25,
+    );
+    const quantity = entryPrice > 0 ? maxTradeUsd / entryPrice : 0.001;
 
     return {
       idempotencyKey: `intent:${candidate.id}:${this.now()}`,
@@ -267,13 +277,13 @@ export class OpportunityDetector {
       venue,
       symbol,
       side,
-      quantity: 0.001,
-      price: this.extractEntryPrice(candidate),
+      quantity,
+      price: entryPrice,
       quoteCurrency: "USDT",
       createdAtMs: this.now(),
       expiresAtMs: this.now() + 60_000,
       limits: {
-        maxSlippageBps: this.config.feeBps,
+        maxSlippageBps: 25,
       },
     };
   }

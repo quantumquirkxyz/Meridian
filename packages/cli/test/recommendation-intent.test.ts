@@ -38,7 +38,7 @@ describe("buildRecommendationIntent (ADR-0013)", () => {
     expect(intent!.venue).toBe("bybit");
     expect(intent!.side).toBe("BUY");
     expect(intent!.price).toBe(100);
-    expect(intent!.quantity).toBe(0.001);
+    expect(intent!.quantity).toBe(0.25);
     expect(intent!.quoteCurrency).toBe("USDT");
     expect(intent!.limits.maxSlippageBps).toBe(5);
     expect(intent!.idempotencyKey).toContain("general:");
