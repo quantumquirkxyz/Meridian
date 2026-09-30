@@ -44,3 +44,14 @@ The execution seam is implemented as the `OrderRouter`:
 - `CanarySession` and `TradingSession` expose `setOrderRouter`, `hasOrderRouter`, `preCheckIntent`, and `placeLiveOrder`.
 - `BybitDexOrderRouter` (cli/src/order-router.ts) routes CEX intents to `BybitRESTClient.placeOrder` and DEX intents to `DEXExecutor.executeSwap`.
 - `LiveRunner` attaches the router at construction and places every accepted intent via `session.placeLiveOrder`, so the connector path (demo or mainnet endpoints) is decided solely by the runner's `bybitEndpoints` wiring.
+
+## Update 2026-09-30
+
+Phase 4 delivered operational validation tooling that hardens the demo → live promotion path defined in this ADR:
+
+- `scripts/validate-demo.ts` — 10 automated checks against demo session reports (trade count, win rate, net PnL, reconciliation, audit completeness, kill switch, slippage, WebSocket stability).
+- `scripts/validate-live.ts` — Pre-flight live readiness checks: typecheck, full test suite, cost model validation, demo evidence requirement, live config validation, and report template generation. Enforces 60s subprocess timeouts to prevent hangs.
+- `scripts/verify-demo-connectivity.ts` — 5 pre-flight connectivity checks (`.env`, credentials, public connectivity, API key validity, account reachability). Includes pre-flight timestamp sync with drift warning when client clock diverges > 3s from Bybit server. `recvWindow` increased to 10000ms to tolerate clock drift.
+- `scripts/generate-demo-report.ts` and `scripts/generate-live-report.ts` — Structured session report generators with escalation recommendations (`continueCanary`, `escalateCapital`, `rollbackToDemo`).
+
+These artifacts operationalize the "manual review exit gate `demo` → `live`" and "documentary evidence" requirements from the original decision.

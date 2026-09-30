@@ -1,7 +1,7 @@
 # Meridian — Multi-Agent CEX/DEX Arbitrage Infrastructure
 
 [![Build](https://github.com/quantumquirkxyz/Meridian/actions/workflows/ci.yml/badge.svg)](https://github.com/quantumquirkxyz/Meridian/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-84%20files-green.svg)](#testing--validation)
+[![Tests](https://img.shields.io/badge/tests-86%20files-green.svg)](#testing--validation)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](#license)
 
@@ -11,7 +11,7 @@
 
 ## What It Does
 
-Meridian is arbitrage infrastructure for fragmented crypto liquidity across Bybit (CEX) and PancakeSwap v4 (DEX). The system builds a versioned market graph, discovers routes with full cost modeling, and only executes when a deterministic Risk Engine approves. Net profit is computed as gross spread minus trading fees, slippage, gas, bridge cost, funding, latency risk, failure risk, and a safety buffer — a route becomes a candidate only when expected net profit exceeds all costs. This is not a signal service: it is a closed-loop execution system with auditable, reproducible decisions.
+Meridian is arbitrage infrastructure for fragmented crypto liquidity across Bybit (CEX) and PancakeSwap v4 (DEX). The system builds a versioned market graph, discovers routes with full cost modeling, and only executes when a deterministic Risk Engine approves. Net profit is computed as gross spread minus trading fees, slippage, gas, bridge cost, funding, latency risk, failure risk, and a safety buffer — a route becomes a candidate only when expected net profit exceeds all costs. Phase 4 delivered live-readiness validation (`validate-live.ts`), demo connectivity verification (`verify-demo-connectivity.ts`), structured session reports, and a documented demo-to-live progression with explicit exit criteria. This is not a signal service: it is a closed-loop execution system with auditable, reproducible decisions.
 
 ## Architecture at a Glance
 
@@ -111,10 +111,12 @@ Agents never execute, approve risk, or move funds. The Risk Engine remains the s
 ## Testing & Validation
 
 ```bash
-bun test                # 84+ test files
+bun test                # 1447 tests across 86 files
 bun run typecheck       # Strict TypeScript
 bun run verify          # typecheck + tests
 bun run validate:costs  # Cost model vs simulator validation
+bun run validate:demo   # Demo session validation (10 automated checks)
+bun run validate:live   # Live readiness validation (pre-flight checks)
 ```
 
 ## Documentation
@@ -127,6 +129,8 @@ bun run validate:costs  # Cost model vs simulator validation
 | [RISK.md](docs/RISK.md) | Risk principles, invariants, net profit formula, fallbacks |
 | [ANALYSIS.md](docs/ANALYSIS.md) | Deep analysis of algorithms, math, microstructure, money-leak vectors |
 | [OPERATING_FLOW.md](docs/OPERATING_FLOW.md) | Mode contract, demo vs live, implementation order |
+| `scripts/validate-demo.ts` | Automated demo session validation |
+| `scripts/validate-live.ts` | Live readiness pre-flight validation |
 
 ## Configuration
 

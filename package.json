@@ -16,7 +16,8 @@
     "audit:fix": "bun audit && bun update",
     "validate:costs": "bun run scripts/validate-cost-models.ts",
     "validate:demo": "bun run scripts/validate-demo.ts",
-    "demo:report": "bun run scripts/generate-demo-report.ts"
+    "demo:report": "bun run scripts/generate-demo-report.ts",
+    "validate:live": "bun run scripts/validate-live.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

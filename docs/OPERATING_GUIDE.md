@@ -15,6 +15,9 @@ Then review the session report in `./reports/<session-id>/` against the criteria
 ### Automated Validation
 `scripts/validate-demo.ts` runs the automated checks against the session report generated in `./reports/<session-id>/`. It validates trade counts, win rate, net PnL, reconciliation status, audit log completeness, kill switch activations, slippage, and WebSocket stability. Run it after stopping the demo runner to get a pass/fail verdict before manual review.
 
+### Demo Connectivity Verification
+`scripts/verify-demo-connectivity.ts` performs 5 pre-flight checks against the configured Bybit mode (demo or live): `.env` existence, credential loading, public market data connectivity, API key validity, and account reachability. A timestamp sync check detects clock drift > 3s before authenticated calls. Run it after configuring `.env` to catch connectivity issues before launching a session.
+
 1. Get Bybit Demo Trading keys from https://www.bybit.com/app/user/api-management
    - Important: Demo keys are separate from live keys
 2. Copy `.env.example` to `.env`
@@ -66,6 +69,27 @@ All of the following must pass before proceeding to live:
    - [ ] API keys validated
    - [ ] Withdrawals disabled confirmed
    - [ ] No orders actually placed in dry-run
+6. Run connectivity verification: `bun run scripts/verify-demo-connectivity.ts`
+7. Run live readiness validation: `bun run validate:live`
+   - Validates typecheck, test suite, cost models, demo evidence, and live config
+   - Generates `live-session-report-template.json` for the first live session
+
+## Live Readiness Checklist
+
+All of the following must be confirmed before starting the live canary:
+
+- [ ] Demo validation passed (10/10 checks)
+- [ ] Demo session report shows `readyForLive: true`
+- [ ] `canary-live.json` exists and is valid
+- [ ] `withdrawalsDisabled: true` in canary-live.json
+- [ ] Real Bybit API keys with withdrawals disabled (NOT demo keys)
+- [ ] Dry-run completed successfully with no orders placed
+- [ ] Operator understands rollback procedure
+- [ ] Capital available is within canary limits ($500 max)
+- [ ] Emergency stop procedure understood
+
+### Connectivity Verification
+`scripts/verify-demo-connectivity.ts` performs 5 pre-flight checks against the configured Bybit mode (demo or live): `.env` existence, credential loading, public market data connectivity, API key validity, and account reachability. A timestamp sync check detects clock drift > 3s before authenticated calls. Run it after configuring `.env` to catch connectivity issues before launching a session.
 
 ## Step 3: Live Canary
 1. Start live canary: `bun run start --mode live --config canary-live.json`
@@ -75,6 +99,44 @@ All of the following must pass before proceeding to live:
    - Reconciliation status
    - Audit trail completeness
 3. Emergency stop: Ctrl+C or TUI command `halt`
+
+### Daily Monitoring Checklist
+- [ ] PnL reviewed and within daily loss limit
+- [ ] Kill switch status: no unexpected activations
+- [ ] Reconciliation passed for all orders
+- [ ] Audit trail is complete with no gaps
+
+### Weekly Review Checklist
+- [ ] Performance metrics analyzed (win rate, Sharpe, drawdown)
+- [ ] Cost model accuracy validated against actual fees
+- [ ] Edge decay assessed: strategy still generating alpha
+
+### Monthly Escalation Criteria
+- **Increase capital**: Consistent profitability for 30 days, win rate > 50%, daily loss limit never triggered
+- **Stop canary**: Any exit criterion triggered, regulatory changes, or strategy decay beyond recovery
+
+## Live Canary Exit Criteria
+
+Stop the canary immediately if any of the following occur:
+
+- Daily loss exceeds $50 (auto-kill)
+- Weekly loss exceeds $150 (auto-kill)
+- 3+ consecutive days of negative PnL
+- Reconciliation fails 2+ times in a day
+- Audit trail has gaps
+- Slippage consistently exceeds 2x estimates
+- Win rate drops below 30%
+- Any bug-induced kill switch activation
+
+## Live Session Report
+
+- Where to find it: `./reports/<session-id>/` after a live session exits
+- How to use `scripts/generate-live-report.ts`: Run after session completion to produce a structured report with PnL, trade counts, reconciliation status, audit completeness, kill switch events, and recommendation (`continueCanary` / `escalateCapital` / `rollbackToDemo`)
+- What to look for in the report: PnL trajectory, win rate, slippage vs estimate, reconciliation pass rate, audit log gaps, kill switch events
+- How to interpret the recommendation:
+  - `continueCanary`: Metrics healthy, continue current capital level
+  - `escalateCapital`: Strategy proving robust, consider increasing capital after review
+  - `rollbackToDemo`: Issues detected, return to demo for remediation
 
 ## Demo Session Report
 - Where to find it: `./reports/<session-id>/` after a demo or live session exits
@@ -102,9 +164,16 @@ All of the following must pass before proceeding to live:
 - **"Reconciliation unresolved"**: Review orphan orders, ensure exchange state matches internal state
 - **"Kill switch activated"**: Check daily/weekly loss limits; resolve cause before restarting
 - **"Audit unavailable"**: Ensure disk space and write permissions for `./reports/`
+- **"Live orders rejected"**: Check risk limits, exposure, slippage tolerance
+- **"Kill switch activated"**: Review daily/weekly loss, resolve before restarting
+- **"Reconciliation mismatch"**: Check for orphan orders, verify exchange state
+- **"Withdrawal error"**: Ensure withdrawals are disabled on API keys
+- **"Insufficient balance"**: Verify capital is within canary limits
+- **"validate-live timeout"**: Script now enforces 60s timeouts on all subprocess checks. If timeout persists, run `bun test` and `bun run typecheck` manually to isolate the slow step.
+- **"Bybit timestamp drift (error 10002)"**: Client clock is ahead of Bybit server. The connectivity verifier now uses `recvWindow=10000` and performs a pre-flight timestamp sync. If drift exceeds 3s, synchronize your system clock via NTP.
 
 ## Rollback
 - Stop the runner: Ctrl+C
 - Cancel all open orders: `session.control("cancel-all")` via TUI
 - Review logs in `./reports/<session-id>/`
-- Downgrade from live to demo by switching `.env` MODE and restarting
+- To downgrade from live to demo: switch `.env` MODE to `demo`, verify connectivity with `bun run scripts/verify-demo-connectivity.ts`, and restart
