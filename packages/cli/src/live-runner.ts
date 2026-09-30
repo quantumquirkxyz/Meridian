@@ -1497,7 +1497,8 @@ export class LiveRunner {
 
       const intent = buildRecommendationIntent(rec, this.scopeMarketState(rec.scope), {
         now: this.nowMs,
-        maxSlippageBps: this.config.feeBps,
+        maxSlippageBps: this.config.canaryConfig.maxSlippageBps,
+        maxTradeSizeUsd: this.config.canaryConfig.capitalLimits.maxRiskPerTradeUsd,
       });
       if (!intent) continue;
 
