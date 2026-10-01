@@ -1,0 +1,49 @@
+{
+  "configId": "canary-funding-arb-1",
+  "name": "Funding Arb Canary (Strict)",
+  "capitalLimits": {
+    "maxCapitalUsd": 300,
+    "maxRiskPerTradeUsd": 15,
+    "maxDailyLossUsd": 60,
+    "maxWeeklyLossUsd": 150
+  },
+  "exposureLimits": {
+    "maxExposurePerTokenUsd": 150,
+    "maxExposurePerVenueUsd": 300,
+    "maxExposurePerChainUsd": 300
+  },
+  "orderLimits": {
+    "maxOrdersPerDay": 12,
+    "maxOpenOrders": 4,
+    "maxOrdersPerWeek": 40
+  },
+  "scope": {
+    "allowedStrategyIds": ["funding-arb"],
+    "allowedVenues": ["bybit"],
+    "allowedChains": ["bsc"],
+    "allowedTokens": ["BTC", "ETH", "USDT", "BNB"]
+  },
+  "apiKeys": {
+    "readApiKey": { "keyId": "", "secretRef": "" },
+    "tradingApiKey": { "keyId": "", "secretRef": "" },
+    "withdrawalsDisabled": true
+  },
+  "killSwitch": {
+    "autoHaltDailyLossUsd": 40,
+    "autoHaltWeeklyLossUsd": 120,
+    "autoHaltOrdersPerDay": 10,
+    "autoHaltOnOrphans": true,
+    "autoHaltOnReconciliationMismatch": true
+  },
+  "noAutomaticScaling": true,
+  "maxOrderNotionalUsd": 75,
+  "maxSlippageBps": 20,
+  "maxGasUsd": 6,
+  "strategyConfigs": {
+    "funding-arb": {
+      "minFundingRateBps": 5,
+      "maxHoldMs": 3600000,
+      "fundingIntervalMs": 28800000
+    }
+  }
+}
