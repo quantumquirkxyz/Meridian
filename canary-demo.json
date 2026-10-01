@@ -18,8 +18,8 @@
     "maxOrdersPerWeek": 30
   },
   "scope": {
-    "allowedStrategyIds": ["arbitrage-alpha"],
-    "allowedVenues": ["bybit"],
+    "allowedStrategyIds": ["funding-arb"],
+    "allowedVenues": ["bybit", "binance"],
     "allowedChains": ["ethereum"],
     "allowedTokens": ["BTC", "ETH", "USDT"]
   },

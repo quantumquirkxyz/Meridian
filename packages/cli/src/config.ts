@@ -44,6 +44,13 @@ export interface AppConfig {
   bybitApiSecret: string;
   /** Bybit REST + WS endpoints for the current mode. */
   bybitEndpoints: BybitEndpoints;
+
+  /** API key for Binance (optional). */
+  binanceApiKey?: string;
+  /** API secret for Binance (optional). */
+  binanceApiSecret?: string;
+  /** Binance base URL (defaults to testnet). */
+  binanceBaseUrl?: string;
   /** PancakeSwap RPC URL for on-chain BNB chain market data (optional). */
   pancakeSwapRpcUrl?: string;
   /** PancakeSwap private key for signing on-chain swaps (execution). */
@@ -150,6 +157,11 @@ export async function loadConfig(
     }
   }
 
+
+  // ── Parse Binance API keys (optional) ─────────────────────────────
+  const binanceApiKey = env.BINANCE_API_KEY?.trim();
+  const binanceApiSecret = env.BINANCE_API_SECRET?.trim();
+  const binanceBaseUrl = env.BINANCE_BASE_URL?.trim() || "https://testnet.binance.vision";
   // ── Parse PancakeSwap credentials (required for pancakeswap venues) ─
   const pancakeSwapRpcUrl = env.PANCAKESWAP_RPC_URL?.trim();
   const pancakeSwapPrivateKey = (env.PANCAKESWAP_PRIVATE_KEY?.trim() || undefined) as `0x${string}` | undefined;
@@ -217,6 +229,10 @@ export async function loadConfig(
       bybitApiKey,
       bybitApiSecret,
       bybitEndpoints,
+
+      binanceApiKey,
+      binanceApiSecret,
+      binanceBaseUrl,
       pancakeSwapRpcUrl,
       pancakeSwapPrivateKey,
       pancakeSwapRouterAddress,

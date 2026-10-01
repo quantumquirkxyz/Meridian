@@ -207,6 +207,9 @@ function buildRunnerConfig(opts: RunOptions, paths: SessionPaths): LiveRunnerCon
     mode: config.mode,
     llmApiKey: config.llmApiKey,
     llmBaseUrl: config.llmBaseUrl,
+    binanceApiKey: config.binanceApiKey,
+    binanceApiSecret: config.binanceApiSecret,
+    binanceBaseUrl: config.binanceBaseUrl,
   };
 
   // For pancakeswap / both venues, pass DEX credentials through to the runner.

@@ -19,7 +19,7 @@
   },
   "scope": {
     "allowedStrategyIds": ["arbitrage-alpha"],
-    "allowedVenues": ["bybit"],
+    "allowedVenues": ["bybit", "binance"],
     "allowedChains": ["ethereum"],
     "allowedTokens": ["BTC", "ETH", "USDT"]
   },
